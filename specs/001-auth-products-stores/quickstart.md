@@ -96,4 +96,8 @@ Done by the owner in the browser, verified by the assistant from the dev-server 
 - Products list and search-as-you-type returned 200 with 64 imported test medicines (unit `pack`, no prices; the import was a one-off SQL insert, not a product feature).
 - Adding a store worked: `POST /api/stores` returned 201 and the row exists with the owner's `business_id`, version 1, optional fields empty.
 
-Still not verified live: adding and editing a medicine in the form, deactivate/reactivate, duplicate and version-conflict prompts, the touch-target audit on signed-in screens, and the skipped automated suites.
+- Adding medicines with prices worked: three POST /api/products returned 201; the rows hold exact prices (for example 60.00 / 65.00 / 170.00 as NUMERIC text), unit 	ablet, dosage form Tablet, version 1, active.
+
+- Editing and deactivating a medicine worked: two PATCH /api/products/{id} returned 200; the row Nimer shows selling price 60.00 (was 50.00), is_active = false and ersion = 3 (1 on create, +1 per update), while the two untouched medicines stay at version 1.
+
+Still not verified live: reactivate, duplicate and version-conflict prompts, the touch-target audit on signed-in screens, and the skipped automated suites.
