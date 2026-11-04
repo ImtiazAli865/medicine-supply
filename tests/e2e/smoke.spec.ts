@@ -53,6 +53,16 @@ test.describe("signed-out smoke checks", () => {
     expect(small).toEqual([]);
   });
 
+  test("the Sign in button is never disabled by empty React state (autofill and password managers)", async ({ page }) => {
+    await page.goto("/sign-in");
+    const button = page.getByRole("button", { name: "Sign in" });
+    // The form is only rendered when Supabase is configured; otherwise the page shows the setup notice.
+    test.skip((await button.count()) === 0, "Supabase is not configured for this run");
+    await expect(button).toBeEnabled();
+    await button.click();
+    await expect(page.getByText("Enter your email and password.")).toBeVisible();
+  });
+
   test("an unknown address shows the friendly not-found screen", async ({ page }) => {
     await page.goto("/definitely/not/a/page");
     // Signed out, the proxy sends it to sign-in first; either screen is a real, usable page.
