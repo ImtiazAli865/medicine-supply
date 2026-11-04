@@ -59,3 +59,21 @@ All Technical Context items are resolved; no `NEEDS CLARIFICATION` remain. Versi
 
 ## Summary of package versions observed (verify at scaffold)
 next 16.4.5, react 19.3.1, tailwindcss 4.3.4, @supabase/supabase-js 2.119.0, @supabase/ssr 0.12.7, zod 4.6.7, lucide-react 1.68.0, vitest 5.1.0, @playwright/test 1.64.1, supabase CLI 3.0.0, TypeScript 7.0.2 (confirm Next compatibility before adopting; otherwise use the version Next's scaffold selects).
+
+
+## Implementation findings (T001, T007) — recorded 2026-11-05
+
+Installed versions: next 16.4.5, react 19.3.0, tailwindcss 4.3.4, typescript 5.9.3, @supabase/ssr 0.12.7, @supabase/supabase-js 2.119.0, zod 4.6.7, lucide-react 1.68.0, vitest 5.1.0, @playwright/test 1.64.1, @electric-sql/pglite 0.5.15, supabase CLI 3.0.0.
+
+Verified against the docs shipped inside `node_modules/next/dist/docs` and the installed package types:
+
+- (a) Next 16 uses `src/proxy.ts` exporting `proxy` (the `middleware` name is deprecated). Confirmed; implemented as `src/proxy.ts`.
+- (b) `@supabase/ssr` 0.12 still uses `createServerClient(url, key, { cookies: { getAll, setAll } })` and `createBrowserClient`. Confirmed from its type definitions. Identity is verified with `auth.getUser()` (a call to the auth server), never an unverified cookie.
+- (c) TypeScript: `create-next-app` selected TypeScript 5.x. TypeScript 7 was NOT adopted; revisit later.
+- The scaffold enabled `cacheComponents` and `partialPrefetching`; both are turned off in `next.config.ts` because every business screen is per-user and dynamic. Authenticated pages use `export const dynamic = "force-dynamic"`.
+- The scaffold writes an `AGENTS.md` that says Next 16 has breaking changes and to read the docs in `node_modules/next/dist/docs/` before coding; it is kept in the repo.
+- Route types (`PageProps`, `LayoutProps`, `RouteContext`) come from `next typegen`; `npm run typecheck` runs it first.
+
+Decision change (T008): Docker is not installed on the development machine, so a local Supabase stack cannot run. Two complementary strategies are used: (1) the migration and Row Level Security are tested on a real PostgreSQL engine in-process (PGlite) with a Supabase-like role setup — runs anywhere, no credentials; (2) tests that need PostgREST and Auth (repositories, route behaviour, E2E) run against a separate hosted Supabase TEST project and are skipped, visibly, until its credentials are provided.
+
+Result of a test-driven finding: Zod 4 treats an object key as required when the schema is a union containing `z.undefined()`; optional fields use `.nullish()` with an explicit `.default(null)` (create) or no default (update) instead.

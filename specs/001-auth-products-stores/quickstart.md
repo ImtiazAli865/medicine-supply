@@ -64,3 +64,27 @@ Required test groups: money and normalization unit tests; duplicate and SKU rule
 ## 7. Known limits of this module
 
 No offline mode, no CSV import, no setup checklist, no orders or invoices, no in-app business editing, no self-registration, no in-app password reset.
+
+
+## 8. Verification results (recorded 2026-11-05)
+
+Only commands that were actually run are listed.
+
+| Check | Result |
+|-------|--------|
+| `npm run lint` (ESLint + secrets check) | Passed |
+| `npm run typecheck` | Passed |
+| `npm run build` | Passed (18 routes) |
+| `npm test` | 71 passed, 35 skipped (5 files). Passing: money, normalization, store and product validation, and `db-schema.pglite.test.ts` (22 tests: the migration, constraints, duplicate rules, versions, and Row Level Security on a real PostgreSQL engine). Skipped: the 5 integration files that need the Supabase test project |
+| `npm run test:e2e` | 28 passed, 72 skipped. Passing: signed-out redirects, 401 JSON from the API, and sign-in screen layout and touch targets, in mobile (360 px) and desktop browsers. Skipped: everything that needs a signed-in user |
+| Migration applied to a Supabase project (T013) | **Not done.** No Supabase credentials were available. It was applied to PGlite only |
+| Manual walk-through (section 5) and SC-001 timing (T073) | **Not done** (needs Supabase) |
+
+What is therefore NOT yet verified: the sign-in flow itself, the real PostgREST/Auth behaviour of the repositories (for example the `::text` money casts and the `find_*_by_name` functions), the Supabase role setup, search timing at 5,000 products, and the signed-in screens in a browser. The tests for these are written and will run once the test project is configured (below).
+
+## 9. Running the Supabase-dependent tests
+
+1. Create a SEPARATE Supabase project for tests (never use real business data).
+2. Apply the migration to it: `supabase link --project-ref <test-ref>` then `supabase db push`, or paste `supabase/migrations/0001_init.sql` into its SQL editor.
+3. Create `.env.test.local` (git-ignored) with `SUPABASE_TEST_URL`, `SUPABASE_TEST_ANON_KEY`, `SUPABASE_TEST_SERVICE_ROLE_KEY` (see `.env.example`).
+4. Run `npm test` and `npm run test:e2e`. The previously skipped tests now run; the service-role key is used only by test helpers to create and clean up test users.

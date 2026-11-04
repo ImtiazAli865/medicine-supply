@@ -1,0 +1,37 @@
+# dependencies
+/node_modules
+/.pnp
+.pnp.*
+
+# next.js
+/.next/
+/out/
+next-env.d.ts
+
+# production
+/build
+
+# testing
+/coverage
+/playwright-report/
+/test-results/
+
+# env files: only the placeholder example may be committed
+.env*
+!.env.example
+.env.test.local
+
+# misc
+.DS_Store
+Thumbs.db
+*.pem
+*.tsbuildinfo
+npm-debug.log*
+
+# editor
+.vscode/
+.idea/
+
+# supabase local
+supabase/.branches/
+supabase/.temp/
