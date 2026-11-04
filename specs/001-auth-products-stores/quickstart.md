@@ -100,4 +100,7 @@ Done by the owner in the browser, verified by the assistant from the dev-server 
 
 - Editing and deactivating a medicine worked: two PATCH /api/products/{id} returned 200; the row Nimer shows selling price 60.00 (was 50.00), is_active = false and ersion = 3 (1 on create, +1 per update), while the two untouched medicines stay at version 1.
 
-Still not verified live: reactivate, duplicate and version-conflict prompts, the touch-target audit on signed-in screens, and the skipped automated suites.
+- Reactivate worked: Nimer is active again at ersion = 4 (create 1, edit 2, deactivate 3, reactivate 4).
+- A similar-medicine attempt was refused once (POST /api/products 409) and, after the owner confirmed, created as a separate product (201): a second Folicure Soft Gel with an empty dosage form now exists next to the original with form Tablet. This is the intended behaviour: similar medicines are never merged, and creating one needs an explicit confirmation.
+
+Still not verified live: the hard block of an EXACT duplicate (same name, strength, form, pack size, manufacturer), reactivate-from-the-duplicate-dialog, duplicate and version-conflict prompts, the touch-target audit on signed-in screens, and the skipped automated suites.
