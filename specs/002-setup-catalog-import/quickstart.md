@@ -70,6 +70,15 @@ Measured times for 5,000 rows:
 
 Verified by tests: every classification status and the status priority; preview and import agree; all-or-nothing (forced failure leaves nothing); idempotent replay including 10 simultaneous confirms; two simultaneous imports with different ids (one applied, one refused); "catalog changed" applies nothing; empty cells stay empty and prices are exact; bad files (wrong type, empty, header only, unknown or missing column, semicolons, damaged, password-protected, macros, too large, too many rows, too wide); settings validation, defaults, version conflict and failed-save behaviour; checklist derived state and dismissal; RLS isolation between two businesses for settings, imports and imported products; signed-out requests return 401; touch targets and no horizontal overflow at 360 px on every new screen.
 
-**Not verified yet (still open, task T060):** the timed human checks SC-001 (business details saved in under 2 minutes) and SC-012 (100-row mixed file previewed and imported in under 5 minutes), and a walk-through by the owner on a real phone. The owner has not yet used the Import and Settings screens on the dev project.
+**Verified by the owner personally (2026-11-05, on a real phone, dev project, app served from the PC over plain http on the same Wi-Fi, file `sample-files/sample-100-rows.csv`):**
+
+- Preview counts matched the expectation: New 88, Duplicate in file 5, SKU already used 3, Invalid 4.
+- Confirm: summary showed Created 88, Skipped 12.
+- SC-012 (100-row mixed file previewed, reviewed and imported): about 5 minutes or less, reported as "approx, under 5 minutes" (not stopwatch-exact).
+- SC-001 (business details and invoice settings saved from first sign-in): about 2 minutes, reported as "approx 2 minutes"; this is at the limit of the 2-minute target, so it is NOT recorded as clearly met.
+- Refresh of the summary page showed the same summary (Created 88, Skipped 12).
+- Not tried by the owner: re-importing the same file to see Already exists / 0 to create (covered by the automated replay and "exists" tests only).
+
+**Bug found by this phone test and fixed (commit 8834bd1):** on plain http the browser has no `crypto.randomUUID`, so Confirm did nothing. `newId()` now falls back to `getRandomValues`; the wizard shows an error instead of failing silently; a unit test and an e2e regression test cover it. This also affected adding a medicine or store from a phone over http.
 
 Known limits found while building (also in section 5): the reader treats an Excel formula that cannot be evaluated as an empty cell, because the library does not expose error cells; a zip whose declared sizes are false could make the browser tab itself work hard, but nothing is sent to the server.
