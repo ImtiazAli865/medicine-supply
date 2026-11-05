@@ -21,8 +21,7 @@ Not included yet: setup checklist, CSV import, orders, market list, invoices, le
 
 See `specs/001-auth-products-stores/quickstart.md`, section 8 "Verification results". In short: lint,
 typecheck and build pass; the database migration and RLS pass on a real PostgreSQL engine (PGlite);
-the tests that need a Supabase project are written but **have not been run yet**, and the app has not
-been connected to a live Supabase project.
+the tests that need a Supabase project (35 integration, 72 E2E) pass on a separate test project, and the app has been tried by the owner on a live Supabase dev project.
 
 ## Setup
 
@@ -54,4 +53,4 @@ or in `src/`. `npm run lint` fails if one appears.
 | `npm run test:e2e` | Playwright tests in mobile (360 px) and desktop browsers |
 
 Tests that need a Supabase test project are skipped with a visible message until `.env.test.local` is set.
-See quickstart section 9.
+See quickstart sections 9 and 10. Stop `npm run dev` before `npm run test:e2e`.

@@ -163,8 +163,10 @@ export async function createProduct(
   const existing = await getProduct(supabase, input.id);
   if (existing) return { result: { product: existing, warnings: priceWarnings(existing) }, created: false };
 
+  // The checks below exclude this request's own id: when the same save is sent twice at the same
+  // moment, the first copy's row must not make the second copy look like a duplicate of itself.
   if (input.sku) {
-    const conflicting = await findBySku(supabase, input.sku);
+    const conflicting = await findBySku(supabase, input.sku, input.id);
     if (conflicting) {
       throw new ApiError("sku_conflict", `This SKU is already used by ${conflicting.name}.`, {
         matches: [conflicting],
@@ -172,7 +174,7 @@ export async function createProduct(
       });
     }
   }
-  await checkIdentity(supabase, input, undefined, input.confirm_similar);
+  await checkIdentity(supabase, input, input.id, input.confirm_similar);
 
   const { confirm_similar: _ignored, ...row } = input;
   void _ignored;

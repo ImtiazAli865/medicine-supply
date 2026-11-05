@@ -69,6 +69,7 @@ test.describe("US2: stores", () => {
     await page.getByLabel(/Store name/).fill(name);
     await page.getByRole("button", { name: "Add store" }).click();
     await page.getByRole("link", { name: "Edit" }).click();
+    await page.waitForURL(/\/stores\/[^/]+\/edit$/);
     const editUrl = page.url();
 
     const other = await context.newPage();

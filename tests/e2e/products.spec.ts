@@ -114,6 +114,7 @@ test.describe("US3: medicines", () => {
     await page.getByLabel(/^Unit/).selectOption("strip");
     await page.getByRole("button", { name: "Add medicine" }).click();
     await page.getByRole("link", { name: "Edit" }).click();
+    await page.waitForURL(/\/products\/[^/]+\/edit$/);
     const editUrl = page.url();
 
     const other = await context.newPage();

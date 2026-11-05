@@ -8,7 +8,8 @@ const baseURL = process.env.E2E_BASE_URL ?? `http://localhost:${port}`;
 
 export default defineConfig({
   testDir: "tests/e2e",
-  timeout: 45_000,
+  timeout: 60_000,
+  expect: { timeout: 10_000 },
   retries: 0,
   reporter: [["list"]],
   use: { baseURL, trace: "retain-on-failure" },
@@ -23,10 +24,13 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: "npm run dev",
+    // A production build: fast and close to the real app (a dev server compiles each page on its
+    // first visit, which makes sign-in tests slow). It must NOT reuse a running dev server, because
+    // that one may be connected to a different Supabase project. Stop `npm run dev` before E2E.
+    command: "npm run build && npm run start",
     url: baseURL,
-    reuseExistingServer: true,
-    timeout: 120_000,
+    reuseExistingServer: false,
+    timeout: 300_000,
     // The app under test talks to the dedicated TEST Supabase project.
     env: {
       NEXT_PUBLIC_SUPABASE_URL: process.env.SUPABASE_TEST_URL ?? "",

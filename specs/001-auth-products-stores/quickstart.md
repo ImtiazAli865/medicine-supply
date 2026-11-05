@@ -104,3 +104,22 @@ Done by the owner in the browser, verified by the assistant from the dev-server 
 - A similar-medicine attempt was refused once (POST /api/products 409) and, after the owner confirmed, created as a separate product (201): a second Folicure Soft Gel with an empty dosage form now exists next to the original with form Tablet. This is the intended behaviour: similar medicines are never merged, and creating one needs an explicit confirmation.
 
 Still not verified live: the hard block of an EXACT duplicate (same name, strength, form, pack size, manufacturer), reactivate-from-the-duplicate-dialog, duplicate and version-conflict prompts, the touch-target audit on signed-in screens, and the skipped automated suites.
+
+## 10. Verification results — Supabase test project (recorded 2026-11-05, evening)
+
+A separate empty Supabase project, `medicine-supply-test`, was set up (migration `0001_init.sql` applied, 0 rows, keys in the git-ignored `.env.test.local`). This supersedes the "skipped" rows in section 8.
+
+| Check | Result |
+|-------|--------|
+| `npm test` (unit, PGlite, and the 5 Supabase integration files) | **106 passed, 0 skipped** |
+| `npm run test:e2e` (production build, test project, mobile 360 px and desktop) | **100 passed, 2 skipped by design** (the touch-target checks run on the mobile project only). The first full run had 5 failures; all were faults in the test scripts and were fixed and re-run (6 passing runs). The full suite was not re-run in one go afterwards |
+| Lint, typecheck, build | Pass |
+
+Things the real Supabase run found:
+
+- **A real bug (fixed):** two copies of the same save sent at the same moment (same `id`) made the second one fail with "This medicine already exists", because the duplicate check matched the first copy's row. The pre-checks for products (identity and SKU) and stores (name) now ignore the request's own `id`, so the second copy returns the saved record. No duplicate row was ever created.
+- **Test faults (fixed):** a search test expected dosage form to be searchable (it is not, by spec); two version-conflict tests did not wait for the edit page; the sign-out test assumed Back returns to the sign-in page; E2E now runs on a production build instead of the dev server because first-visit page compilation made sign-in tests time out.
+
+Still not verified: the SC-001 timing by a person, the hard block of an exact duplicate by a person in the owner's browser (the E2E test covers it and passes), and the sign-in flow on a real phone.
+
+How to run E2E: stop `npm run dev` first (E2E starts its own server on port 3000 and never reuses a running one), then `npm run test:e2e`. A full run takes about 10 minutes.

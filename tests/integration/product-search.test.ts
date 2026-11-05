@@ -51,7 +51,8 @@ suite("search performance at scale (SC-002)", () => {
   }, 120_000);
 
   it("returns product search results in under 1 second for 5,000 products", async () => {
-    for (const q of ["PAN", "brufen 4", "sku-4999", "Maker 17", "250 mg tablet"]) {
+    // Search covers name, brand, generic name, strength, manufacturer and SKU (not dosage form).
+    for (const q of ["PAN", "brufen 4", "sku-4999", "Maker 17", "250 mg"]) {
       const started = performance.now();
       const page = await listProducts(a.client, ListQuerySchema.parse({ q }));
       const elapsed = performance.now() - started;

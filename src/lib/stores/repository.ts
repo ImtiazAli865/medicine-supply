@@ -66,7 +66,8 @@ export async function createStore(
   if (existing) return { store: existing, created: false };
 
   if (!input.confirm_duplicate) {
-    const similar = await findStoresByName(supabase, input.name);
+    // Exclude this request's own id so a save sent twice at once is not a "duplicate" of itself.
+    const similar = await findStoresByName(supabase, input.name, input.id);
     if (similar.length > 0) {
       throw new ApiError("similar_store", "A store with this name already exists.", { matches: similar });
     }

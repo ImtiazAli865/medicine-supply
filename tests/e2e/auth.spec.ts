@@ -48,8 +48,11 @@ test.describe("US1: sign in and protected screens", () => {
     await expect(page.getByRole("link", { name: "Products" }).first()).toBeVisible();
     await page.getByRole("button", { name: "Sign out" }).click();
     await expect(page).toHaveURL(/\/sign-in/);
-    await page.goBack();
-    await page.reload();
+    // Going back must not bring protected content back (it may land on a blank page, which is fine),
+    // and opening a protected address directly must send the visitor to sign-in again.
+    await page.goBack().catch(() => null);
+    await expect(page.getByTestId("business-name")).toHaveCount(0);
+    await page.goto("/products");
     await expect(page).toHaveURL(/\/sign-in/);
     await expect(page.getByTestId("business-name")).toHaveCount(0);
   });
