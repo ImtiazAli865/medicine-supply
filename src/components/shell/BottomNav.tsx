@@ -1,6 +1,6 @@
 "use client";
 
-import { Home, Pill, Store } from "lucide-react";
+import { Home, Pill, Settings, Store } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
@@ -8,6 +8,7 @@ const items = [
   { href: "/", label: "Home", icon: Home },
   { href: "/products", label: "Products", icon: Pill },
   { href: "/stores", label: "Stores", icon: Store },
+  { href: "/settings", label: "Settings", icon: Settings },
 ] as const;
 
 function isActive(pathname: string, href: string): boolean {
@@ -22,7 +23,7 @@ export function BottomNav() {
       aria-label="Main"
       className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-surface pb-[env(safe-area-inset-bottom)] md:static md:w-56 md:shrink-0 md:border-r md:border-t-0 md:pb-0"
     >
-      <ul className="grid grid-cols-3 md:grid-cols-1 md:gap-1 md:p-3">
+      <ul className="grid grid-cols-4 md:grid-cols-1 md:gap-1 md:p-3">
         {items.map(({ href, label, icon: Icon }) => {
           const active = isActive(pathname, href);
           return (

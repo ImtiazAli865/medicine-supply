@@ -1,0 +1,11 @@
+name,unit,brand,generic name,strength,dosage form,manufacturer,pack size,sku,purchase price,selling price,mrp
+Amoxil,strip,,Amoxicillin,500 mg,Capsule,Sami,10 caps,SKU-AMX,40,55,60
+Panadol,strip,Panadol,Paracetamol,500 mg,Tablet,GSK,10 tabs,,10,15,18
+Panadol,strip,Panadol,Paracetamol,250 mg,Tablet,GSK,10 tabs,,8,12,14
+Brufen,strip,,Ibuprofen,400 mg,Tablet,Abbott,10 tabs,,12,18,20
+Brufen,strip,,Ibuprofen,400 mg,Tablet,Abbott,10 tabs,,12,18,20
+Cetrizine,strip,,Cetirizine,10 mg,Tablet,Getz,10 tabs,sku-amx,5,8,9
+Calpol,,,Paracetamol,120 mg,Syrup,GSK,60 ml,,50,70,80
+Disprin,strip,,Aspirin,300 mg,Tablet,Reckitt,10 tabs,,-5,10,12
+Zyrtec,strip,,Cetirizine,10 mg,Tablet,UCB,10 tabs,,5.123,8,9
+XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX,strip,,,,,,,,,,

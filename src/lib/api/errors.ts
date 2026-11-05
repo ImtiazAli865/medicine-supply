@@ -10,6 +10,7 @@ export type ErrorCode =
   | "similar_store"
   | "sku_conflict"
   | "version_conflict"
+  | "import_changed"
   | "server_error";
 
 const STATUS: Record<ErrorCode, number> = {
@@ -22,6 +23,7 @@ const STATUS: Record<ErrorCode, number> = {
   similar_store: 409,
   sku_conflict: 409,
   version_conflict: 409,
+  import_changed: 409,
   server_error: 500,
 };
 

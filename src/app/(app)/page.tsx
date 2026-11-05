@@ -1,17 +1,26 @@
 import { Pill, Store } from "lucide-react";
 import Link from "next/link";
+import { SetupChecklist } from "@/components/setup/SetupChecklist";
+import { requirePageContext } from "@/lib/api/auth";
+import { getSetupState } from "@/lib/setup/repository";
 
 export const metadata = { title: "Home · Medicine Supply" };
+export const dynamic = "force-dynamic";
 
 const cards = [
   { href: "/products", title: "Products", description: "Your medicine list, prices and units.", icon: Pill },
   { href: "/stores", title: "Stores", description: "The pharmacies you supply.", icon: Store },
 ] as const;
 
-export default function HomePage() {
+export default async function HomePage() {
+  const { supabase } = await requirePageContext();
+  // Setup state is derived from real data; if it cannot be loaded, Home still works without the card.
+  const setup = await getSetupState(supabase).catch(() => null);
+
   return (
     <div className="space-y-4">
       <h1 className="text-2xl font-semibold">Home</h1>
+      {setup && !setup.dismissed ? <SetupChecklist state={setup} /> : null}
       <ul className="grid gap-3 sm:grid-cols-2">
         {cards.map(({ href, title, description, icon: Icon }) => (
           <li key={href}>

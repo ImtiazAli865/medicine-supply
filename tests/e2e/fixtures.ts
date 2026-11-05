@@ -4,7 +4,7 @@ import { createTenant, deleteTenant, hasTestEnv, SKIP_REASON, type TestTenant } 
 
 // E2E tests drive the real app against the dedicated TEST Supabase project. Without test
 // credentials every E2E test is skipped (and reported as skipped), never faked.
-export const test = base.extend<{ tenant: TestTenant }, { workerTenant: TestTenant }>({
+export const test = base.extend<{ tenant: TestTenant; freshTenant: TestTenant }, { workerTenant: TestTenant }>({
   workerTenant: [
     async ({}, provide) => {
       if (!hasTestEnv) {
@@ -20,6 +20,16 @@ export const test = base.extend<{ tenant: TestTenant }, { workerTenant: TestTena
   tenant: async ({ workerTenant }, provide) => {
     test.skip(!hasTestEnv, SKIP_REASON);
     await provide(workerTenant);
+  },
+  // A brand-new business (empty catalog, no stores, default settings) created for ONE test and removed after it.
+  freshTenant: async ({}, provide) => {
+    test.skip(!hasTestEnv, SKIP_REASON);
+    const tenant = await createTenant("e2e-fresh");
+    try {
+      await provide(tenant);
+    } finally {
+      await deleteTenant(tenant);
+    }
   },
 });
 

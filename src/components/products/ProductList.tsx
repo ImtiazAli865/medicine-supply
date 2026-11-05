@@ -1,6 +1,6 @@
 "use client";
 
-import { Pill, Plus, Search } from "lucide-react";
+import { FileUp, Pill, Plus, Search } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 import { Badge } from "@/components/ui/Badge";
@@ -28,6 +28,10 @@ export function ProductList() {
           Add medicine
         </ButtonLink>
       </div>
+      <Link href="/products/import" className="inline-flex min-h-11 items-center gap-2 font-medium text-primary underline">
+        <FileUp size={20} aria-hidden="true" />
+        Import from file
+      </Link>
 
       <div className="relative">
         <Search size={20} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted" aria-hidden="true" />
@@ -60,8 +64,13 @@ export function ProductList() {
           <EmptyState
             icon={Pill}
             title="Add your first medicine"
-            description="Only the name and unit are needed. Prices can be added later. Deactivated medicines are under Inactive."
-            action={<ButtonLink href="/products/new">Add your first medicine</ButtonLink>}
+            description="Only the name and unit are needed. Prices can be added later. Deactivated medicines are under Inactive. Or import a whole list from a file."
+            action={
+              <div className="flex flex-wrap justify-center gap-2">
+                <ButtonLink href="/products/new">Add your first medicine</ButtonLink>
+                <ButtonLink href="/products/import" variant="secondary">Import from file</ButtonLink>
+              </div>
+            }
           />
         )
       ) : (

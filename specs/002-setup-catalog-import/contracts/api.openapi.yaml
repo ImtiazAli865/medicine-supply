@@ -1,0 +1,228 @@
+openapi: 3.0.3
+info:
+  title: Medicine Supply — Module 002 API (settings, setup checklist, catalog import)
+  version: 1.0.0
+  description: >
+    REST route handlers inside the Next.js app, in addition to the Module 001 API. Every request
+    requires a signed-in user (cookie session); the business is derived on the server and is never
+    sent by the client. The browser reads CSV/Excel files itself and sends only text rows as JSON;
+    no file is ever uploaded or stored. Money values are decimal strings with at most two decimals
+    (PKR). The JSON body of the import endpoints is limited to 4 MB.
+servers:
+  - url: /api
+security:
+  - sessionCookie: []
+paths:
+  /settings:
+    get:
+      summary: Get the business settings
+      responses:
+        '200': { description: Settings, content: { application/json: { schema: { $ref: '#/components/schemas/Settings' } } } }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/NoBusiness' }
+    patch:
+      summary: Save the business settings (all fields of the form, versioned)
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/SettingsUpdate' } } }
+      responses:
+        '200': { description: Saved, content: { application/json: { schema: { $ref: '#/components/schemas/Settings' } } } }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/NoBusiness' }
+        '409': { description: 'code = version_conflict (settings changed elsewhere); the current settings are returned in current', content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /setup:
+    get:
+      summary: Derived setup checklist state
+      responses:
+        '200': { description: State, content: { application/json: { schema: { $ref: '#/components/schemas/SetupState' } } } }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/NoBusiness' }
+  /setup/checklist:
+    patch:
+      summary: Dismiss the checklist, or show it again
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [dismissed], properties: { dismissed: { type: boolean } } } } }
+      responses:
+        '200': { description: New state, content: { application/json: { schema: { $ref: '#/components/schemas/SetupState' } } } }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+  /imports/preview:
+    post:
+      summary: Classify rows against the current catalog (read-only; nothing is saved)
+      description: >
+        Rows that fail field validation are returned as invalid by the server (with the cell and
+        reason); the rest are classified by the database. Calling it again with the same rows
+        returns the same classification while the catalog is unchanged.
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/PreviewRequest' } } }
+      responses:
+        '200': { description: Preview, content: { application/json: { schema: { $ref: '#/components/schemas/PreviewResponse' } } } }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/NoBusiness' }
+  /imports:
+    get:
+      summary: History of applied imports (newest first)
+      parameters:
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 20 } }
+      responses:
+        '200': { description: Imports, content: { application/json: { schema: { type: object, properties: { items: { type: array, items: { $ref: '#/components/schemas/ImportSummary' } } } } } } }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+    post:
+      summary: Confirm and apply an import (all-or-nothing, idempotent on import_id)
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/ApplyRequest' } } }
+      responses:
+        '201': { description: Applied now, content: { application/json: { schema: { $ref: '#/components/schemas/ApplyResponse' } } } }
+        '200': { description: 'Same import_id was already applied (retry); the original result is returned and nothing changes (replayed = true)', content: { application/json: { schema: { $ref: '#/components/schemas/ApplyResponse' } } } }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/NoBusiness' }
+        '409': { description: 'code = import_changed: the catalog changed since the preview (or a chosen similar row is no longer similar). Nothing was imported; the client re-runs the preview', content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /imports/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+    get:
+      summary: One applied import with its skipped rows
+      responses:
+        '200': { description: Import, content: { application/json: { schema: { $ref: '#/components/schemas/ImportSummary' } } } }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+components:
+  securitySchemes:
+    sessionCookie: { type: apiKey, in: cookie, name: auth-session, description: 'Cookie session set by the auth provider client; real cookie names are provider-defined.' }
+  responses:
+    Unauthenticated: { description: No valid session, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+    NoBusiness: { description: 'Signed in but no business (code = no_business)', content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+    NotFound: { description: 'Not found; also returned for another business''s id, never revealing it exists', content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+    ValidationError: { description: 'code = validation_error with per-field messages. For imports also: too many rows (over 10,000), body over 4 MB, or malformed rows', content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  schemas:
+    Error:
+      type: object
+      required: [code, message]
+      properties:
+        code: { type: string, enum: [unauthenticated, no_business, not_found, validation_error, version_conflict, import_changed, server_error] }
+        message: { type: string }
+        fields: { type: object, additionalProperties: { type: string } }
+        current: { type: object, description: Current server record on version_conflict }
+    Settings:
+      type: object
+      required: [name, thermal_paper_mm, account_summary_default, details_saved, checklist_dismissed, version]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 200 }
+        phone: { type: string, nullable: true, maxLength: 50 }
+        address: { type: string, nullable: true, maxLength: 500 }
+        thermal_paper_mm: { type: integer, minimum: 40, maximum: 120, default: 80 }
+        account_summary_default: { type: boolean, default: false }
+        details_saved: { type: boolean }
+        checklist_dismissed: { type: boolean }
+        version: { type: integer }
+    SettingsUpdate:
+      type: object
+      required: [expected_version, name, thermal_paper_mm, account_summary_default]
+      properties:
+        expected_version: { type: integer, minimum: 1 }
+        name: { type: string, minLength: 1, maxLength: 200 }
+        phone: { type: string, nullable: true, maxLength: 50 }
+        address: { type: string, nullable: true, maxLength: 500 }
+        thermal_paper_mm: { type: integer, minimum: 40, maximum: 120 }
+        account_summary_default: { type: boolean }
+    SetupState:
+      type: object
+      required: [details_done, stores_done, catalog_done, dismissed]
+      properties:
+        details_done: { type: boolean, description: Settings saved at least once }
+        stores_done: { type: boolean, description: At least one store exists }
+        catalog_done: { type: boolean, description: At least one medicine exists }
+        dismissed: { type: boolean }
+    ImportRow:
+      type: object
+      required: [row_no]
+      description: Text cells exactly as read from the file (trimmed; empty cells are null). The server validates and never trusts them.
+      properties:
+        row_no: { type: integer, minimum: 2, description: 'Row number in the file (the header is row 1)' }
+        name: { type: string, nullable: true }
+        unit: { type: string, nullable: true }
+        brand: { type: string, nullable: true }
+        generic_name: { type: string, nullable: true }
+        strength: { type: string, nullable: true }
+        dosage_form: { type: string, nullable: true }
+        manufacturer: { type: string, nullable: true }
+        pack_size: { type: string, nullable: true }
+        sku: { type: string, nullable: true }
+        purchase_price: { type: string, nullable: true }
+        selling_price: { type: string, nullable: true }
+        mrp: { type: string, nullable: true }
+    PreviewRequest:
+      type: object
+      required: [rows]
+      properties:
+        rows: { type: array, minItems: 1, maxItems: 10000, items: { $ref: '#/components/schemas/ImportRow' } }
+    RowStatus:
+      type: string
+      enum: [new, exists, similar, file_duplicate, sku_used, invalid]
+    PreviewRow:
+      type: object
+      required: [row_no, status]
+      properties:
+        row_no: { type: integer }
+        status: { $ref: '#/components/schemas/RowStatus' }
+        field: { type: string, nullable: true, description: 'For invalid rows: the column that is wrong' }
+        message: { type: string, nullable: true, description: 'Human-readable reason (invalid) or detail' }
+        conflict: { type: object, nullable: true, properties: { id: { type: string, format: uuid }, name: { type: string } } }
+        warnings: { type: array, items: { type: string, enum: [selling_below_purchase, mrp_below_selling] } }
+    PreviewResponse:
+      type: object
+      required: [fingerprint, total, counts, rows]
+      properties:
+        fingerprint: { type: string, description: Identifies this exact classification; send it back when confirming }
+        total: { type: integer }
+        counts:
+          type: object
+          required: [new, exists, similar, file_duplicate, sku_used, invalid]
+          properties:
+            new: { type: integer }
+            exists: { type: integer }
+            similar: { type: integer }
+            file_duplicate: { type: integer }
+            sku_used: { type: integer }
+            invalid: { type: integer }
+        rows: { type: array, items: { $ref: '#/components/schemas/PreviewRow' } }
+    ApplyRequest:
+      type: object
+      required: [import_id, file_name, file_kind, rows, fingerprint]
+      properties:
+        import_id: { type: string, format: uuid, description: Client-generated before confirming; the idempotency key }
+        file_name: { type: string, maxLength: 255 }
+        file_kind: { type: string, enum: [csv, xlsx] }
+        rows: { type: array, minItems: 1, maxItems: 10000, items: { $ref: '#/components/schemas/ImportRow' } }
+        fingerprint: { type: string }
+        create_similar: { type: array, items: { type: integer }, description: 'Row numbers of Similar rows the supplier chose to create as separate products' }
+    ApplyResponse:
+      type: object
+      required: [applied, replayed, import]
+      properties:
+        applied: { type: boolean }
+        replayed: { type: boolean }
+        import: { $ref: '#/components/schemas/ImportSummary' }
+    ImportSummary:
+      type: object
+      required: [id, file_name, file_kind, submitted_rows, created_count, created_similar_count, skipped_count, status_counts, created_at]
+      properties:
+        id: { type: string, format: uuid }
+        file_name: { type: string }
+        file_kind: { type: string, enum: [csv, xlsx] }
+        submitted_rows: { type: integer }
+        created_count: { type: integer }
+        created_similar_count: { type: integer }
+        skipped_count: { type: integer }
+        status_counts: { type: object, additionalProperties: { type: integer } }
+        skipped:
+          type: array
+          description: Only on GET /imports/{id} and in the apply response
+          items: { type: object, properties: { row_no: { type: integer }, status: { $ref: '#/components/schemas/RowStatus' }, message: { type: string }, conflict_name: { type: string, nullable: true } } }
+        created_at: { type: string, format: date-time }

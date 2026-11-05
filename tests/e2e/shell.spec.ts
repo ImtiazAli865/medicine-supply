@@ -11,6 +11,7 @@ test.describe("US4: app shell and navigation", () => {
     const targets = [
       { name: "Products", url: /\/products$/, heading: "Products" },
       { name: "Stores", url: /\/stores$/, heading: "Stores" },
+      { name: "Settings", url: /\/settings$/, heading: "Settings" },
       { name: "Home", url: /\/$/, heading: "Home" },
     ];
     for (const t of targets) {
@@ -33,6 +34,11 @@ test.describe("US4: app shell and navigation", () => {
     await expect(page.getByRole("heading", { name: "Add store" })).toBeVisible();
     await page.getByRole("link", { name: "Cancel" }).click();
     await expect(page.getByRole("heading", { name: "Stores", level: 1 })).toBeVisible();
+
+    // Import is reachable from Products, and Settings from the navigation.
+    await page.getByRole("navigation", { name: "Main" }).getByRole("link", { name: "Products" }).click();
+    await page.getByRole("link", { name: "Import from file" }).click();
+    await expect(page.getByRole("heading", { name: "Import medicines", level: 1 })).toBeVisible();
   });
 
   test("an unknown address shows a friendly not-found screen with a way home", async ({ page }) => {

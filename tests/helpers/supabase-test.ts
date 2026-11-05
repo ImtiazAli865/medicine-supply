@@ -69,6 +69,7 @@ export async function deleteTenant(tenant: TestTenant): Promise<void> {
   const admin = serviceClient();
   if (tenant.businessId) {
     await admin.from("products").delete().eq("business_id", tenant.businessId);
+    await admin.from("imports").delete().eq("business_id", tenant.businessId); // after products (they reference it)
     await admin.from("stores").delete().eq("business_id", tenant.businessId);
     await admin.from("profiles").delete().eq("user_id", tenant.userId);
     await admin.from("businesses").delete().eq("id", tenant.businessId);

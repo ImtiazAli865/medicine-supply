@@ -12,7 +12,7 @@ test.describe("touch targets and layout at 360 px", () => {
 
   test("every signed-in screen", async ({ page, tenant }) => {
     await signIn(page, tenant);
-    for (const path of ["/", "/products", "/products/new", "/stores", "/stores/new"]) {
+    for (const path of ["/", "/products", "/products/new", "/products/import", "/stores", "/stores/new", "/settings"]) {
       await page.goto(path);
       await expect(page.locator("main")).toBeVisible();
       expect(await smallTargets(page), `small targets on ${path}`).toEqual([]);

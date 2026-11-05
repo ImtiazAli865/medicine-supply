@@ -63,7 +63,7 @@ describe("migration applies and guards every table", () => {
       return res.rows;
     });
     const names = rows.map((r) => r.table_name).sort();
-    expect(names).toEqual(["businesses", "products", "profiles", "stores"]);
+    expect(names).toEqual(["business_settings", "businesses", "imports", "products", "profiles", "stores"]);
     for (const row of rows) {
       expect(row.rls_enabled, `${row.table_name} must have RLS enabled`).toBe(true);
       if (row.table_name !== "businesses" && row.table_name !== "profiles") {

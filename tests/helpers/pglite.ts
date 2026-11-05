@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { PGlite } from "@electric-sql/pglite";
 import { pg_trgm } from "@electric-sql/pglite/contrib/pg_trgm";
@@ -32,8 +32,11 @@ export async function createTestDb(): Promise<PGlite> {
     grant execute on function auth.uid() to anon, authenticated, service_role;
   `);
 
-  const migration = readFileSync(path.resolve("supabase/migrations/0001_init.sql"), "utf8");
-  await db.exec(migration);
+  // Apply every migration in order, exactly as the project's migration folder defines them.
+  const dir = path.resolve("supabase/migrations");
+  for (const file of readdirSync(dir).filter((f) => f.endsWith(".sql")).sort()) {
+    await db.exec(readFileSync(path.join(dir, file), "utf8"));
+  }
   return db;
 }
 
