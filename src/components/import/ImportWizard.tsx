@@ -132,10 +132,20 @@ export function ImportWizard() {
     // One id per approved preview + choices: a retry of the same approval repeats the same id, so the
     // server returns the original result instead of importing twice.
     const key = `${preview.fingerprint}|${chosenSimilar.join(",")}`;
-    if (approval.current?.key !== key) approval.current = { key, id: newId() };
-    const id = approval.current.id;
-
-    sessionStorage.setItem(PENDING_KEY, id);
+    let id: string;
+    try {
+      if (approval.current?.key !== key) approval.current = { key, id: newId() };
+      id = approval.current.id;
+    } catch {
+      // Never fail silently: tell the user nothing was sent.
+      setConfirmError("This browser could not prepare the import, so nothing was sent or saved. Please try again or use another browser.");
+      return;
+    }
+    try {
+      sessionStorage.setItem(PENDING_KEY, id);
+    } catch {
+      // Private browsing may block storage; the import itself does not depend on it.
+    }
     setConfirmError(null);
     setStage("confirming");
     try {

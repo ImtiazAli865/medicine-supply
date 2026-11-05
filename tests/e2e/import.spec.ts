@@ -132,6 +132,21 @@ test.describe("US1: catalog import", () => {
     expect(data!.filter((p) => p.name === "Cetrizine")).toHaveLength(0);
   });
 
+  test("Confirm works where crypto.randomUUID is missing (a phone opening the app over plain http)", async ({ page, freshTenant }) => {
+    // Browsers expose crypto.randomUUID only on HTTPS/localhost; simulate the phone-over-LAN case.
+    await page.addInitScript(() => {
+      Object.defineProperty(Crypto.prototype, "randomUUID", { value: undefined, configurable: true });
+    });
+    await page.reload();
+    expect(await page.evaluate(() => typeof crypto.randomUUID)).toBe("undefined");
+    await choose(page, "valid-5.csv", validCsv());
+    await expect(page.locator('[data-status="new"]')).toHaveCount(5);
+    await page.getByTestId("confirm-import").click();
+    await expect(page.getByTestId("import-summary")).toBeVisible();
+    await expect(page.getByTestId("summary-created")).toHaveText("5");
+    expect(await productCount(freshTenant)).toBe(5);
+  });
+
   test("double-pressing Confirm creates no duplicates", async ({ page, freshTenant }) => {
     await choose(page, "valid-5.csv", validCsv());
     const confirm = page.getByTestId("confirm-import");

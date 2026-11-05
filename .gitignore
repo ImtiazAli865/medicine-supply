@@ -35,3 +35,4 @@ npm-debug.log*
 # supabase local
 supabase/.branches/
 supabase/.temp/
+sample-files/
