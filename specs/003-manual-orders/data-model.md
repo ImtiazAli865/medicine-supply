@@ -50,7 +50,7 @@ Constraints:
 - `check (status <> 'cancelled' or cancelled_at is not null)`.
 - `check (status <> 'cancelled' or confirmed_at is null or char_length(btrim(coalesce(cancel_reason, ''))) > 0)`: cancelling a confirmed order needs a reason (FR-031).
 - Trigger `orders_row_meta` (existing `set_row_meta`): `id`, `business_id`, `created_at` immutable.
-- Trigger `orders_guard` (before update): `store_id`, `order_number` and `source` are immutable; status may only move `draft -> confirmed`, `draft -> cancelled`, `confirmed -> cancelled` (any other change raises). This repeats in the database what the functions already enforce.
+- Trigger `orders_guard` (before update): `order_number` and `source` are immutable; `store_id` may change only while the order is a draft AND has no active line (so a line can never sit under a store it was not entered for; this is the database side of FR-011); status may only move `draft -> confirmed`, `draft -> cancelled`, `confirmed -> cancelled` (any other change raises). This repeats in the database what the functions already enforce.
 
 Indexes:
 
@@ -121,7 +121,7 @@ Append-only change history.
 | `detail` | jsonb not null default `'{}'` | see below |
 | `created_at` | timestamptz not null default now() | |
 
-`before update or delete` trigger raises `order_events_append_only`. Index `order_events_order_idx (order_id, created_at desc)`.
+`before update or delete` trigger raises `order_events_append_only`; the only exception is a DELETE by the `service_role` (used by tests to remove a test business and by operations, never by the app, which does not use that key; signed-in users have no write privileges on the table at all). Index `order_events_order_idx (order_id, created_at desc)`.
 
 `detail` shapes (never contain purchase price or MRP):
 
@@ -177,6 +177,8 @@ Steps (one transaction):
 5. Return `{saved:true, replayed:false, order}`.
 
 Line validation (`{saved:false, reason:'invalid_lines', detail:{...}}`): more than 200 lines; duplicate line ids; a line id that already belongs to another order or business; `product_id` not in the business; a **new** line for an inactive medicine; a typed line without a name; quantity outside 1..100000; empty unit. The function also trims and collapses repeated spaces in a typed line's name and trims the unit itself, because it can be called directly through the database API without the route handler's checks.
+
+Implementation notes (recorded while writing migration 0003): the result of `order_save` also carries `created` (true only for the very first save, so the route can answer 201); extra failure reasons are `store_not_found` (the store id is unknown in this business) and `unusable_id` (the order id already belongs to another business); a line cannot change its medicine (remove it and add a new line), and the name of a typed line on a confirmed order cannot change (its description is frozen by the snapshot guard); `order_cancel` also returns `reason_too_long` for a reason over 500 characters. The route handlers map `store_not_found`, `store_inactive`, `invalid_lines`, `reason_required`, `reason_too_long` and `unusable_id` to 400 `validation_error` with field messages.
 
 ### `order_confirm(p_id uuid, p_request_id uuid, p_expected_version int) returns jsonb` (SECURITY DEFINER)
 

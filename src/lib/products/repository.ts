@@ -12,6 +12,11 @@ const COLUMNS =
   "id,name,unit,brand,generic_name,strength,dosage_form,manufacturer,pack_size,sku," +
   "purchase_price::text,selling_price::text,mrp::text,is_active,version,created_at,updated_at";
 
+/** Wraps a value for a PostgREST filter string: double quotes, with backslash and quote escaped. */
+export function quoteFilterValue(value: string): string {
+  return `"${value.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
+}
+
 function money(value: unknown): string | null {
   if (value == null) return null;
   // Tolerate a number too (older API behavior): String() of a 2-decimal value is exact for our range.
@@ -72,7 +77,11 @@ export async function listProducts(supabase: SupabaseClient, query: ListQuery): 
   if (query.status === "inactive") request = request.eq("is_active", false);
 
   for (const token of searchTokens(query.q)) {
-    request = request.ilike("search_text", `%${escapeLike(token)}%`);
+    // Each word must match the search text OR the dosage form (the stored search text does not contain it).
+    // PostgREST's or(...) syntax treats commas, brackets and quotes specially, so the pattern is double-quoted
+    // and its backslashes and quotes escaped: user text can never change the shape of the filter.
+    const pattern = quoteFilterValue(`%${escapeLike(token)}%`);
+    request = request.or(`search_text.ilike.${pattern},dosage_form.ilike.${pattern}`);
   }
 
   const { data, error } = await request

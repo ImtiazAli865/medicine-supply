@@ -26,9 +26,9 @@ export function signInUrl(): string {
 }
 
 function handleExpiredSession() {
-  // A form with typed text marks itself with data-unsaved-guard. Keep it on screen and show the
+  // A form or screen with typed text marks itself with data-unsaved-guard. Keep it on screen and show the
   // banner (the user signs in in a new tab and retries). Anywhere else, go to sign-in directly.
-  const formOnScreen = document.querySelector("form[data-unsaved-guard]");
+  const formOnScreen = document.querySelector("[data-unsaved-guard]");
   if (formOnScreen) {
     window.dispatchEvent(new CustomEvent(SESSION_EXPIRED_EVENT));
   } else {
@@ -37,7 +37,7 @@ function handleExpiredSession() {
 }
 
 interface RequestOptions {
-  method?: "GET" | "POST" | "PATCH";
+  method?: "GET" | "POST" | "PATCH" | "PUT";
   json?: unknown;
   signal?: AbortSignal;
 }

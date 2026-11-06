@@ -1,0 +1,15 @@
+import { requireBusinessUser } from "@/lib/api/auth";
+import { handle, notFound, readJson } from "@/lib/api/errors";
+import { isUuid } from "@/lib/ids";
+import { cancelOrder } from "@/lib/orders/repository";
+import { OrderCancelSchema } from "@/lib/validation/order";
+
+export async function POST(request: Request, ctx: RouteContext<"/api/orders/[id]/cancel">) {
+  return handle(async () => {
+    const { supabase } = await requireBusinessUser();
+    const { id } = await ctx.params;
+    if (!isUuid(id)) throw notFound();
+    const input = OrderCancelSchema.parse(await readJson(request));
+    return Response.json(await cancelOrder(supabase, id, input));
+  });
+}

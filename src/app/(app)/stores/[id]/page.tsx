@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { ChevronLeft, Pencil } from "lucide-react";
+import { ChevronLeft, ClipboardList, Pencil } from "lucide-react";
 import Link from "next/link";
 import { Badge } from "@/components/ui/Badge";
 import { ButtonLink } from "@/components/ui/Button";
@@ -40,6 +40,9 @@ export default async function StoreDetailPage({ params }: PageProps<"/stores/[id
       <div className="flex flex-wrap gap-2">
         <ButtonLink href={`/stores/${store.id}/edit`}>
           <Pencil size={18} aria-hidden="true" /> Edit
+        </ButtonLink>
+        <ButtonLink href={`/orders?store=${store.id}`} variant="secondary">
+          <ClipboardList size={18} aria-hidden="true" /> Orders
         </ButtonLink>
         <ActiveToggle endpoint="/api/stores" id={store.id} version={store.version} isActive={store.is_active} name={store.name} noun="store" />
       </div>

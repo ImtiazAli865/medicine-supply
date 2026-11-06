@@ -11,6 +11,9 @@ export type ErrorCode =
   | "sku_conflict"
   | "version_conflict"
   | "import_changed"
+  | "order_not_editable"
+  | "store_locked"
+  | "order_empty"
   | "server_error";
 
 const STATUS: Record<ErrorCode, number> = {
@@ -24,6 +27,9 @@ const STATUS: Record<ErrorCode, number> = {
   sku_conflict: 409,
   version_conflict: 409,
   import_changed: 409,
+  order_not_editable: 409,
+  store_locked: 409,
+  order_empty: 409,
   server_error: 500,
 };
 

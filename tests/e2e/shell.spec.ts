@@ -9,6 +9,7 @@ test.describe("US4: app shell and navigation", () => {
   test("every navigation item opens a working screen and highlights itself", async ({ page }) => {
     const nav = page.getByRole("navigation", { name: "Main" });
     const targets = [
+      { name: "Orders", url: /\/orders$/, heading: "Orders" },
       { name: "Products", url: /\/products$/, heading: "Products" },
       { name: "Stores", url: /\/stores$/, heading: "Stores" },
       { name: "Settings", url: /\/settings$/, heading: "Settings" },
