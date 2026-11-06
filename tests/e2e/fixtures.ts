@@ -47,7 +47,11 @@ export async function signIn(page: Page, tenant: Pick<TestTenant, "email" | "pas
   await page.waitForURL((url) => !url.pathname.startsWith("/sign-in"));
 }
 
-/** Every visible interactive element must be at least 44 x 44 CSS pixels. */
+/**
+ * Every visible interactive element must be at least 44 x 44 CSS pixels. A checkbox or radio inside a
+ * <label> is measured by its label row, because tapping anywhere on the label toggles it (the small
+ * box itself is not the touch target).
+ */
 export async function smallTargets(page: Page): Promise<string[]> {
   return page.evaluate(() => {
     const selector = "a[href], button, input:not([type=hidden]), select, textarea, [role=button]";
@@ -55,7 +59,9 @@ export async function smallTargets(page: Page): Promise<string[]> {
     for (const el of Array.from(document.querySelectorAll<HTMLElement>(selector))) {
       const style = getComputedStyle(el);
       if (style.visibility === "hidden" || style.display === "none") continue;
-      const rect = el.getBoundingClientRect();
+      const isToggle = el instanceof HTMLInputElement && (el.type === "checkbox" || el.type === "radio");
+      const target = isToggle ? (el.closest("label") ?? el) : el;
+      const rect = target.getBoundingClientRect();
       if (rect.width === 0 || rect.height === 0) continue;
       if (el.classList.contains("sr-only")) continue;
       if (rect.width < 43.5 || rect.height < 43.5) {
