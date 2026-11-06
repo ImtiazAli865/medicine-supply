@@ -1,0 +1,257 @@
+openapi: 3.0.3
+info:
+  title: Medicine Supply — Module 001 API (stores and products)
+  version: 1.0.0
+  description: >
+    REST route handlers inside the Next.js app. Every request requires a signed-in user
+    (session cookie). The user's business is derived on the server; clients never send
+    business_id. Money values are decimal strings with at most two decimals (PKR).
+    Sign-in and sign-out use the auth provider client directly and are not part of this API.
+servers:
+  - url: /api
+security:
+  - sessionCookie: []
+paths:
+  /stores:
+    get:
+      summary: List or search stores
+      parameters:
+        - { name: q, in: query, schema: { type: string, maxLength: 200 }, description: Partial, case-insensitive text on name, contact person, phone }
+        - { name: status, in: query, schema: { type: string, enum: [active, inactive, all], default: active } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 50 } }
+        - { name: cursor, in: query, schema: { type: string } }
+      responses:
+        '200': { description: Page of stores, content: { application/json: { schema: { $ref: '#/components/schemas/StorePage' } } } }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/NoBusiness' }
+    post:
+      summary: Create a store (idempotent on id)
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/StoreCreate' } } }
+      responses:
+        '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/Store' } } } }
+        '200': { description: Same id already exists for this business (retry); existing record returned, content: { application/json: { schema: { $ref: '#/components/schemas/Store' } } } }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/NoBusiness' }
+        '409': { description: 'code = similar_store (needs confirm_duplicate)', content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /stores/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+    get:
+      summary: Get one store (any status)
+      responses:
+        '200': { description: Store, content: { application/json: { schema: { $ref: '#/components/schemas/Store' } } } }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      summary: Edit, deactivate, or reactivate a store
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/StoreUpdate' } } }
+      responses:
+        '200': { description: Updated, content: { application/json: { schema: { $ref: '#/components/schemas/Store' } } } }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { description: 'code = version_conflict (record changed since opened); current record included', content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /stores/similar:
+    get:
+      summary: Stores whose normalized name matches the given name
+      parameters:
+        - { name: name, in: query, required: true, schema: { type: string, maxLength: 200 } }
+        - { name: excludeId, in: query, schema: { type: string, format: uuid } }
+      responses:
+        '200': { description: Matches, content: { application/json: { schema: { type: object, properties: { items: { type: array, items: { $ref: '#/components/schemas/Store' } } } } } } }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+  /products:
+    get:
+      summary: List or search products (suggestions use this with a short q)
+      parameters:
+        - { name: q, in: query, schema: { type: string, maxLength: 200 }, description: Partial, case-insensitive text on name, brand, generic name, strength, manufacturer, code }
+        - { name: status, in: query, schema: { type: string, enum: [active, inactive, all], default: active } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 50 } }
+        - { name: cursor, in: query, schema: { type: string } }
+      responses:
+        '200': { description: Page of products, content: { application/json: { schema: { $ref: '#/components/schemas/ProductPage' } } } }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/NoBusiness' }
+    post:
+      summary: Create a product (idempotent on id)
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/ProductCreate' } } }
+      responses:
+        '201': { description: Created (may include non-blocking warnings), content: { application/json: { schema: { $ref: '#/components/schemas/ProductResult' } } } }
+        '200': { description: Same id already exists for this business (retry), content: { application/json: { schema: { $ref: '#/components/schemas/ProductResult' } } } }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/NoBusiness' }
+        '409': { description: 'code = duplicate_product (blocked; existing product returned in matches with its is_active flag so the client can offer Reactivate), similar_products (needs confirm_similar), or sku_conflict (conflicting product returned)', content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /products/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+    get:
+      summary: Get one product (any status), including internal unit gross profit
+      responses:
+        '200': { description: Product, content: { application/json: { schema: { $ref: '#/components/schemas/Product' } } } }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      summary: Edit, deactivate, or reactivate a product
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/ProductUpdate' } } }
+      responses:
+        '200': { description: Updated (may include warnings), content: { application/json: { schema: { $ref: '#/components/schemas/ProductResult' } } } }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { description: 'code = version_conflict, duplicate_product, similar_products, or sku_conflict', content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /products/similar:
+    get:
+      summary: Active and inactive products with the same normalized name (for the confirmation screen)
+      parameters:
+        - { name: name, in: query, required: true, schema: { type: string, maxLength: 200 } }
+        - { name: excludeId, in: query, schema: { type: string, format: uuid } }
+      responses:
+        '200': { description: Matches, content: { application/json: { schema: { type: object, properties: { items: { type: array, items: { $ref: '#/components/schemas/Product' } } } } } } }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+components:
+  securitySchemes:
+    sessionCookie: { type: apiKey, in: cookie, name: auth-session, description: 'Cookie-based session set by the auth provider client (the real cookie names are provider-defined and may be chunked); not a fixed name.' }
+  responses:
+    Unauthenticated: { description: No valid session (client shows "session expired" and goes to sign-in), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+    NoBusiness: { description: 'Signed in but the account has no business (code = no_business)', content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+    NotFound: { description: 'Not found. Also returned for another business''s id, never revealing it exists', content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+    ValidationError: { description: 'code = validation_error with per-field messages. Also returned on field id ("This id cannot be used") when a create uses an id that cannot be used, including an id that belongs to another business; the client then generates a new id', content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  schemas:
+    Money:
+      type: string
+      pattern: '^\d{1,10}(\.\d{1,2})?$'
+      example: '125.50'
+    Error:
+      type: object
+      required: [code, message]
+      properties:
+        code: { type: string, enum: [unauthenticated, no_business, not_found, validation_error, duplicate_product, similar_products, similar_store, sku_conflict, version_conflict, server_error] }
+        message: { type: string }
+        fields: { type: object, additionalProperties: { type: string } }
+        matches: { type: array, items: { type: object }, description: Existing records to show (similar or conflicting) }
+        current: { type: object, description: Current server record on version_conflict }
+    Store:
+      type: object
+      required: [id, name, is_active, version, created_at, updated_at]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string, minLength: 1, maxLength: 200 }
+        contact_person: { type: string, nullable: true, maxLength: 200 }
+        phone: { type: string, nullable: true, maxLength: 50 }
+        address: { type: string, nullable: true, maxLength: 500 }
+        notes: { type: string, nullable: true, maxLength: 1000 }
+        is_active: { type: boolean }
+        version: { type: integer }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    StoreCreate:
+      type: object
+      required: [id, name]
+      properties:
+        id: { type: string, format: uuid, description: Client-generated }
+        name: { type: string, minLength: 1, maxLength: 200 }
+        contact_person: { type: string, maxLength: 200 }
+        phone: { type: string, maxLength: 50 }
+        address: { type: string, maxLength: 500 }
+        notes: { type: string, maxLength: 1000 }
+        confirm_duplicate: { type: boolean, default: false }
+    StoreUpdate:
+      type: object
+      required: [expected_version]
+      properties:
+        expected_version: { type: integer }
+        name: { type: string, minLength: 1, maxLength: 200 }
+        contact_person: { type: string, nullable: true, maxLength: 200 }
+        phone: { type: string, nullable: true, maxLength: 50 }
+        address: { type: string, nullable: true, maxLength: 500 }
+        notes: { type: string, nullable: true, maxLength: 1000 }
+        is_active: { type: boolean }
+        confirm_duplicate: { type: boolean, default: false }
+    StorePage:
+      type: object
+      required: [items]
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/Store' } }
+        next_cursor: { type: string, nullable: true }
+    Product:
+      type: object
+      required: [id, name, unit, is_active, version, created_at, updated_at]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string, minLength: 1, maxLength: 200 }
+        unit: { type: string, minLength: 1, maxLength: 50 }
+        brand: { type: string, nullable: true }
+        generic_name: { type: string, nullable: true }
+        strength: { type: string, nullable: true }
+        dosage_form: { type: string, nullable: true }
+        manufacturer: { type: string, nullable: true }
+        pack_size: { type: string, nullable: true }
+        sku: { type: string, nullable: true }
+        purchase_price: { allOf: [{ $ref: '#/components/schemas/Money' }], nullable: true }
+        selling_price: { allOf: [{ $ref: '#/components/schemas/Money' }], nullable: true }
+        mrp: { allOf: [{ $ref: '#/components/schemas/Money' }], nullable: true }
+        unit_gross_profit: { type: string, nullable: true, description: 'selling_price - purchase_price; null when either price is missing. Internal only.' }
+        is_active: { type: boolean }
+        version: { type: integer }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    ProductCreate:
+      type: object
+      required: [id, name, unit]
+      properties:
+        id: { type: string, format: uuid, description: Client-generated }
+        name: { type: string, minLength: 1, maxLength: 200 }
+        unit: { type: string, minLength: 1, maxLength: 50 }
+        brand: { type: string, maxLength: 200 }
+        generic_name: { type: string, maxLength: 200 }
+        strength: { type: string, maxLength: 100 }
+        dosage_form: { type: string, maxLength: 100 }
+        manufacturer: { type: string, maxLength: 200 }
+        pack_size: { type: string, maxLength: 100 }
+        sku: { type: string, maxLength: 100 }
+        purchase_price: { $ref: '#/components/schemas/Money' }
+        selling_price: { $ref: '#/components/schemas/Money' }
+        mrp: { $ref: '#/components/schemas/Money' }
+        confirm_similar: { type: boolean, default: false }
+    ProductUpdate:
+      type: object
+      required: [expected_version]
+      description: Same optional fields as ProductCreate (null clears an optional field), plus is_active.
+      properties:
+        expected_version: { type: integer }
+        name: { type: string }
+        unit: { type: string }
+        brand: { type: string, nullable: true }
+        generic_name: { type: string, nullable: true }
+        strength: { type: string, nullable: true }
+        dosage_form: { type: string, nullable: true }
+        manufacturer: { type: string, nullable: true }
+        pack_size: { type: string, nullable: true }
+        sku: { type: string, nullable: true }
+        purchase_price: { type: string, nullable: true }
+        selling_price: { type: string, nullable: true }
+        mrp: { type: string, nullable: true }
+        is_active: { type: boolean }
+        confirm_similar: { type: boolean, default: false }
+    ProductResult:
+      type: object
+      required: [product]
+      properties:
+        product: { $ref: '#/components/schemas/Product' }
+        warnings: { type: array, items: { type: string, enum: [selling_below_purchase, mrp_below_selling] } }
+    ProductPage:
+      type: object
+      required: [items]
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/Product' } }
+        next_cursor: { type: string, nullable: true }

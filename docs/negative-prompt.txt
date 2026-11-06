@@ -1,0 +1,129 @@
+# NEGATIVE PROMPT: Medical Supply Management Application
+
+Do NOT make any of the following mistakes.
+
+## A. No Fake Functionality
+
+- Do not create a static mockup and call it a complete application.
+- Do not use hardcoded product lists as the permanent database.
+- Do not simulate successful Supabase saves without actually performing the database operation.
+- Do not add buttons that have no working action.
+- Do not display fake success messages when a request fails.
+- Do not claim that voice recognition, offline mode, cloud synchronization, PDF generation, or printing works unless it is implemented and tested.
+- Do not leave critical screens as placeholder pages.
+
+## B. No Billing Errors
+
+- Never show Purchase Price on a customer-facing invoice.
+- Never show MRP on a customer-facing invoice.
+- Never show internal profit or acquisition costs on a customer-facing invoice.
+- Never calculate invoice totals using the current catalog price if a different verified price snapshot belongs to the order.
+- Never invent a Selling Price for a new medicine.
+- Never finalize an invoice with unresolved required prices.
+- Never generate duplicate invoice numbers or duplicate invoices because of retries.
+- Never silently alter an issued invoice's historical values.
+- Never confuse ordered quantities with fulfilled or sold quantities.
+- Never calculate realized profit from unknown acquisition costs without identifying it as an estimate or incomplete value.
+- Never show Purchase Price, MRP, costs, or profit in the optional Account Summary or on a Store Statement.
+- Never print an Account Summary balance that differs from the ledger at the moment the invoice is issued.
+- Never change an issued invoice's Account Summary after it has been issued.
+
+## C. No Medicine Matching Errors
+
+- Never automatically merge different strengths, dosage forms, manufacturers, or pack sizes merely because their names are similar.
+- Never silently replace an unknown medicine with a different medicine.
+- Never discard an unknown medicine or its requested quantity.
+- Never create duplicate master products without checking existing records.
+- Never invent product details, manufacturer information, prices, or pack sizes.
+- Never assume that two differently packaged medicines use interchangeable quantity units.
+- Never treat an unconfirmed voice transcript as an unquestionable final order.
+
+## D. No Order Data Loss
+
+- Never mix one store's order items into another store's order.
+- Never overwrite an existing order when starting a new store order.
+- Never delete unsynchronized offline orders without explicit user confirmation.
+- Never lose an order while registering a new product.
+- Never replace a saved order with an empty order after a refresh or navigation.
+- Never silently overwrite newer server data with stale offline data.
+- Never mark data as cloud-synchronized before the server confirms the save.
+- Never treat a purchase checkbox as proof of a full purchase without recording the actual purchased quantity.
+- Never aggregate unrelated products based only on similar text names.
+
+## E. No Insecure Backend
+
+- Never expose the Supabase service-role key or other server secrets in client-side code.
+- Never disable Row Level Security to make the application appear to work.
+- Never permit unauthorized users to read or modify another business's data.
+- Never rely only on client-side validation for financial or security-sensitive operations.
+- Never commit real credentials or private environment files to source control.
+- Never claim that offline data is automatically available on every device.
+- Never pretend that LocalStorage alone provides a real cloud backend.
+- Never implement synchronization without duplicate prevention and conflict handling.
+
+## F. No Misleading Voice or Offline Claims
+
+- Never assume every mobile browser supports the same speech-recognition features.
+- Never claim speech recognition works offline unless the configured engine actually supports it.
+- Never silently discard speech-recognition errors.
+- Never accept an ambiguous medicine name or uncertain quantity without allowing correction.
+- Never make the application depend entirely on voice recognition.
+- Always provide a manual order-entry fallback.
+- Never call the Gemini API (or any AI provider) from browser code, and never expose its key.
+- Never let the AI provider choose the final product, price, or store. Matching is done by application code and confirmed by the supplier.
+- Never send purchase prices, MRP, selling prices, balances, invoices, or other financial data to the AI provider.
+- Never save AI output that fails schema validation.
+- Never hard-code the AI model name or the API key.
+- Never use the free tier of an AI provider for real business data.
+- Never let a failed or rate-limited AI call block order taking. Fall back to manual entry.
+- Never run automated tests against the real AI API.
+
+## G. No Poor Printing or Interface Design
+
+- Do not design desktop-only layouts.
+- Do not use tiny buttons or unreadable mobile text.
+- Do not include navigation controls that do not work.
+- Do not print the entire application interface on invoices.
+- Do not include purchase costs or internal reports in customer printouts.
+- Do not mix all stores into one unstructured printout.
+- Do not omit individual store breakdowns from the consolidated market list.
+- Do not use excessive animations that slow down order entry.
+
+## H. No Incomplete Engineering
+
+- Do not ignore TypeScript errors, lint errors, or build failures.
+- Do not hardcode environment credentials.
+- Do not skip database migrations or RLS configuration.
+- Do not create unvalidated CSV imports that can silently corrupt the catalog.
+- Do not ignore failed network requests.
+- Do not omit error states, loading states, and empty states.
+- Do not claim tests passed if they were not executed.
+- Do not stop after producing a plan when implementation is possible.
+- Do not replace a required working feature with a placeholder without clearly reporting the limitation.
+
+## I. No Ledger (Khata) Errors
+
+- Never store a store's balance as an editable number. Always calculate it from ledger entries.
+- Never edit or delete a ledger entry. Use a reversal entry and a corrected entry with a reason.
+- Never create ledger entries from draft invoices.
+- Never lose the previous balance when a new invoice is issued.
+- Never record the same payment twice because of a retry, refresh, or synchronization.
+- Never apply one store's payment to another store's invoices.
+- Never let a payment larger than the balance disappear. Keep the excess as an advance.
+- Never show a balance as final while it includes payments that have not synced to the server. Mark it "pending sync".
+
+## J. No Dead Ends on First Use
+
+- Never require a pre-loaded medicine list or store list before the supplier can take an order.
+- Never discard or block an order because a medicine or a store is not registered yet.
+- Never invent a price, strength, pack size, or manufacturer while quick-registering a medicine.
+- Never auto-merge unregistered lines from different stores without the supplier's confirmation.
+- Never leave an unregistered line out of the consolidated market list.
+- Never issue an invoice while any line lacks a verified Selling Price.
+- Never show a blank screen without an empty state that explains the next action.
+
+## FINAL RULE
+
+Prioritize data integrity, medicine identification accuracy, invoice correctness, security, offline safety, and real functionality over visual appearance or development speed.
+
+When requirements are ambiguous, preserve the user's data, ask for confirmation where necessary, and never invent critical financial or medicine information.

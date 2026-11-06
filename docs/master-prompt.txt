@@ -1,0 +1,674 @@
+# MASTER PROMPT: Medical Supply & Voice-Based Order Management System
+
+## 1. ROLE AND OBJECTIVE
+
+Act as a senior full-stack software engineer, UI/UX designer, database architect, and AI application developer.
+
+Build a complete, production-minded, mobile-first Medical Supply & Order Management Web Application for a pharmaceutical supplier who collects orders from multiple pharmacies, purchases consolidated quantities from a wholesale market, distributes medicines to stores, generates invoices, and tracks profit.
+
+The application must replace handwritten order-taking, manual quantity calculations, repetitive billing, and paper-based market lists.
+
+Do not create merely a static UI, prototype, or mockup. Build functional workflows with a real Supabase backend, persistent data, validation, printing, offline support, and working navigation.
+
+This document is the full product specification. Build it module by module as described in Section 18: finish, test, and show each module before starting the next. A visual mockup and a flow map of the intended screens and workflow are provided separately as the design reference.
+
+## 2. REQUIRED TECHNOLOGY STACK
+
+Use the following technologies:
+
+- Next.js with App Router and TypeScript.
+- React.
+- Tailwind CSS.
+- Lucide React icons.
+- Supabase PostgreSQL database.
+- Supabase Authentication.
+- Supabase Row Level Security (RLS).
+- Supabase JavaScript client.
+- IndexedDB for reliable offline data storage and an offline write queue.
+- LocalStorage only for lightweight preferences and UI state.
+- Browser Speech Recognition where supported, with a configurable speech-to-text provider interface for alternative implementations.
+- Google Gemini API, called only from server-side code, to turn the speech transcript into a structured order draft, behind a configurable text-understanding provider interface.
+- Browser printing with dedicated print styles for A4 and thermal receipt layouts.
+- A reliable PDF generation or browser-printing approach.
+
+Use current stable, compatible package versions and follow their official APIs.
+
+## 3. MOBILE-FIRST DESIGN
+
+Create a clean, professional, fast, touch-friendly interface optimized for Android mobile devices.
+
+Requirements:
+
+- Responsive design for mobile, tablet, and desktop.
+- Bottom navigation on mobile where appropriate.
+- Large touch targets and readable typography.
+- Minimal typing and fast order entry.
+- Clear loading, success, error, and offline states.
+- Searchable dropdowns and autocomplete.
+- Confirmation dialogs for destructive operations.
+- Consistent design system, spacing, colors, and components.
+- Accessible forms and keyboard navigation.
+- Fast product search even with hundreds or thousands of products.
+
+Use polished Lucide React icons and meaningful empty states.
+
+## 4. CORE DATABASE ENTITIES
+
+Design normalized PostgreSQL tables with proper foreign keys, indexes, constraints, timestamps, and migration files.
+
+### A. Products
+
+Store:
+
+- Product ID (UUID).
+- Product name and normalized search name.
+- Brand name, generic name, strength, dosage form, and manufacturer when applicable.
+- Pack size and selling unit.
+- SKU or internal product code.
+- Purchase price.
+- Selling price.
+- MRP.
+- Product status: active or inactive.
+- Created and updated timestamps.
+
+Purchase Price means the supplier's acquisition cost. Selling Price means the price charged to the pharmacy. MRP means the maximum retail price recorded from the product packaging.
+
+Calculate estimated gross profit per unit as:
+
+Unit Gross Profit = Selling Price - Purchase Price.
+
+Never invent product prices or assume that similarly named medicines are interchangeable.
+
+### B. Stores
+
+Store:
+
+- Store ID.
+- Store name.
+- Contact person.
+- Phone number.
+- Address.
+- Notes.
+- Active/inactive status.
+- Creation and update timestamps.
+
+### C. Orders
+
+Store:
+
+- Order ID.
+- Unique order number.
+- Store ID.
+- Order date and time.
+- Order status: draft, confirmed, fulfilled, cancelled.
+- Notes.
+- Order source: voice or manual.
+- Created and updated timestamps.
+
+### D. Order Items
+
+Store:
+
+- Order item ID.
+- Order ID.
+- Product ID when linked to a registered product.
+- Product name snapshot.
+- Quantity.
+- Unit of measure.
+- Purchase price snapshot.
+- Selling price snapshot.
+- MRP snapshot.
+- Item status, including pending product registration where needed.
+- Line total.
+- Creation and update timestamps.
+
+Use a suitable product reference or nullable product ID for new, unregistered products.
+
+Each order must retain its own price snapshots. Updating a product's current price must not silently change previously confirmed orders or invoices.
+
+### E. Purchases and Purchase Items
+
+Record actual wholesale purchases separately from requested quantities.
+
+Store supplier or market details when available, purchase date, product, purchased quantity, actual unit cost, and purchase reference.
+
+Support partial purchases and differences between ordered and purchased quantities.
+
+### F. Invoices and Invoice Items
+
+Store:
+
+- Unique invoice number.
+- Related order and store.
+- Invoice date.
+- Invoice status: draft, issued, paid, partially paid, cancelled.
+- Item descriptions and price snapshots.
+- Line totals, grand total, and any explicitly configured discounts.
+- Account Summary snapshot (previous balance, payment received, balance due) saved at issue time when the summary is enabled.
+- Payment records and outstanding balance where applicable.
+
+Issued invoices must preserve their original details. Corrections should use controlled edits, cancellation, or replacement invoices rather than silently altering historical financial records.
+
+### G. Supporting Records
+
+Add appropriate tables for:
+
+- User profiles and business settings.
+- Payment records.
+- Store ledger entries (khata), one running account per store.
+- Audit history for important financial changes.
+- Offline synchronization records where needed.
+
+Use decimal-safe monetary handling, such as PostgreSQL NUMERIC columns, and validate calculations consistently.
+
+## 5. MEDICINE MASTER LIST
+
+Build a complete product management screen.
+
+Features:
+
+- Add, edit, view, search, and deactivate products.
+- Optionally import an initial product list (for example 150–200 products) from CSV or Excel using a validated import workflow. The app must work fully with zero products (see Section 7A).
+- Preview imported records before committing them.
+- Detect duplicate products and conflicting product codes.
+- Search by product name, partial name, brand, generic name, strength, manufacturer, and SKU where available.
+- Support fast partial matching, such as typing "PAN" to find all matching Panadol products.
+- Show relevant product suggestions while typing.
+- Allow the user to select a suggestion with one tap.
+- Display the appropriate unit and verified pricing.
+
+Use debounced search, indexed database fields, and appropriate server-side querying.
+
+Do not create duplicate products simply because the same product is ordered by another store.
+
+## 6. VOICE-BASED ORDER TAKING
+
+This is a core feature, not an optional visual element.
+
+Provide an in-app microphone button on the order-entry screen.
+
+The supplier should be able to say something like:
+
+"Al Madina Medical: Panadol 20 strips, Brufen 10 strips, and cough syrup 5 bottles."
+
+The system must:
+
+1. Capture speech using a supported speech-recognition implementation.
+2. Convert speech into text.
+3. Recognize the selected store and requested product names.
+4. Extract quantities and units.
+5. Match product names against the master catalog.
+6. Present a structured order preview.
+7. Highlight ambiguous products, unknown names, and uncertain quantities.
+8. Allow corrections before confirmation.
+9. Save the order and its line items.
+10. Display clear save and synchronization status.
+
+Design the recognition layer to support Urdu, Roman Urdu, English, and mixed-language speech when the configured recognition provider supports them.
+
+Voice pipeline and AI provider rules:
+
+- Step 1, speech to text: use the browser Speech Recognition by default. Keep a speech-to-text provider interface so that Google Cloud Speech-to-Text (Urdu code ur-PK) can be added later without changing the order screens.
+- Step 2, text to structured order: send the transcript to the Google Gemini API from a server-side route only (for example a Next.js route handler). Ask for strict structured JSON output: the store name as spoken, and a list of items, each with the product name as spoken, the quantity, and the unit. Validate the JSON against a schema on the server, reject anything that does not fit, and treat the result as a draft.
+- Step 3, matching: the Gemini output never decides which catalog product, store, or price applies. Matching against the catalog is done by application code (normalized and fuzzy search). Uncertain results become "choose one" or pending lines as described in Sections 7A and 8.
+- Send only the transcript text to the AI provider. Never send purchase prices, MRP, selling prices, balances, invoices, or other financial data.
+- Keep the provider behind an interface (for example a TextToOrderParser) with the Gemini API as the first implementation, so another provider can replace it. Read the model name from an environment variable (GEMINI_MODEL) and never hard-code it.
+- Keep GEMINI_API_KEY on the server only, in environment variables, with a placeholder in .env.example. Never expose the key in browser code or committed files.
+- Use the paid tier of the Gemini API for real business data. The free tier is for development with test data only, because free-tier inputs may be used by the provider to improve its products.
+- Handle rate limits (HTTP 429), timeouts, invalid output, and no internet with a clear message and a retry. The supplier must always be able to fall back to manual entry or device keyboard voice typing without losing the order. Optionally provide a simple rule-based parser as a degraded fallback for clear, simple sentences; it must flag everything it is unsure about.
+- Always show the transcript and the parsed preview for correction before saving. AI output is never saved as a final order without the supplier's confirmation.
+- Log AI failures and low-confidence results in a diagnostic log, never storing the API key or secrets.
+
+Do not promise universal offline voice recognition. Browser support and network requirements must be detected and communicated honestly.
+
+Provide manual entry and browser keyboard voice typing as fallbacks.
+
+Never silently substitute a similar medicine when a product match is uncertain.
+
+## 7. STORE-WISE ORDER MANAGEMENT
+
+Every store must have its own independent order history.
+
+Features:
+
+- Select a store before starting an order.
+- Add multiple products and quantities.
+- Edit or remove order items.
+- Save drafts automatically.
+- Confirm completed orders.
+- Reopen existing orders with appropriate permissions.
+- Search orders by store, date, order number, and status.
+- View previous orders without overwriting them.
+- Create multiple orders for different stores on the same day.
+- Support multiple visits or orders for the same store.
+- Display the last saved time and synchronization status.
+
+Changing the selected store must never accidentally transfer items from one store's order into another.
+
+## 7A. FIRST-TIME USE: STARTING WITH AN EMPTY APP
+
+The supplier will start with no medicine list and no store list. The app must be fully usable from the first minute with an empty catalog and no stores. Never require a pre-loaded list before an order can be taken.
+
+- A short, skippable setup checklist: business details and invoice settings; add stores (or add them while taking the first order); optional catalog import. Nothing else is required.
+- Inline "Add new store" inside the store selector of the order screen. Only the store name is required; contact details can be added later.
+- Quick Register for medicines: only the product name and unit are required. Strength and dosage form are captured when the supplier says them. Manufacturer, pack size, MRP, Purchase Price, and Selling Price are optional at registration and must never be invented.
+- The catalog grows from real orders. Every unknown medicine, spoken or typed, becomes a pending order line that keeps the exact name, quantity, and unit. Quick Register then creates the product once, and the pending line is linked to it.
+- An order that contains pending lines can still be saved and confirmed. Pending lines never block confirming an order. They only block issuing the invoice until the medicine is registered and its Selling Price is set. Orders are auto-saved as drafts while they are being entered, so nothing is lost mid-order.
+- If a spoken or typed name has several possible matches, the supplier must either pick one or choose "None of these, it is a new medicine", which creates a pending line. The supplier is never stuck.
+- When the same unregistered name appears in other stores' orders, propose linking those lines to the newly registered product and ask the supplier to confirm each link. Never auto-merge lines with different strengths, dosage forms, or pack sizes.
+- Pending (unregistered) lines must still appear in the consolidated market list, in a separate "Not yet registered" group, grouped by the exact typed name with a store-wise breakdown. They are included in the market-list print, marked "unregistered". Once registered they move into the normal grouping.
+- A product without a Selling Price cannot appear on an issued invoice. Provide a "Pending Prices" screen that lists every product (and order line) missing a Selling Price. When the supplier enters a price, order lines that had no price get their price snapshot filled only after the supplier confirms, and the change is recorded in the audit history. Lines that already carry a price snapshot are never changed.
+- The real Purchase Price is usually known only at the wholesale market, so it is recorded in Purchase Recording as the actual unit cost. Optionally offer to update the product's current Purchase Price from the latest purchase, after confirmation.
+- Voice entry with an empty or small catalog must still work: unmatched names become pending lines and are shown for correction. Manual entry remains available.
+- Every list screen needs a clear empty state that shows the next action (for example "Add your first store" or "Take your first order").
+
+## 8. AUTOMATIC NEW MEDICINE REGISTRATION
+
+Implement a complete workflow for medicines that are not present in the master catalog.
+
+Example:
+
+The supplier says, "Add ABC Syrup, quantity 5 bottles, to Al Madina Medical's order."
+
+If ABC Syrup is not found:
+
+1. Preserve the requested medicine name, quantity, unit, and store order.
+2. Mark the item as an unregistered or pending product.
+3. Show a clear "Register New Medicine" option.
+4. Allow the user to enter or confirm the product name, strength, dosage form, manufacturer, pack size, unit, Purchase Price, Selling Price, and MRP as applicable. Only the name and unit are required; prices may be entered later (see Section 7A).
+5. Check for possible duplicates before creating the new product.
+6. Save the new product in Supabase after confirmation.
+7. Link the pending order item to the new permanent product record.
+8. Include the new product in future autocomplete searches.
+9. Include it in consolidated market lists.
+10. Include it in the relevant store invoice once required prices have been verified.
+
+The supplier must not lose the order while registering the new product.
+
+If a required selling price is missing, keep the invoice as a draft and clearly indicate what must be completed. Never silently generate a finalized invoice using a fabricated price.
+
+If two products have similar names but different strengths, dosage forms, or pack sizes, request clarification instead of merging them.
+
+## 9. CONSOLIDATED WHOLESALE MARKET LIST
+
+Build a dedicated market-list screen that aggregates confirmed, active orders for a selected business date or selected set of orders.
+
+Example:
+
+- Al Madina orders 20 Panadol.
+- Shah Medical orders 10 Panadol.
+- Rehman Medical orders 15 Panadol.
+
+The consolidated total must be 45 Panadol.
+
+The interface must show:
+
+- Product name and unit.
+- Total requested quantity.
+- Quantity requested by each store.
+- Individual store names and quantities.
+- Purchased quantity.
+- Remaining quantity to purchase.
+- Checkbox or purchase-status control.
+- Search and filtering.
+- Date selection.
+- Print and export options.
+
+Example:
+
+Panadol — Total: 45 strips
+- Al Madina: 20
+- Shah Medical: 10
+- Rehman Medical: 15
+
+Brufen — Total: 15 strips
+- Al Madina: 10
+- Rehman Medical: 5
+
+Group products by their actual product ID, not merely by similar text names.
+
+Never combine different strengths, dosage forms, manufacturers, or pack sizes as if they were identical products.
+
+The market list must update when the underlying order changes.
+
+Purchased quantities must be recorded separately from requested quantities. A checkbox must not falsely imply that a full purchase occurred unless that is the explicitly configured action.
+
+Support partial purchases and outstanding quantities.
+
+Pending (unregistered) order lines must also appear, in a separate "Not yet registered" group (see Section 7A), so no requested quantity is ever left out of the list.
+
+## 10. THREE PRINTING OPTIONS FOR ORDERS
+
+Provide all three options.
+
+### Option A: Individual Store Order Print
+
+Print one selected store's order only.
+
+Include:
+
+- Business name and contact details.
+- Store name and contact.
+- Order number and date.
+- Product names.
+- Quantities and units.
+- Clear totals where appropriate.
+
+### Option B: Combined Store-Wise Order Print
+
+Print orders for multiple stores in one document.
+
+Each store must have a separate section with its own complete product list and quantities.
+
+Do not mix individual store details into a single undifferentiated list.
+
+### Option C: Consolidated Market List Print
+
+Print one combined wholesale purchase list.
+
+Show each product's total quantity and its store-wise breakdown. Provide a compact layout suitable for taking to the wholesale market.
+
+Allow printing all stores' orders for a selected date and selecting individual stores when required.
+
+## 11. AUTOMATIC BILLING AND INVOICE GENERATION
+
+Generate an invoice draft automatically from each store's saved order.
+
+The invoice must be associated with the correct store and order.
+
+The customer-facing invoice must ONLY display:
+
+- Product Name.
+- Quantity.
+- Selling Price.
+- Total Line Amount (Quantity × Selling Price).
+- Grand Total at the bottom.
+
+It may additionally display the supplier's business details, invoice number, date, and store details.
+
+OPTIONAL ACCOUNT SUMMARY (store balance on the invoice):
+
+The supplier wants the store's running balance to be printable on the invoice. Provide an "Account Summary" block below the Grand Total. It is shown only when the supplier turns it on, using a checkbox on the invoice print screen with a default in Settings (default off). It shows only: "Balance as on <date>", Previous Balance, This Invoice (the Grand Total), Payment Received (when a payment was recorded at delivery), and Balance Due.
+
+Rules for the Account Summary:
+
+- Previous Balance is the store's ledger balance immediately before this invoice. Balance Due = Previous Balance + This Invoice - Payment Received.
+- The figures are a snapshot saved with the invoice when it is issued, so a reprinted issued invoice always shows the same numbers. Payments recorded later do not change it.
+- The issue screen has an optional "Payment received now" amount. If entered, issuing the invoice and recording that payment happen together in one atomic database operation, and the payment appears in the summary.
+- It appears on both the A4 and the thermal layouts.
+- It must never show Purchase Price, MRP, cost, margin, or profit.
+- A draft invoice shows a live preview of the summary; the snapshot is taken at issue.
+
+CRITICAL BILLING RULES:
+
+- Never display Purchase Price on the customer invoice.
+- Never display MRP on the customer invoice.
+- Never display internal gross profit or cost margins on the customer invoice.
+- Calculate the line total using the order's verified Selling Price snapshot.
+- Calculate the grand total from the invoice lines.
+- Validate all monetary values.
+- Do not invent prices for unregistered products.
+- Do not finalize an invoice with unresolved required product prices.
+- Do not create duplicate invoices when the user refreshes or retries an operation.
+- Use a controlled invoice-number generation mechanism.
+- Preserve issued invoice history.
+
+Generate a clean A4 invoice and a compact thermal receipt layout. The user must be able to choose which layout to print.
+
+The application should support both browser printing and PDF output where implemented.
+
+## 12. PROFIT AND BUSINESS REPORTS
+
+Create internal financial reports showing:
+
+- Purchase cost.
+- Selling revenue.
+- Estimated gross profit.
+- Realized gross profit based on recorded actual acquisition costs and fulfilled quantities.
+- Daily, weekly, and monthly totals.
+- Store-wise sales.
+- Product-wise sales.
+- Outstanding customer balances.
+- Purchase and sales summaries.
+
+Use:
+
+Gross Profit = Sales Revenue - Corresponding Cost of Goods Sold.
+
+Do not confuse requested quantities with sold quantities.
+
+Do not calculate realized profit for products whose acquisition cost is unknown without clearly marking the figure as an estimate or incomplete.
+
+Keep internal financial reports separate from customer-facing invoices.
+
+## 13. STORE LEDGER (KHATA), DELIVERY, PAYMENTS, AND BALANCES
+
+Every store has its own account (khata) that runs continuously from one invoice to the next.
+
+Example: a store receives goods worth 20,000 and pays 15,000 in cash, so its balance is 5,000. On the next delivery of 8,000 the balance becomes 13,000, because the previous 5,000 carries forward. A later payment of 10,000 makes it 3,000.
+
+Ledger design:
+
+- A ledger table keeps one entry per event for each store: business, store, entry date, entry type, debit amount, credit amount, related invoice or payment, note, created by, and an idempotency key.
+- Entry types: opening_balance, invoice, payment, adjustment, reversal.
+- A debit increases what the store owes (an issued invoice or an opening balance). A credit reduces it (a payment).
+- The balance is always calculated from the ledger entries as a running balance. Never store the balance as an editable number.
+- Entries are append-only. They are never edited or deleted. A mistake is corrected with a reversal entry and a new correct entry, with a reason, and recorded in the audit history.
+- Only ISSUED invoices create ledger entries. Draft invoices do not. Cancelling an issued invoice creates a reversal entry.
+- Opening balance: when the supplier starts using the app, each store's previous outstanding amount can be entered once as an opening_balance entry, with a date and a note.
+- Advance: if a store pays more than it owes, the excess is kept as an advance (credit balance) and is applied automatically against the next invoice. It is never lost.
+
+Delivery and payment at the store:
+
+- Order statuses are draft, confirmed, fulfilled (delivered), and cancelled. Marking an order delivered leads to issuing its invoice.
+- The issue screen has an optional "Payment received now" amount. If entered, issuing the invoice and recording the payment happen together in one atomic operation.
+- A payment can also be recorded later from the store account screen.
+
+Payment rules:
+
+- A payment belongs to the store account, not to a single invoice. The system allocates each payment to the oldest unpaid item first (the opening balance, then invoices by date) and shows each invoice's status: unpaid, partially paid, or paid.
+- Support cash payments with a date and an optional reference. Keep the data model ready for other methods (bank transfer, mobile wallet) with a payment method field, but only cash is required now.
+- Prevent duplicate payment entries with client-generated idempotency keys, so a retried save, refresh, or sync retry never records a payment twice.
+- Payments recorded offline are saved on the device first and synchronized later. Until the server confirms them, the balance is shown as "pending sync".
+- Never apply a store's payment to another store's invoices.
+
+Screens:
+
+- Store Accounts: all stores with their balances, highest first, and the total receivable.
+- Store Account: the balance, a Record Payment action, and the ledger entries with a running balance.
+- Record Payment: amount, date, and reference, with a preview of the balance after the payment and how it will be allocated.
+- Store Statement: a printable and PDF document for a date range showing the opening balance, every entry, and the closing balance. It is a separate document from the customer invoice.
+
+Neither the Store Statement nor the Store Accounts screens may ever show Purchase Price, MRP, cost, or profit to the customer. Reports show outstanding balances by store, calculated from the ledger.
+
+Preserve an audit history for every financial change.
+
+## 14. SUPABASE BACKEND AND SECURITY
+
+Use Supabase PostgreSQL as the authoritative persistent database.
+
+Requirements:
+
+- Create database schema and version-controlled migrations.
+- Configure authentication.
+- Implement Row Level Security for every relevant table.
+- Associate business records with an authorized business or user account.
+- Prevent unauthorized access to other users' stores, orders, prices, invoices, and reports.
+- Validate all important operations on the server.
+- Use transactions or appropriate database functions for operations that must be atomic.
+- Use database constraints for data integrity.
+- Add suitable indexes for product search, order lookup, and invoice lookup.
+- Keep Supabase service-role credentials on the server only.
+- Keep the Gemini API key, and any Google Cloud credentials, on the server only as well.
+- Never expose secrets in browser code or committed source files.
+- Provide a documented `.env.example` containing placeholder variable names only.
+- Handle authentication expiry, failed requests, and permission errors properly.
+
+Do not claim that Supabase is connected until the application has valid configuration and successful integration tests.
+
+## 15. OFFLINE-FIRST OPERATION AND AUTOMATIC SYNC
+
+The application must support practical offline operation.
+
+Use IndexedDB to persist locally required data and pending operations.
+
+Implement:
+
+- Offline product catalog cache.
+- Offline store cache.
+- Offline order creation and editing.
+- Local persistence before showing a successful local save.
+- A pending synchronization queue.
+- Retry logic with safe duplicate prevention.
+- Clear online/offline and sync-pending indicators.
+- A visible error state for failed synchronization.
+- Conflict detection for records changed on multiple devices.
+- Safe reconciliation when the connection returns.
+- Export/import backup capability.
+
+Use stable client-generated UUIDs or another safe idempotency mechanism to prevent duplicate orders and invoices during retries.
+
+Do not silently overwrite newer server records with older local data.
+
+Show the difference between "Saved on this device" and "Synced to server."
+
+Explain that a new product created offline may need synchronization before it is available on another device.
+
+If offline speech recognition is unavailable, provide manual input or supported device voice typing without losing the order.
+
+## 16. USER INTERFACE AND NAVIGATION
+
+Create the following main screens:
+
+1. Dashboard.
+2. Medicine Master List.
+3. Store Management.
+4. Voice and Manual Order Entry.
+5. Order History.
+6. New Medicine Registration.
+7. Consolidated Market List.
+8. Purchase Recording.
+9. Billing and Invoices.
+10. Store Accounts (Khata), Store Statement, and Record Payment.
+11. Profit and Reports.
+12. Backup, Sync, and Settings (including the invoice Account Summary default and the first-time setup checklist).
+13. Pending Prices (products and order lines still missing a Selling Price).
+
+Navigation must be intuitive on mobile.
+
+Include global search where appropriate, loading indicators, empty states, confirmation dialogs, and useful error messages.
+
+## 17. TESTING REQUIREMENTS
+
+Create automated tests for critical business logic and workflows.
+
+At minimum, test:
+
+1. Creating, editing, and searching products.
+2. Importing a catalog without creating unintended duplicates.
+3. Creating orders for multiple stores.
+4. Preserving separate store-wise order records.
+5. Voice transcript parsing and manual correction.
+6. Handling unknown medicines without losing quantities.
+7. Linking a newly registered product to an existing pending order.
+8. Aggregating identical products across stores.
+9. Keeping different strengths and pack sizes separate.
+10. Recalculating market quantities when orders change.
+11. Partial wholesale purchases.
+12. Invoice line totals and grand totals.
+13. Hiding Purchase Price, MRP, and internal profit from invoices.
+14. Preserving historical prices after a catalog price update.
+15. Preventing duplicate invoices during retries.
+16. Recording payments and calculating balances.
+17. Offline order persistence and synchronization.
+18. Handling conflicting edits and failed sync operations.
+19. Supabase authentication and RLS restrictions.
+20. Responsive layouts and print output.
+21. Starting from an empty catalog and no stores, and taking a full order.
+22. Quick Register with only name and unit, and linking pending lines from other stores after confirmation.
+23. Market list showing unregistered lines in their own group.
+24. Blocking invoice issue until the Selling Price is set, and the Pending Prices flow.
+25. Ledger balance carry-forward across several invoices and payments.
+26. Payment allocation to the oldest unpaid item first, advance handling, and no duplicate payments on retry.
+27. Reversal entries instead of edits or deletes.
+28. Account Summary snapshot on issued invoices (on and off, A4 and thermal), with no cost or profit data in it.
+29. Issuing an invoice together with a payment received now in one atomic operation.
+30. Transcript parsing with a mocked AI provider: valid JSON, invalid JSON, an empty result, and provider failures (timeouts and HTTP 429). Automated tests must never call the real Gemini API.
+31. Confirming that no price, balance, or other financial data is sent to the AI provider, and that the API key never appears in browser code.
+
+Use realistic test data, but do not use mock data as a substitute for the actual backend.
+
+## 18. IMPLEMENTATION WORKFLOW
+
+Work systematically.
+
+Phase 1: Inspect the existing project, if any, and identify the current structure.
+
+Phase 2: Create a short implementation plan and establish the database schema.
+
+Phase 3: Implement authentication, Supabase integration, migrations, and RLS policies.
+
+Phase 4: Build product and store management, including the first-time setup checklist, Quick Register, and optional catalog import.
+
+Phase 5: Implement manual order entry, product autocomplete, and voice-to-order.
+
+Phase 6: Implement unknown-product registration and pending product resolution.
+
+Phase 7: Implement consolidated market lists and purchase tracking.
+
+Phase 8: Implement automatic invoice drafts, invoice history, printing, the store ledger (khata), payments, and the invoice Account Summary.
+
+Phase 9: Implement offline persistence, synchronization, and backup.
+
+Phase 10: Build dashboards, reports, responsive layouts, and settings.
+
+Phase 11: Run tests, linting, type checks, and production builds. Fix identified errors.
+
+Do not stop after creating a plan or a few UI screens. Continue implementing the application to the extent possible in the available environment. Work module by module, and finish and test each module before starting the next one.
+
+If credentials or external configuration are unavailable, build the real integration code, provide exact setup instructions, and clearly identify what remains unconfigured.
+
+Do not fabricate successful database connections, test results, or deployments.
+
+## 19. FINAL DELIVERABLES
+
+Provide:
+
+- Complete working source code.
+- Organized Next.js App Router project.
+- Database schema and migrations.
+- Supabase setup instructions.
+- RLS policies.
+- Environment-variable example file.
+- Product import template.
+- Voice recognition and Gemini API configuration instructions (getting a key, GEMINI_MODEL, free versus paid tier, server-only keys).
+- Offline and synchronization documentation.
+- Invoice (with the optional Account Summary), store statement, and market-list print layouts.
+- Automated tests for critical workflows.
+- README with local development and deployment steps.
+- A list of implemented features and any remaining limitations.
+
+The final result must be maintainable, secure, mobile-friendly, and ready for real configuration and testing.
+
+## FINAL ACCEPTANCE CRITERIA
+
+The application is acceptable only when:
+
+- A supplier can register stores and medicines.
+- The supplier can enter orders manually or through supported voice recognition.
+- Every store's order is saved independently.
+- An unknown product can be registered without losing the order.
+- The product becomes searchable for subsequent orders.
+- The consolidated market list correctly aggregates quantities across stores.
+- Individual, combined store-wise, and consolidated market-list printing work.
+- Invoice drafts are generated from saved orders.
+- Customer invoices contain only the permitted product, quantity, Selling Price, line total, and grand total fields, plus necessary invoice identification details.
+- Purchase Price, MRP, and internal profit remain hidden from customer invoices.
+- The app can be used from the first minute with no medicines and no stores registered.
+- Each store has its own running account (khata) whose balance carries forward from invoice to invoice.
+- The invoice can optionally show the store's Account Summary (previous balance, this invoice, payment received, balance due) without exposing cost or profit.
+- The backend stores data securely in Supabase.
+- Offline changes persist locally and synchronize safely when connectivity returns.
+- Critical workflows are tested and documented.
+
+Build the complete application, not just its appearance.
