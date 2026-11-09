@@ -32,12 +32,12 @@ test.describe("US3: typed (not registered) lines", () => {
     await waitSaved(page);
     await expect(page.getByTestId("order-line")).toHaveCount(2);
     await expect(page.getByText("Not registered")).toHaveCount(2);
-    await expect(page.getByText("No selling price")).toHaveCount(2);
+    await expect(page.getByTestId("order-line").getByText("No selling price")).toHaveCount(2);
     await expect(page.getByTestId("line-price")).toHaveCount(0);
 
     await confirmOrder(page);
     await expect(page.getByText("Not registered")).toHaveCount(2);
-    await expect(page.getByText("No selling price")).toHaveCount(2);
+    await expect(page.getByTestId("order-line").getByText("No selling price")).toHaveCount(2);
     await expect(page.getByTestId("line-price")).toHaveCount(0);
     await expect(page.getByTestId("order-total-amount")).toHaveText("—");
     await expect(page.getByTestId("order-total-note")).toHaveText("2 lines have no selling price");

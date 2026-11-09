@@ -81,7 +81,7 @@ test.describe("order screens at 360 px", () => {
     expect(await smallTargets(page), "small targets in the medicine search").toEqual([]);
     await page.getByRole("dialog").getByLabel("Search medicines").fill("nothing matches this");
     await page.getByTestId("add-as-typed").click();
-    await expect(page.getByLabel("Medicine name")).toBeVisible();
+    await expect(page.getByRole("dialog").getByLabel("Medicine name")).toBeVisible();
     expect(await smallTargets(page), "small targets in the typed form").toEqual([]);
     await page.keyboard.press("Escape");
 
