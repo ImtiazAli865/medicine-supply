@@ -1,6 +1,7 @@
 import { Pill, Plus, Store } from "lucide-react";
 import Link from "next/link";
 import { ContinueOrders } from "@/components/orders/ContinueOrders";
+import { PendingSummaryCard } from "@/components/pending/PendingSummaryCard";
 import { SetupChecklist } from "@/components/setup/SetupChecklist";
 import { ButtonLink } from "@/components/ui/Button";
 import { requirePageContext } from "@/lib/api/auth";
@@ -31,6 +32,7 @@ export default async function HomePage() {
         New order
       </ButtonLink>
       {drafts ? <ContinueOrders orders={drafts.items} /> : null}
+      <PendingSummaryCard />
       {setup && !setup.dismissed ? <SetupChecklist state={setup} /> : null}
       <ul className="grid gap-3 sm:grid-cols-2">
         {cards.map(({ href, title, description, icon: Icon }) => (

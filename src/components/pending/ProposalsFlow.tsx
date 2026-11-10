@@ -232,11 +232,14 @@ export function PendingProposals({
   request,
   currentOrderId,
   onCurrentOrderChanged,
+  onAnyLinked,
   onClose,
 }: {
   request: ProposalsRequest;
   currentOrderId: string | null;
   onCurrentOrderChanged?: (order: Order) => void;
+  /** Called after any line was linked from the list, so a screen that lists pending lines can refresh. */
+  onAnyLinked?: () => void;
   onClose: () => void;
 }) {
   const toast = useToast();
@@ -246,6 +249,7 @@ export function PendingProposals({
 
   function handleLinked(result: LinkResult) {
     if (currentOrderId !== null && result.order.id === currentOrderId) onCurrentOrderChanged?.(result.order);
+    onAnyLinked?.();
   }
 
   async function startManual(line: TypedLine) {
@@ -312,7 +316,7 @@ export function PendingProposals({
  * Lets a screen offer the proposals after a register or a link. `offer` looks for matching lines and opens the
  * list only when there are some; `element` must be rendered by the screen (it outlives the line that triggered it).
  */
-export function usePendingProposals(currentOrderId: string | null, onCurrentOrderChanged?: (order: Order) => void) {
+export function usePendingProposals(currentOrderId: string | null, onCurrentOrderChanged?: (order: Order) => void, onAnyLinked?: () => void) {
   const toast = useToast();
   const [request, setRequest] = useState<ProposalsRequest | null>(null);
 
@@ -329,7 +333,7 @@ export function usePendingProposals(currentOrderId: string | null, onCurrentOrde
   );
 
   const element = request ? (
-    <PendingProposals key={request.product.id} request={request} currentOrderId={currentOrderId} onCurrentOrderChanged={onCurrentOrderChanged} onClose={() => setRequest(null)} />
+    <PendingProposals key={request.product.id} request={request} currentOrderId={currentOrderId} onCurrentOrderChanged={onCurrentOrderChanged} onAnyLinked={onAnyLinked} onClose={() => setRequest(null)} />
   ) : null;
 
   return { offer, element };

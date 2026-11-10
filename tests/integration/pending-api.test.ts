@@ -1,8 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { ApiError } from "@/lib/api/errors";
-import { linkLine, pendingCandidates, registerLine } from "@/lib/pending/repository";
-import { LinkBodySchema, PendingProductQuerySchema, RegisterBodySchema } from "@/lib/validation/pending";
+import { linkLine, listPendingPrices, listTypedGroups, pendingCandidates, pendingSummary, registerLine } from "@/lib/pending/repository";
+import { LinkBodySchema, PendingListQuerySchema, PendingProductQuerySchema, RegisterBodySchema } from "@/lib/validation/pending";
 import { getOrderWithClient, linkBody, registerBody, seedMedicineWithClient, seedOrderWithClient, seedStoreWithClient } from "../helpers/pending";
 import { createTenant, deleteTenant, hasTestEnv, SKIP_REASON, type TestTenant } from "../helpers/supabase-test";
 
@@ -268,6 +268,85 @@ suite("pending products repository against Supabase", () => {
       const after = await getOrderWithClient(a.client, o.orderId);
       expect(after.version).toBe(o.version);
       expect(after.lines[0].product_id).toBeNull();
+    });
+  });
+
+  describe("summary and typed groups", () => {
+    const typedQuery = (q: string, limit = "50", cursor?: string) => PendingListQuerySchema.parse({ q, limit, ...(cursor ? { cursor } : {}) });
+
+    async function allTypedGroups() {
+      const groups = [];
+      let cursor: string | undefined;
+      do {
+        const page = await listTypedGroups(a.client, typedQuery("", "100", cursor));
+        groups.push(...page.items);
+        cursor = page.next_cursor ?? undefined;
+      } while (cursor);
+      return groups;
+    }
+
+    async function allPriceItems() {
+      const items = [];
+      let cursor: string | undefined;
+      do {
+        const page = await listPendingPrices(a.client, typedQuery("", "100", cursor));
+        items.push(...page.items);
+        cursor = page.next_cursor ?? undefined;
+      } while (cursor);
+      return items;
+    }
+
+    it("counts follow a new typed line and a register, and equal the lists (SC-007)", async () => {
+      const before = await pendingSummary(a.client);
+      const unique = `Sumx${randomUUID().slice(0, 6)}`;
+      const o = await seedOrderWithClient(a.client, storeA, [{ product_id: null, name: unique, quantity: 2, unit: "strip" }], { confirm: true });
+      const typed = await pendingSummary(a.client);
+      expect(typed.typed_lines).toBe(before.typed_lines + 1);
+      expect(typed.typed_groups).toBe(before.typed_groups + 1);
+
+      await registerLine(a.client, o.orderId, o.lineIds[0], parseRegister(registerBody(o.version, { name: unique })));
+      const after = await pendingSummary(a.client);
+      expect(after.typed_lines).toBe(before.typed_lines);
+      expect(after.price_items).toBe(before.price_items + 1); // the new medicine has no price
+      expect(after.price_items_with_waiting_lines).toBe(before.price_items_with_waiting_lines + 1);
+      expect(after.lines_waiting).toBe(before.lines_waiting + 1);
+
+      expect(after.typed_groups).toBe((await allTypedGroups()).length);
+      const items = await allPriceItems();
+      expect(after.price_items).toBe(items.length);
+      expect(after.price_items_with_waiting_lines).toBe(items.filter((i) => i.lines_waiting > 0).length);
+      expect(after.lines_waiting).toBe(items.reduce((n, i) => n + i.lines_waiting, 0));
+      expect(JSON.stringify(after)).not.toMatch(/purchase_price|"mrp"/i);
+    });
+
+    it("searches and pages the typed groups with the exact typed text, store, order number and quantity", async () => {
+      const unique = `Tpx${randomUUID().slice(0, 6)}`;
+      const o1 = await seedOrderWithClient(a.client, storeA, [{ product_id: null, name: `${unique} one`, quantity: 5, unit: "box" }, { product_id: null, name: `${unique} two`, quantity: 1, unit: "strip" }], { confirm: true });
+      await seedOrderWithClient(a.client, storeA, [{ product_id: null, name: `${unique} three`, quantity: 2, unit: "strip" }, { product_id: null, name: `${unique.toUpperCase()} ONE`, quantity: 9, unit: "strip" }]);
+
+      const first = await listTypedGroups(a.client, typedQuery(unique, "2"));
+      expect(first.items).toHaveLength(2);
+      expect(first.next_cursor).toBe("2");
+      const second = await listTypedGroups(a.client, typedQuery(unique, "2", first.next_cursor!));
+      expect(second.items).toHaveLength(1);
+      expect(second.next_cursor).toBeNull();
+      const all = [...first.items, ...second.items];
+      expect(all.map((g) => g.typed_text)).toEqual([`${unique} one`, `${unique} three`, `${unique} two`]);
+      const one = all[0];
+      expect(one.line_count).toBe(2); // the same text typed in two orders, any case
+      expect(one.lines[0]).toMatchObject({ order_id: o1.orderId, order_number: o1.number, order_status: "confirmed", typed_text: `${unique} one`, quantity: 5, unit: "box" });
+      expect(typeof one.lines[0].store_name).toBe("string");
+      expect(JSON.stringify(all)).not.toMatch(/purchase_price|"mrp"/i);
+
+      expect((await listTypedGroups(a.client, typedQuery(`${unique} zzzz`))).items).toEqual([]);
+      expect((await listTypedGroups(b.client, typedQuery(unique))).items).toEqual([]); // another business sees nothing
+    });
+
+    it("rejects an invalid limit or cursor with a validation message", async () => {
+      for (const limit of ["0", "101", "abc", "-1"]) expect(PendingListQuerySchema.safeParse({ limit }).success, limit).toBe(false);
+      expect(PendingListQuerySchema.safeParse({ waiting: "yes" }).success).toBe(false);
+      const error = await errorOf(listTypedGroups(a.client, { q: "", limit: 10, cursor: "x" }));
+      expect(error?.code).toBe("validation_error");
     });
   });
 });

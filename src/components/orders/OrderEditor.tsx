@@ -239,6 +239,12 @@ export function OrderEditor({
         </Banner>
       ) : null}
 
+      {state.lines.some((l) => l.product_id === null) ? (
+        <Link href="/pending?tab=register" data-testid="pending-link" className="inline-flex min-h-11 items-center font-medium text-primary underline">
+          Medicines waiting to be registered
+        </Link>
+      ) : null}
+
       <section aria-label="Order lines" className="space-y-3">
         {hasLines ? (
           <ul className="space-y-3" data-testid="order-lines">

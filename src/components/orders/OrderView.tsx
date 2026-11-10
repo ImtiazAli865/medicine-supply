@@ -52,6 +52,12 @@ export function OrderView({
 
       {actions}
 
+      {order.lines.some((l) => l.product_id === null) ? (
+        <Link href="/pending?tab=register" data-testid="pending-link" className="inline-flex min-h-11 items-center font-medium text-primary underline">
+          Medicines waiting to be registered
+        </Link>
+      ) : null}
+
       <ul className="space-y-3" data-testid="order-lines">
         {order.lines.map((line) => (
           <OrderLineRow
