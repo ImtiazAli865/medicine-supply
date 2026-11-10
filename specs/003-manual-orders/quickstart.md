@@ -52,8 +52,45 @@ Serve the dev-project build to the phone: `npm run build`, then `npm run start -
 
 ## 6. Verification results
 
-*(To be completed during implementation. Record only what was actually run: test counts, the 5,000-medicine search time, the 1,000-order first-page time, and the owner's timed 10-line order.)*
+Recorded 2026-11-10, only what was actually run on branch `003-manual-orders` (commit d618276 plus the test fixes it contains):
+
+| Check | Result |
+|---|---|
+| `npm run lint` (eslint and secret check) | pass |
+| `npm run typecheck` | pass |
+| `npm test` (Vitest: unit, PGlite database, Supabase test-project integration) | 45 files, 465 tests, all passed |
+| `npm run build` (dev environment) | pass |
+| `npm run test:e2e` (Playwright, full suite, mobile and desktop projects) | 258 tests: 214 passed, 0 failed, 44 skipped, 15.5 minutes |
+| Order browser specs only (mobile project) | 47 of 47 passed |
+| 1,000-order history, first page of 30 (Supabase test project) | 208 ms (SC-010 target: under 2 s) |
+| Automated 10-line order, 500-medicine catalog, "New order" to Confirmed | 23.6 s in the last full run (29.0 s in another run). This is instant automated entry, not a human time |
+
+- The 44 skipped e2e tests are all in the `desktop` project: the order specs are marked "mobile project only", so they are skipped there on purpose. They ran on the `mobile` project.
+- A first full e2e attempt was cut off when the session ended (147 passed, none failed, no summary). It was discarded and the whole suite was rerun from the start; only the rerun is counted above.
+- Two order e2e tests failed once because their locators matched more than one element (a total note containing "no selling price", and an inline form next to the add-medicine dialog). The product code was correct; the locators were scoped and both pass.
+
+**Not done or not measured (do not treat as passed):**
+- T075: the 5,000-medicine search timing (SC-009, including the dosage-form search) has not been run.
+- T078: the security and honesty sweep of `src/` has not been written up.
+- T081: the owner's timed 10-line order on a real phone (SC-001, target under 3 minutes) and the manual walk-through in section 4. SC-001 is therefore not yet confirmed with a human.
+- T076: the shared states e2e (`states.spec.ts`) was not extended; order screens are covered by `touch-targets.spec.ts` (360 px, every order screen) and by the loading, error and empty tests in `orders-history.spec.ts`.
 
 ## 7. Items checked at first apply (from research.md)
 
-*(To be completed: `Asia/Karachi` in PGlite and on both Supabase projects; generated column cast; advisory lock and counter behaviour; products search with `dosage_form` on 5,000 medicines.)*
+**Migration `0003_orders.sql` applied to the dev project (`medicine-supply-dev`) on 2026-11-10** through the Supabase SQL Editor, signed in by the owner. Read-only checks before and after:
+
+| | Before | After |
+|---|---|---|
+| Medicines | 156 | 156 |
+| Stores | 1 | 1 |
+| Profiles | 1 | 1 |
+| Order tables (`orders`, `order_lines`, `order_events`, `order_counters`) | 0 | 4 |
+| Order functions | 0 | 6 |
+| Row Level Security on the four order tables | n/a | on (4 of 4) |
+| Table grants for signed-in users on `orders`, `order_lines`, `order_events` | n/a | SELECT only |
+| Grants for signed-in users on `order_counters` | n/a | none |
+| Rows in `orders` | n/a | 0 |
+
+Supabase showed its generic "destructive operations" warning because the file has `drop trigger/policy if exists` lines; they only touch objects created by this same file. The migration is one transaction (`begin` to `commit`) and reported "Success".
+
+Covered by tests on the TEST project and PGlite (all passing in the run above): `Asia/Karachi` day bounds, the generated `line_total` column, the advisory lock with 10 simultaneous requests, and the gapless counter. Still open: products search with `dosage_form` on 5,000 medicines (T075).
