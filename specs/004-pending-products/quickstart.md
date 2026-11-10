@@ -55,7 +55,7 @@ Serve the dev-project build to the phone: `npm run build`, then `npm run start -
 
 ## 6. Verification results
 
-**Status: Setup, Foundational, US1 (register), US2 (link), US3 (proposals), US4 (Pending Prices) and US5 (visibility) only. Everything below was actually run on 2026-11-10; stories US3 to US5 and the polish tasks are not built yet, so this is not a completed module.**
+**Status (end of 2026-11-10): all five stories and the polish tasks T054 to T059 are built and tested. NOT done: T060 (a clean full verification: the last full `npm run test:e2e` had 3 failures and its rerun was stopped unfinished), the owner steps T061 to T063 and the pull request T064. So this is not a completed module. Everything below was actually run on 2026-11-10.**
 
 | Check | Result |
 |---|---|
@@ -69,6 +69,42 @@ Serve the dev-project build to the phone: `npm run build`, then `npm run start -
 - The simultaneous-request tests ran against separate connections to the real test project: 10 identical register requests gave one medicine, one link, one event, and ten matching responses (one new, nine replayed).
 - Not run yet: `npm run build` and the full e2e suite (both planned for T060), the 1,000-line scale check (T056), and the owner's walkthrough (T062).
 
+### Polish results (T054 to T059)
+
+| Check | Result |
+|---|---|
+| Isolation (T054) | `db-pending-rls.pglite.test.ts` 10 passed and `rls-pending.test.ts` (TEST project, two real users) 5 passed. A crafted order, line, medicine or request id of business A gets business B exactly the answer of a missing id; 0 rows of A change; a request id used by A is not replayed for B; `pending_requests` is closed to both users and visitors; a visitor can call none of the functions |
+| History (T055) | `db-pending-history.pglite.test.ts` 6 passed: `linked` and `price_filled` events cannot be changed or deleted, `typed_name` is write-once and survives edits and a cancel, an editor holding the old typed line gets `version_conflict` |
+| 360 px, states, navigation (T057) | `touch-targets`, `states` and `shell` specs, mobile project: 32 passed. New: every pending screen and dialog has no target under 44 px and no sideways scroll; both Pending lists and the Home card have loading, error with Retry and empty states; the bottom navigation still has 5 items |
+| Security and honesty sweep (T058) | In `src/` the words purchase price / MRP appear in pending code only in the register form fields; no `localStorage`/`sessionStorage`/`indexedDB` for pending data (the only `sessionStorage` use is the Module 002 import wizard); no service-role or secret key; no "synced" or "saved on this device" wording; no `any`, no empty `catch`, no `@ts-ignore`; no "link all" or auto-linking (the one mention is a comment saying there is none); typed text is never parsed for strength or form (the only text handling is the name and label comparison and the first word used to list look-alikes); every button in `src/components/pending` has a handler. One note: the trigger function `pending_requests_guard` can be executed by `anon` as a function, but a trigger function cannot be called through the API |
+| README (T059) | Module 004 section added; migration `0004` in the setup steps |
+
+**Scale (T056, SC-011).** 1,000 typed lines, 1,000 waiting lines of one medicine and 500 medicines without a price, on the TEST project, 5 runs each, times are the database calls from this machine (network round trip included, the Next.js route and the browser are not).
+
+| Call | Before `0005` (ms) | After `0005` (ms, max of 5) |
+|---|---|---|
+| Home summary | 281 | 233 |
+| Need a price, first page | 2,557 to 2,792 (over the 2 s limit) | 254 |
+| Need a price, search | 339 | 242 |
+| Need a price, last page | up to 2,740 (over the limit) | 209 |
+| To register, first page / search / late page | 251 / 381 / 251 | 262 / 274 / 379 |
+| Proposals for a medicine with 250 matching lines | statement timeout (over 8 s) | 241 |
+| Price review of 1,000 lines | 619 | 422 |
+| Price fill of 1,000 lines (once) | 834 | 346 |
+
+Cause (found with EXPLAIN ANALYZE on PGlite): the planner re-ran the "waiting lines" aggregate once for each of the 501 medicines (about 4.5 million buffer hits), and `pending_candidates` recomputed every medicine's labels for every typed line. Fix: migration `0005_pending_perf.sql` (the aggregate is `MATERIALIZED`; labels are computed once). Only function bodies changed. On PGlite the same data went from 115 s to 0.1 s for the list and from 14.5 s to 0.05 s for the proposals. `0005` was applied to the TEST project only (see section 7); it is NOT applied to the dev project.
+
+### Full verification so far (T060, not finished)
+
+| Check | Result |
+|---|---|
+| `npm run lint`, `npm run typecheck` | pass |
+| `npm test` | 60 files, 630 tests, all passed |
+| `npm run test:e2e` (mobile and desktop), first full run | 286 passed, 87 skipped by design (tests that are for one project only), **3 failed**: (1) mobile, the Need a price loading test: two `loading` elements at once, strict-mode error in my new test, fixed with `.first()`; (2) desktop, the Home card loading test: it used the shared test business, which holds other tests' data, fixed with a fresh business; (3) desktop, Module 002 "5,000-row xlsx" import: timed out at 60 s in the full run, passed in 5.9 s when run alone (csv and xlsx); the cause is not proven (load suspected) |
+| `npm run test:e2e`, rerun after the two test fixes | NOT finished: stopped by hand at about test 57 of 370. A clean full run is still needed before anything is called passed |
+| `npm run build` after the e2e run | to be run again (the e2e run builds `.next` for the TEST project) |
+| Section 17 mapping | not written yet (part of T060) |
+
 ## 7. Items checked at first apply (from research.md)
 
 **Migration `0004_pending_products.sql` applied to the TEST project (`medicine-supply-test`) on 2026-11-10** through the owner's signed-in Supabase tab (page title checked as `medicine-supply-test` before running). Read-only counts before and after: 15 medicines, 3 stores, 1 order, 2 order lines, 0 events, identical. After: `typed_name` exists and is null on every line; `pending_requests` exists with RLS on and no grants for `anon` or `authenticated`; 3 indexes; 8 public functions, all executable by signed-in users and not by `anon`; `pending_link_line` not executable by either; the `order_events` check lists the six event types. Supabase showed its generic "destructive operations" warning because the file has `drop trigger if exists` and replaces one check constraint.
@@ -81,4 +117,6 @@ Checked so far against the eight items of research.md:
 5. Register: replay, 10 simultaneous identical requests, stale version: PGlite and TEST project. Link and fill: not yet.
 6. Lines that already carry a price are identical after a fill: not yet (US4).
 7. The reads return no purchase price or MRP: register response and history checked; the read functions are not built into screens yet.
-8. The 1,000 lines / 500 medicines list time: not yet (T056).
+8. The 1,000 lines / 500 medicines list time: measured (T056), see section 6; it needed `0005`.
+
+**Migration `0005_pending_perf.sql` applied to the TEST project on 2026-11-10** through the owner's signed-in Supabase tab (page title checked as `medicine-supply-test`; "Success. No rows returned."). Read-only check afterwards: `pending_prices_list` and `pending_summary` contain `materialized`, `pending_candidates` uses the new label set, `pending_candidates` is executable by signed-in users, the internal helper `pending_link_line` is not. **Not applied to the dev project.** When `0004` is applied to dev (T061), `0005` must be applied right after it, in that order.

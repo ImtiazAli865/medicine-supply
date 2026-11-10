@@ -91,3 +91,73 @@ test.describe("order screens at 360 px", () => {
     expect(await smallTargets(page), "small targets while editing a confirmed order").toEqual([]);
   });
 });
+
+// Module 004 (SC-012): the Pending screens and their dialogs at 360 px.
+test.describe("pending screens at 360 px", () => {
+  test.skip(({ viewport }) => !viewport || viewport.width > 400, "mobile project only");
+
+  test("every pending screen and dialog has no small targets and no sideways scroll", async ({ page, freshTenant }) => {
+    const { seedMedicines, seedStore, createOrder } = await import("./orders-helpers");
+    const catalog = await seedMedicines(freshTenant);
+    const alpha = await seedStore(freshTenant, "Alpha Store");
+    const bravo = await seedStore(freshTenant, "Bravo Store");
+    // two typed lines with the same text (so the proposals dialog has something to show) and an unpriced medicine
+    const first = await createOrder(freshTenant, alpha, [{ product_id: null, name: "Noran 20mg", quantity: 3, unit: "strip" }, { product_id: catalog.noPriceId, quantity: 2, unit: "bottle" }], { confirm: true });
+    await createOrder(freshTenant, bravo, [{ product_id: null, name: "Noran 20mg", quantity: 4, unit: "box" }]);
+
+    const check = async (what: string) => {
+      expect(await smallTargets(page), `small targets: ${what}`).toEqual([]);
+      const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+      expect(overflow, `horizontal overflow: ${what}`).toBeLessThanOrEqual(1);
+    };
+
+    await signIn(page, freshTenant);
+    for (const path of ["/", "/pending?tab=register", "/pending?tab=prices", `/pending/prices/${catalog.noPriceId}`]) {
+      await page.goto(path);
+      await expect(page.locator("main")).toBeVisible();
+      await page.waitForLoadState("networkidle");
+      await expect(page.getByTestId("loading")).toHaveCount(0);
+      await expect(page.getByTestId("pending-summary-loading")).toHaveCount(0);
+      await check(path);
+    }
+
+    // the price screen after the review (the list of lines) and after the fill (the result)
+    await page.goto(`/pending/prices/${catalog.noPriceId}`);
+    await page.getByTestId("price-input").fill("125.50");
+    await page.getByTestId("price-review").click();
+    await expect(page.getByTestId("review-panel")).toBeVisible();
+    await check("price review");
+    await page.getByTestId("fill-confirm").click();
+    await expect(page.getByTestId("fill-result")).toBeVisible();
+    await check("price result");
+
+    // the dialogs, opened from the To register tab
+    await page.goto("/pending?tab=register");
+    await expect(page.getByTestId("typed-group")).toHaveCount(1);
+    await page.getByTestId("typed-line").first().getByTestId("link-existing-medicine").click();
+    const linkDialog = page.getByRole("dialog");
+    await expect(linkDialog.getByTestId("link-result").first()).toBeVisible();
+    await check("link dialog (search)");
+    await linkDialog.getByLabel("Search medicines").fill("panadol");
+    await linkDialog.getByTestId("link-result").filter({ hasText: "Panadol 500mg" }).first().click();
+    await expect(linkDialog.getByTestId("link-picked")).toBeVisible();
+    await check("link dialog (compare)");
+    await page.keyboard.press("Escape");
+
+    await page.getByTestId("typed-line").first().getByTestId("register-medicine").click();
+    const registerDialog = page.getByRole("dialog");
+    await expect(registerDialog.getByLabel(/^Medicine name/)).toBeVisible();
+    await check("register dialog");
+    await registerDialog.getByTestId("register-more").click();
+    await check("register dialog (more details)");
+    await registerDialog.getByTestId("register-submit").click();
+    await expect(page.getByTestId("proposed-group")).toBeVisible(); // the other order's line is proposed
+    await check("proposals dialog");
+    await page.getByTestId("proposals-close").click();
+
+    // the order screen keeps the Pending link and the medicine page keeps its entry
+    await page.goto(`/orders/${first.id}`);
+    await page.waitForLoadState("networkidle");
+    await check("confirmed order with a registered line");
+  });
+});
