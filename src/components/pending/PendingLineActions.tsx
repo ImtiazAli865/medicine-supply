@@ -21,6 +21,7 @@ export function PendingLineActions({
   line,
   getVersion,
   onOrderChanged,
+  onLinked,
 }: {
   orderId: string;
   orderStatus: "draft" | "confirmed";
@@ -28,6 +29,11 @@ export function PendingLineActions({
   getVersion: () => Promise<VersionResult>;
   /** The order as the server has it after the change; the screen shows it from now on. */
   onOrderChanged: (order: Order) => void;
+  /**
+   * Called after a register or link succeeded, with the medicine. The screen offers the proposals for other lines
+   * from there, because this component goes away once its line is no longer pending.
+   */
+  onLinked?: (product: MedicineBrief) => void;
 }) {
   const toast = useToast();
   const [register, setRegister] = useState<RegisterTarget | null>(null);
@@ -54,6 +60,7 @@ export function PendingLineActions({
     onOrderChanged(result.order);
     const priced = result.price_applied ? result.order.lines.find((l) => l.id === line.id)?.selling_price : null;
     toast.show(priced ? `${text} The line now has the price ${priced}.` : text, "success");
+    onLinked?.(result.product);
   }
 
   function stale(text: string, order?: Order) {

@@ -1,6 +1,7 @@
 import { ChevronLeft, Lock, Pencil } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { WaitingLinesButton } from "@/components/pending/WaitingLinesButton";
 import { ActiveToggle } from "@/components/ui/ActiveToggle";
 import { Badge } from "@/components/ui/Badge";
 import { ButtonLink } from "@/components/ui/Button";
@@ -41,6 +42,21 @@ export default async function ProductDetailPage({ params }: PageProps<"/products
           <Pencil size={18} aria-hidden="true" /> Edit
         </ButtonLink>
         <ActiveToggle endpoint="/api/products" id={p.id} version={p.version} isActive={p.is_active} name={p.name} noun="medicine" />
+        {p.is_active ? (
+          <WaitingLinesButton
+            product={{
+              id: p.id,
+              name: p.name,
+              unit: p.unit,
+              strength: p.strength,
+              dosage_form: p.dosage_form,
+              pack_size: p.pack_size,
+              manufacturer: p.manufacturer,
+              selling_price: p.selling_price,
+              is_active: p.is_active,
+            }}
+          />
+        ) : null}
       </div>
 
       <dl className="divide-y divide-border rounded-xl border border-border bg-surface px-4">

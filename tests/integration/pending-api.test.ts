@@ -1,8 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { ApiError } from "@/lib/api/errors";
-import { linkLine, registerLine } from "@/lib/pending/repository";
-import { LinkBodySchema, RegisterBodySchema } from "@/lib/validation/pending";
+import { linkLine, pendingCandidates, registerLine } from "@/lib/pending/repository";
+import { LinkBodySchema, PendingProductQuerySchema, RegisterBodySchema } from "@/lib/validation/pending";
 import { getOrderWithClient, linkBody, registerBody, seedMedicineWithClient, seedOrderWithClient, seedStoreWithClient } from "../helpers/pending";
 import { createTenant, deleteTenant, hasTestEnv, SKIP_REASON, type TestTenant } from "../helpers/supabase-test";
 
@@ -222,6 +222,52 @@ suite("pending products repository against Supabase", () => {
       const foreign = await seedMedicineWithClient(b.client, { name: "B medicine", unit: "strip" });
       expect((await errorOf(linkLine(a.client, p.orderId, p.typedId, parseLink(linkBody(p.version, foreign)))))?.code).toBe("not_found");
       expect((await getOrderWithClient(a.client, p.orderId)).lines[0].product_id).toBeNull();
+    });
+  });
+
+  describe("candidates", () => {
+    it("lists the clear matches as proposed and the look-alikes as not proposed, with store, order number, typed text, quantity and unit", async () => {
+      const unique = `Candy${randomUUID().slice(0, 6)}`;
+      const medicine = await seedMedicineWithClient(a.client, { name: unique, unit: "strip", strength: "20 mg" });
+      const catalog = await seedMedicineWithClient(a.client, { name: `Catalog ${randomUUID().slice(0, 6)}`, unit: "box" });
+      const draft = await seedOrderWithClient(a.client, storeA, [{ product_id: null, name: `${unique} 20 mg`, quantity: 4, unit: "strip" }, { product_id: catalog, quantity: 1, unit: "box" }], { confirm: false });
+      const confirmed = await seedOrderWithClient(a.client, storeA, [{ product_id: null, name: unique.toUpperCase(), quantity: 6, unit: "box" }], { confirm: true });
+      const alike = await seedOrderWithClient(a.client, storeA, [{ product_id: null, name: `${unique} 40 mg`, quantity: 2, unit: "strip" }], { confirm: true });
+      // the same text in another business never shows up
+      const foreignStore = (await b.client.from("stores").select("id").limit(1)).data?.[0]?.id as string;
+      await seedOrderWithClient(b.client, foreignStore, [{ product_id: null, name: `${unique} 20 mg`, quantity: 9, unit: "strip" }], { confirm: true });
+
+      const res = await pendingCandidates(a.client, medicine);
+      const storeName = (await a.client.from("stores").select("name").eq("id", storeA).single()).data?.name as string;
+      expect(res.proposed.map((l) => l.line_id).sort()).toEqual([draft.lineIds[0], confirmed.lineIds[0]].sort());
+      expect(res.not_proposed.map((l) => l.line_id)).toEqual([alike.lineIds[0]]);
+      const first = res.proposed.find((l) => l.line_id === draft.lineIds[0]);
+      expect(first).toMatchObject({
+        order_id: draft.orderId, order_number: (await getOrderWithClient(a.client, draft.orderId)).order_number, order_status: "draft",
+        store_name: storeName, typed_text: `${unique} 20 mg`, quantity: 4, unit: "strip",
+      });
+      expect(res.proposed.find((l) => l.line_id === confirmed.lineIds[0])).toMatchObject({ order_status: "confirmed", typed_text: unique.toUpperCase(), quantity: 6, unit: "box" });
+      expect(res.not_proposed[0]).toMatchObject({ typed_text: `${unique} 40 mg`, quantity: 2 });
+      expect(JSON.stringify(res)).not.toMatch(/purchase_price|"mrp"/i);
+    });
+
+    it("answers not found for an unknown medicine or one of another business, and rejects a malformed id", async () => {
+      const mine = await seedMedicineWithClient(a.client, { name: `Private${randomUUID().slice(0, 6)}`, unit: "strip" });
+      expect((await errorOf(pendingCandidates(b.client, mine)))?.code).toBe("not_found");
+      expect((await errorOf(pendingCandidates(a.client, randomUUID())))?.code).toBe("not_found");
+      expect(PendingProductQuerySchema.safeParse({ product_id: "not-a-uuid" }).success).toBe(false);
+      expect(PendingProductQuerySchema.safeParse({}).success).toBe(false);
+      expect(PendingProductQuerySchema.safeParse({ product_id: mine }).success).toBe(true);
+    });
+
+    it("changes nothing: the order's version is the same after reading", async () => {
+      const unique = `Readonly${randomUUID().slice(0, 6)}`;
+      const medicine = await seedMedicineWithClient(a.client, { name: unique, unit: "strip" });
+      const o = await seedOrderWithClient(a.client, storeA, [{ product_id: null, name: unique, quantity: 1, unit: "strip" }], { confirm: true });
+      await pendingCandidates(a.client, medicine);
+      const after = await getOrderWithClient(a.client, o.orderId);
+      expect(after.version).toBe(o.version);
+      expect(after.lines[0].product_id).toBeNull();
     });
   });
 });
