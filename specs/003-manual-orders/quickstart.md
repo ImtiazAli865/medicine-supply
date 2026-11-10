@@ -72,7 +72,7 @@ Recorded 2026-11-10, only what was actually run on branch `003-manual-orders` (c
 **Not done or not measured (do not treat as passed):**
 - T075: the 5,000-medicine search timing (SC-009, including the dosage-form search) has not been run.
 - T078: the security and honesty sweep of `src/` has not been written up.
-- T081: the owner's timed 10-line order on a real phone (SC-001, target under 3 minutes) and the manual walk-through in section 4. SC-001 is therefore not yet confirmed with a human.
+- T081: the owner's walk-through on a real phone (section 4, dev project build over Wi-Fi, 2026-11-10) is only partly done. Owner's answers: the first timed 10-line order took about 20 minutes, because it was the owner's first time on the screen and understanding it took longer; the owner expects it to get faster with practice, but a second timed run has not been done. **SC-001 (under 3 minutes) is therefore NOT met, and not confirmed.** Checks 2 (typed medicine), 4 (Not saved and Retry), 5 (store lock), 6 (price snapshot), 7 (edit and cancel) and 8 (history) were reported as passing and nothing odd was noticed. Check 3 (refresh test) was not understood at first; the owner then did it and reported it as done with no problem mentioned (the owner did not give a separate pass or fail wording). The walk-through is complete; SC-001 is marked not clearly met, as was done for Module 002, and a second timed run after practice is still a suggested follow-up.
 - T076: the shared states e2e (`states.spec.ts`) was not extended; order screens are covered by `touch-targets.spec.ts` (360 px, every order screen) and by the loading, error and empty tests in `orders-history.spec.ts`.
 
 ## 7. Items checked at first apply (from research.md)
