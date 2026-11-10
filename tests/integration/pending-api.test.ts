@@ -1,9 +1,9 @@
 import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { ApiError } from "@/lib/api/errors";
-import { registerLine } from "@/lib/pending/repository";
-import { RegisterBodySchema } from "@/lib/validation/pending";
-import { getOrderWithClient, registerBody, seedMedicineWithClient, seedOrderWithClient, seedStoreWithClient } from "../helpers/pending";
+import { linkLine, registerLine } from "@/lib/pending/repository";
+import { LinkBodySchema, RegisterBodySchema } from "@/lib/validation/pending";
+import { getOrderWithClient, linkBody, registerBody, seedMedicineWithClient, seedOrderWithClient, seedStoreWithClient } from "../helpers/pending";
 import { createTenant, deleteTenant, hasTestEnv, SKIP_REASON, type TestTenant } from "../helpers/supabase-test";
 
 // The pending-products repository (the code behind /api/orders/{id}/lines/{lineId}/register and the other
@@ -161,6 +161,67 @@ suite("pending products repository against Supabase", () => {
       const error = await errorOf(registerLine(a.client, o.orderId, o.typedId, parseRegister(registerBody(o.version, { id: foreign, name: "Mine" }))));
       expect(error?.code).toBe("validation_error");
       expect(error?.fields).toHaveProperty("id");
+    });
+  });
+
+  describe("link", () => {
+    const parseLink = (body: ReturnType<typeof linkBody>) => LinkBodySchema.parse(body);
+
+    it("links a typed line to an existing medicine and changes only that line", async () => {
+      const medicine = await seedMedicineWithClient(a.client, { name: "Link Target 500mg", unit: "strip", strength: "500 mg", dosage_form: "tablet" });
+      const o = await typedOrder("link target 500");
+      const res = await linkLine(a.client, o.orderId, o.typedId, parseLink(linkBody(o.version, medicine)));
+      expect(res.replayed).toBe(false);
+      expect(res.product).toMatchObject({ id: medicine, name: "Link Target 500mg" });
+      expect(res.order.lines[0]).toMatchObject({ product_id: medicine, item_status: "registered", typed_name: "link target 500", strength: "500 mg", quantity: 3, unit: "strip" });
+      expect(res.order.lines[1]).toMatchObject({ product_id: o.catalog, typed_name: null, quantity: 2, unit: "box" });
+      expect(res.order.version).toBe(o.version + 1);
+      expect(res.order.events.filter((e) => e.event_type === "linked")).toHaveLength(1);
+      expect(JSON.stringify(res)).not.toMatch(/purchase_price|"mrp"/i);
+    });
+
+    it("returns the stored result when the same request is repeated", async () => {
+      const medicine = await seedMedicineWithClient(a.client, { name: "Link Replay", unit: "strip" });
+      const o = await typedOrder("link replay");
+      const body = parseLink(linkBody(o.version, medicine));
+      const first = await linkLine(a.client, o.orderId, o.typedId, body);
+      const again = await linkLine(a.client, o.orderId, o.typedId, body);
+      expect(again.replayed).toBe(true);
+      expect(again.order.version).toBe(first.order.version);
+      expect((await getOrderWithClient(a.client, o.orderId)).events.filter((e) => e.event_type === "linked")).toHaveLength(1);
+    });
+
+    it("records the medicine's price on a confirmed line only when apply_price is true", async () => {
+      const medicine = await seedMedicineWithClient(a.client, { name: "Link Priced", unit: "strip", selling_price: "125.50" });
+      const o = await typedOrder("link priced");
+      const res = await linkLine(a.client, o.orderId, o.typedId, parseLink(linkBody(o.version, medicine, { apply_price: true })));
+      expect(res.price_applied).toBe(true);
+      expect(res.order.lines[0]).toMatchObject({ price_basis: "snapshot", selling_price: "125.50", line_total: "376.50" });
+      const p = await typedOrder("link declined");
+      const declined = await linkLine(a.client, p.orderId, p.typedId, parseLink(linkBody(p.version, medicine, { apply_price: false })));
+      expect(declined.price_applied).toBe(false);
+      expect(declined.order.lines[0]).toMatchObject({ price_basis: "none", selling_price: null });
+    });
+
+    it("refuses an inactive medicine, an already linked line, a stale version and another business's data", async () => {
+      const inactive = await seedMedicineWithClient(a.client, { name: "Link Inactive", unit: "strip", is_active: false });
+      const o = await typedOrder("link refusals");
+      expect((await errorOf(linkLine(a.client, o.orderId, o.typedId, parseLink(linkBody(o.version, inactive)))))?.code).toBe("product_inactive");
+
+      const medicine = await seedMedicineWithClient(a.client, { name: "Link Refusals", unit: "strip" });
+      const first = await linkLine(a.client, o.orderId, o.typedId, parseLink(linkBody(o.version, medicine)));
+      const again = await errorOf(linkLine(a.client, o.orderId, o.typedId, parseLink(linkBody(first.order.version, medicine))));
+      expect(again?.code).toBe("line_not_pending");
+      expect((again?.current as { version: number }).version).toBe(first.order.version);
+
+      const stale = await errorOf(linkLine(a.client, o.orderId, o.typedId, parseLink(linkBody(o.version, medicine))));
+      expect(stale?.code).toBe("version_conflict");
+
+      const p = await typedOrder("link private");
+      expect((await errorOf(linkLine(b.client, p.orderId, p.typedId, parseLink(linkBody(p.version, medicine)))))?.code).toBe("not_found");
+      const foreign = await seedMedicineWithClient(b.client, { name: "B medicine", unit: "strip" });
+      expect((await errorOf(linkLine(a.client, p.orderId, p.typedId, parseLink(linkBody(p.version, foreign)))))?.code).toBe("not_found");
+      expect((await getOrderWithClient(a.client, p.orderId)).lines[0].product_id).toBeNull();
     });
   });
 });

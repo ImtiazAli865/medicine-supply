@@ -1,9 +1,9 @@
 import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { ApiError } from "@/lib/api/errors";
-import { registerLine } from "@/lib/pending/repository";
-import { RegisterBodySchema } from "@/lib/validation/pending";
-import { getOrderWithClient, registerBody, seedMedicineWithClient, seedOrderWithClient, seedStoreWithClient } from "../helpers/pending";
+import { linkLine, registerLine } from "@/lib/pending/repository";
+import { LinkBodySchema, RegisterBodySchema } from "@/lib/validation/pending";
+import { getOrderWithClient, linkBody, registerBody, seedMedicineWithClient, seedOrderWithClient, seedStoreWithClient } from "../helpers/pending";
 import { createTenant, deleteTenant, hasTestEnv, SKIP_REASON, type TestTenant } from "../helpers/supabase-test";
 
 // Simultaneous requests through separate connections to the real Supabase test project: this is where the
@@ -61,5 +61,18 @@ suite("pending products under simultaneous requests", () => {
     const order = await getOrderWithClient(a.client, o.orderId);
     expect(order.lines[0].product_id).toBe((await medicinesNamed("Race Noran"))[0].id);
     expect(order.events.filter((e) => e.event_type === "linked")).toHaveLength(1);
+  }, 120_000);
+
+  it("gives 10 simultaneous identical link requests one link, one event and the same result", async () => {
+    const medicine = await seedMedicineWithClient(a.client, { name: "Concurrent Link Target", unit: "strip" });
+    const o = await typedOrder("concurrent link");
+    const body = LinkBodySchema.parse(linkBody(o.version, medicine));
+    const results = await Promise.all(Array.from({ length: 10 }, () => linkLine(a.client, o.orderId, o.typedId, body)));
+    expect(results.filter((r) => r.replayed === false)).toHaveLength(1);
+    expect(results.filter((r) => r.replayed === true)).toHaveLength(9);
+    const order = await getOrderWithClient(a.client, o.orderId);
+    expect(order.events.filter((e) => e.event_type === "linked")).toHaveLength(1);
+    expect(order.version).toBe(o.version + 1);
+    expect(order.lines[0].product_id).toBe(medicine);
   }, 120_000);
 });

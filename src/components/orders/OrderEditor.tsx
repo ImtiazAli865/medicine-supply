@@ -260,7 +260,7 @@ export function OrderEditor({
                       <PendingLineActions
                         orderId={orderId}
                         orderStatus={editing ? "confirmed" : "draft"}
-                        line={{ id: line.id, name: info[line.id]?.name ?? line.name ?? "", unit: line.unit }}
+                        line={{ id: line.id, name: info[line.id]?.name ?? line.name ?? "", unit: line.unit, quantity: line.quantity }}
                         getVersion={editor.prepareForPending}
                         onOrderChanged={(order) => editor.adoptServerOrder(order)}
                       />

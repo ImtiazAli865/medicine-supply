@@ -164,7 +164,7 @@ export function OrderScreen({ id, storeParam }: { id: string; storeParam: string
               <PendingLineActions
                 orderId={order.id}
                 orderStatus="confirmed"
-                line={{ id: line.id, name: line.name, unit: line.unit }}
+                line={{ id: line.id, name: line.name, unit: line.unit, quantity: line.quantity }}
                 getVersion={async () => ({ ok: true, version: order.version })}
                 onOrderChanged={setOverride}
               />

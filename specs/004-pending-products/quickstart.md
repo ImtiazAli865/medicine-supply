@@ -55,15 +55,14 @@ Serve the dev-project build to the phone: `npm run build`, then `npm run start -
 
 ## 6. Verification results
 
-**Status: MVP stage (Setup, Foundational and US1) only. Everything below was actually run on 2026-11-10; stories US2 to US5 and the polish tasks are not built yet, so this is not a completed module.**
+**Status: Setup, Foundational, US1 (register) and US2 (link) only. Everything below was actually run on 2026-11-10; stories US3 to US5 and the polish tasks are not built yet, so this is not a completed module.**
 
 | Check | Result |
 |---|---|
 | `npm run lint` | pass |
 | `npm run typecheck` | pass |
-| `npm test` (all Vitest suites) | 51 files, 538 tests, all passed (the Module 003 total was 467; the 71 new are 17 schema, 25 register on PGlite, 13 register API and concurrency on Supabase, 16 validation) |
-| Order browser tests after the order screens were touched (`orders-*`, `touch-targets`, `shell`, `states`, mobile project) | 59 passed, 0 failed |
-| `pending-register.spec.ts` (mobile) | 9 of 9 passed |
+| `npm test` (all Vitest suites) | 52 files, 556 tests, all passed (the Module 003 total was 467; the 89 new are 17 schema, 25 register and 13 link on PGlite, 18 register and link API and simultaneous requests on Supabase, 16 validation) |
+| Order screens and Module 004 browser tests together (`orders-*`, `pending-*`, `touch-targets`, `shell`, `states`, mobile project) | 75 passed, 0 failed (59 existing, 9 register, 7 link) |
 
 - **Baseline (T001):** the first baseline attempt was started before the migration file existed and finished while the file was half written, so its failures (database suites) were caused by that and it is not counted. The clean reference is the Module 003 verification (46 files, 467 tests, all passed, recorded in `specs/003-manual-orders/quickstart.md`); the full `npm test` above passes every one of those 467 tests plus the new ones, so nothing regressed.
 - Two real defects were found and fixed while testing: the migration was first assembled with JavaScript `String.replace`, which turned `$$` into `$` (the database tests failed at once); and the browser's own `required` check hid the app's field messages in the register form (fixed with `noValidate`).
