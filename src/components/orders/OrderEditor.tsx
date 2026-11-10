@@ -9,6 +9,7 @@ import { ConfirmOrderDialog } from "@/components/orders/ConfirmOrderDialog";
 import { MedicineSearch } from "@/components/orders/MedicineSearch";
 import { OrderLineRow } from "@/components/orders/OrderLineRow";
 import { OrderStatusBadge } from "@/components/orders/OrderStatusBadge";
+import { PendingLineActions } from "@/components/pending/PendingLineActions";
 import { OrderTotals } from "@/components/orders/OrderTotals";
 import { SaveStatus } from "@/components/orders/SaveStatus";
 import { StoreSelector } from "@/components/orders/StoreSelector";
@@ -254,6 +255,17 @@ export function OrderEditor({
                   onChange={(patch) => editor.updateLine(line.id, patch)}
                   onRemove={() => (editing ? setRemoveId(line.id) : editor.removeLine(line.id))}
                   onValidity={handleValidity}
+                  actions={
+                    line.product_id === null ? (
+                      <PendingLineActions
+                        orderId={orderId}
+                        orderStatus={editing ? "confirmed" : "draft"}
+                        line={{ id: line.id, name: info[line.id]?.name ?? line.name ?? "", unit: line.unit }}
+                        getVersion={editor.prepareForPending}
+                        onOrderChanged={(order) => editor.adoptServerOrder(order)}
+                      />
+                    ) : undefined
+                  }
                 />
               );
             })}

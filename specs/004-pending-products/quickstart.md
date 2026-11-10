@@ -55,8 +55,31 @@ Serve the dev-project build to the phone: `npm run build`, then `npm run start -
 
 ## 6. Verification results
 
-*(To be completed during implementation. Record only what was actually run: lint, typecheck, test, build and e2e counts with skips and reasons; the 1,000-pending-lines / 500-unpriced-medicines list time; and the owner's walkthrough answers.)*
+**Status: MVP stage (Setup, Foundational and US1) only. Everything below was actually run on 2026-11-10; stories US2 to US5 and the polish tasks are not built yet, so this is not a completed module.**
+
+| Check | Result |
+|---|---|
+| `npm run lint` | pass |
+| `npm run typecheck` | pass |
+| `npm test` (all Vitest suites) | 51 files, 538 tests, all passed (the Module 003 total was 467; the 71 new are 17 schema, 25 register on PGlite, 13 register API and concurrency on Supabase, 16 validation) |
+| Order browser tests after the order screens were touched (`orders-*`, `touch-targets`, `shell`, `states`, mobile project) | 59 passed, 0 failed |
+| `pending-register.spec.ts` (mobile) | 9 of 9 passed |
+
+- **Baseline (T001):** the first baseline attempt was started before the migration file existed and finished while the file was half written, so its failures (database suites) were caused by that and it is not counted. The clean reference is the Module 003 verification (46 files, 467 tests, all passed, recorded in `specs/003-manual-orders/quickstart.md`); the full `npm test` above passes every one of those 467 tests plus the new ones, so nothing regressed.
+- Two real defects were found and fixed while testing: the migration was first assembled with JavaScript `String.replace`, which turned `$$` into `$` (the database tests failed at once); and the browser's own `required` check hid the app's field messages in the register form (fixed with `noValidate`).
+- The simultaneous-request tests ran against separate connections to the real test project: 10 identical register requests gave one medicine, one link, one event, and ten matching responses (one new, nine replayed).
+- Not run yet: `npm run build` and the full e2e suite (both planned for T060), the 1,000-line scale check (T056), and the owner's walkthrough (T062).
 
 ## 7. Items checked at first apply (from research.md)
 
-*(To be completed: the eight items listed at the end of research.md, on PGlite and on both Supabase projects.)*
+**Migration `0004_pending_products.sql` applied to the TEST project (`medicine-supply-test`) on 2026-11-10** through the owner's signed-in Supabase tab (page title checked as `medicine-supply-test` before running). Read-only counts before and after: 15 medicines, 3 stores, 1 order, 2 order lines, 0 events, identical. After: `typed_name` exists and is null on every line; `pending_requests` exists with RLS on and no grants for `anon` or `authenticated`; 3 indexes; 8 public functions, all executable by signed-in users and not by `anon`; `pending_link_line` not executable by either; the `order_events` check lists the six event types. Supabase showed its generic "destructive operations" warning because the file has `drop trigger if exists` and replaces one check constraint.
+
+Checked so far against the eight items of research.md:
+1. Event check replaced, existing events unchanged, new kinds insert: PGlite and TEST project.
+2. `typed_name` null everywhere and write-once (also with the flag on): PGlite.
+3. Direct writes to the order tables, `order_events` and `pending_requests` refused; functions not executable by `anon`: PGlite; TEST project (grants query).
+4. The snapshot-edit flag is off after a success and after a refusal: PGlite (the error path rolls the transaction back).
+5. Register: replay, 10 simultaneous identical requests, stale version: PGlite and TEST project. Link and fill: not yet.
+6. Lines that already carry a price are identical after a fill: not yet (US4).
+7. The reads return no purchase price or MRP: register response and history checked; the read functions are not built into screens yet.
+8. The 1,000 lines / 500 medicines list time: not yet (T056).

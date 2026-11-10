@@ -168,6 +168,27 @@ export function useOrderEditor({ orderId, initialOrder, storeId, mode = "draft" 
 
   const retry = useCallback(() => machine.retry(), [machine]);
 
+  /**
+   * Register and Link (Module 004) need the order exactly as the server has it. A draft saves any unsaved edit
+   * first; a confirmed order being edited is never saved on the side, so unsaved edits block the action.
+   */
+  const prepareForPending = useCallback(async (): Promise<{ ok: true; version: number } | { ok: false; message: string }> => {
+    if (mode === "edit") {
+      const snap = machine.getSnapshot();
+      if (snap.isDirty) return { ok: false, message: "Save or discard your changes to this order first." };
+      if (snap.version === null) return { ok: false, message: "Save the order first." };
+      return { ok: true, version: snap.version };
+    }
+    try {
+      await machine.flush();
+    } catch {
+      return { ok: false, message: "Save the order first. The latest changes could not be saved." };
+    }
+    const snap = machine.getSnapshot();
+    if (snap.version === null || snap.isDirty) return { ok: false, message: "Save the order first." };
+    return { ok: true, version: snap.version };
+  }, [machine, mode]);
+
   /** After "changed elsewhere": replace what is on screen with the server's current order. */
   const adoptServerOrder = useCallback(
     (order: Order) => {
@@ -247,6 +268,7 @@ export function useOrderEditor({ orderId, initialOrder, storeId, mode = "draft" 
     saveChanges,
     revertChanges,
     retry,
+    prepareForPending,
     adoptServerOrder,
   };
 }

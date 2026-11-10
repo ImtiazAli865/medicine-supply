@@ -27,7 +27,27 @@ function describeChange(change: Change): string {
   }
 }
 
-function describeEvent(event: OrderEvent): { title: string; lines: string[] } {
+interface LinkedEntry {
+  line_id?: string;
+  typed_name?: string;
+  product_name?: string;
+  how?: string;
+  price_recorded?: string | null;
+}
+
+interface FilledEntry {
+  line_id?: string;
+  quantity?: number;
+  new_price?: string | null;
+}
+
+const HOW: Record<string, string> = {
+  registered: "registered as a new medicine",
+  existing: "linked to an existing medicine",
+  proposal: "linked from a proposal",
+};
+
+function describeEvent(event: OrderEvent, lineNames: Record<string, string>): { title: string; lines: string[] } {
   const detail = event.detail as Record<string, Record<string, unknown> | undefined>;
   switch (event.event_type) {
     case "created":
@@ -48,12 +68,31 @@ function describeEvent(event: OrderEvent): { title: string; lines: string[] } {
       const c = detail.cancelled ?? {};
       return { title: "Order cancelled", lines: c.reason ? [`Reason: ${String(c.reason)}`] : [] };
     }
+    case "linked": {
+      const entries = ((event.detail as { linked?: LinkedEntry[] }).linked ?? []).map((entry) => {
+        const how = HOW[String(entry.how)] ?? "linked";
+        const price = entry.price_recorded ? `price ${formatPKR(entry.price_recorded)} recorded` : "no price recorded";
+        return `"${entry.typed_name ?? ""}" ${how}: ${entry.product_name ?? "medicine"} · ${price}`;
+      });
+      return { title: "Medicine linked", lines: entries };
+    }
+    case "price_filled": {
+      const entries = ((event.detail as { price_filled?: FilledEntry[] }).price_filled ?? []).map((entry) => {
+        const name = (entry.line_id && lineNames[entry.line_id]) || "line";
+        return `Price ${formatPKR(entry.new_price ?? null)} recorded for ${entry.quantity ?? "?"} × ${name} (no price before)`;
+      });
+      return { title: "Price recorded", lines: entries };
+    }
+    default:
+      // A kind this screen does not know yet: show it plainly instead of breaking the history.
+      return { title: "Order updated", lines: [] };
   }
 }
 
 /** The order's change history, newest first. Purchase price and MRP never appear here. */
-export function OrderHistoryLog({ events }: { events: OrderEvent[] }) {
+export function OrderHistoryLog({ events, lines = [] }: { events: OrderEvent[]; lines?: Array<{ id: string; name: string }> }) {
   if (events.length === 0) return null;
+  const lineNames: Record<string, string> = Object.fromEntries(lines.map((l) => [l.id, l.name]));
   return (
     <section aria-labelledby="history-heading" className="space-y-2" data-testid="order-history-log">
       <h2 id="history-heading" className="text-lg font-semibold">
@@ -61,7 +100,7 @@ export function OrderHistoryLog({ events }: { events: OrderEvent[] }) {
       </h2>
       <ol className="space-y-2">
         {events.map((event) => {
-          const { title, lines } = describeEvent(event);
+          const { title, lines } = describeEvent(event, lineNames);
           return (
             <li key={event.id} data-testid="history-event" className="rounded-xl border border-border bg-surface px-4 py-3">
               <p className="font-medium">{title}</p>

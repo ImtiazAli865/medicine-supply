@@ -65,7 +65,7 @@ describe("migration applies and guards every table", () => {
     const names = rows.map((r) => r.table_name).sort();
     expect(names).toEqual([
       "business_settings", "businesses", "imports", "order_counters", "order_events", "order_lines", "orders",
-      "products", "profiles", "stores",
+      "pending_requests", "products", "profiles", "stores",
     ]);
     for (const row of rows) {
       expect(row.rls_enabled, `${row.table_name} must have RLS enabled`).toBe(true);

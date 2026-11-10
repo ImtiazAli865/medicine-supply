@@ -1,7 +1,7 @@
 "use client";
 
 import { Trash2 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Badge } from "@/components/ui/Badge";
 import { formatPKR } from "@/lib/money";
 import { cleanTypedName, LIMITS, parseQuantity, type LineInfo } from "@/lib/orders/editor-state";
@@ -23,6 +23,7 @@ export function OrderLineRow({
   onRemove,
   onValidity,
   priceNote,
+  actions,
 }: {
   line: OrderLineInput;
   info: LineInfo | undefined;
@@ -37,6 +38,8 @@ export function OrderLineRow({
   onValidity?: (lineId: string, ok: boolean) => void;
   /** Replaces the price line, for example "Price recorded when you save" on a line added to a confirmed order. */
   priceNote?: string;
+  /** Actions for a typed (not registered) line, such as Register this medicine (Module 004). */
+  actions?: ReactNode;
 }) {
   const name = info?.name ?? line.name ?? "Medicine";
   const typed = line.product_id === null;
@@ -84,6 +87,11 @@ export function OrderLineRow({
           {details ? (
             <p className="text-sm text-muted" dir="auto">
               {details}
+            </p>
+          ) : null}
+          {info?.typed_name ? (
+            <p className="text-sm text-muted" dir="auto" data-testid="line-typed-name">
+              As typed: {info.typed_name}
             </p>
           ) : null}
         </div>
@@ -184,6 +192,8 @@ export function OrderLineRow({
           ) : null}
         </p>
       ) : null}
+
+      {typed && actions ? <div className="flex flex-wrap gap-2" data-testid="line-actions">{actions}</div> : null}
 
       {repeatedTyped ? (
         <p role="status" className="text-sm text-warning" data-testid="repeated-typed-warning">

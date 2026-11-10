@@ -6,10 +6,21 @@ import { OrderTotals } from "@/components/orders/OrderTotals";
 import { formatPakistanDateTime } from "@/lib/orders/dates";
 import { infoFromLine } from "@/lib/orders/editor-state";
 import { formatOrderNumber } from "@/lib/orders/number";
-import type { Order } from "@/lib/orders/types";
+import type { Order, OrderLine } from "@/lib/orders/types";
 
 /** A confirmed or cancelled order, read-only: prices and totals come from its own snapshot. */
-export function OrderView({ order, actions, children }: { order: Order; actions?: ReactNode; children?: ReactNode }) {
+export function OrderView({
+  order,
+  actions,
+  renderLineActions,
+  children,
+}: {
+  order: Order;
+  actions?: ReactNode;
+  /** Actions shown on a typed line (Register this medicine). Not used for a cancelled order. */
+  renderLineActions?: (line: OrderLine) => ReactNode;
+  children?: ReactNode;
+}) {
   return (
     <div className="space-y-4">
       <div className="flex items-start justify-between gap-3">
@@ -47,6 +58,7 @@ export function OrderView({ order, actions, children }: { order: Order; actions?
             key={line.id}
             line={{ id: line.id, product_id: line.product_id, name: line.product_id === null ? line.name : null, quantity: line.quantity, unit: line.unit }}
             info={infoFromLine(line)}
+            actions={order.status !== "cancelled" ? renderLineActions?.(line) : undefined}
             readOnly
           />
         ))}

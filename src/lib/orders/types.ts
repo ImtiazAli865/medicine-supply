@@ -15,6 +15,8 @@ export interface OrderLine {
   product_id: string | null;
   item_status: ItemStatus;
   name: string;
+  /** The exact text the supplier typed; set when a typed line was linked to a medicine (Module 004), otherwise null. */
+  typed_name: string | null;
   strength: string | null;
   dosage_form: string | null;
   pack_size: string | null;
@@ -35,7 +37,7 @@ export interface OrderTotals {
   line_count: number;
 }
 
-export type OrderEventType = "created" | "confirmed" | "edited" | "cancelled";
+export type OrderEventType = "created" | "confirmed" | "edited" | "cancelled" | "linked" | "price_filled";
 
 export interface OrderEvent {
   id: string;

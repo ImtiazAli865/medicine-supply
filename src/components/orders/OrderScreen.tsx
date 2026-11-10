@@ -7,6 +7,7 @@ import { CancelOrderDialog } from "@/components/orders/CancelOrderDialog";
 import { OrderEditor } from "@/components/orders/OrderEditor";
 import { OrderHistoryLog } from "@/components/orders/OrderHistoryLog";
 import { OrderView } from "@/components/orders/OrderView";
+import { PendingLineActions } from "@/components/pending/PendingLineActions";
 import { Button, ButtonLink } from "@/components/ui/Button";
 import { LoadingBlock } from "@/components/ui/Spinner";
 import { EmptyState, ErrorState } from "@/components/ui/States";
@@ -158,8 +159,19 @@ export function OrderScreen({ id, storeParam }: { id: string; storeParam: string
         <OrderView
           order={order}
           actions={order.status === "confirmed" ? <ConfirmedActions order={order} onEdit={() => setEditing(true)} onCancelled={setOverride} /> : null}
+          renderLineActions={(line) =>
+            line.product_id === null ? (
+              <PendingLineActions
+                orderId={order.id}
+                orderStatus="confirmed"
+                line={{ id: line.id, name: line.name, unit: line.unit }}
+                getVersion={async () => ({ ok: true, version: order.version })}
+                onOrderChanged={setOverride}
+              />
+            ) : null
+          }
         >
-          <OrderHistoryLog events={order.events} />
+          <OrderHistoryLog events={order.events} lines={order.lines} />
         </OrderView>
       </div>
     );
