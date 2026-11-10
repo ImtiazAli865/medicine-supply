@@ -1,6 +1,6 @@
 "use client";
 
-import { FileUp, Pill, Plus, Search } from "lucide-react";
+import { FileUp, Pill, Plus, Search, Tag } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 import { Badge } from "@/components/ui/Badge";
@@ -31,6 +31,10 @@ export function ProductList() {
       <Link href="/products/import" className="inline-flex min-h-11 items-center gap-2 font-medium text-primary underline">
         <FileUp size={20} aria-hidden="true" />
         Import from file
+      </Link>
+      <Link href="/pending?tab=prices" data-testid="pending-prices-link" className="ml-4 inline-flex min-h-11 items-center gap-2 font-medium text-primary underline">
+        <Tag size={20} aria-hidden="true" />
+        Pending prices
       </Link>
 
       <div className="relative">
