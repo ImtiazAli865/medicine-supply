@@ -55,7 +55,7 @@ Serve the dev-project build to the phone: `npm run build`, then `npm run start -
 
 ## 6. Verification results
 
-**Status (2026-11-11): all five stories and the polish and verification tasks T054 to T060 are built, tested and recorded. A clean full run exists (lint, typecheck, 630 unit and integration tests, 289 browser tests, build). `0004` and `0005` were applied to the dev project on 2026-11-11 (T061, section 7). NOT done: T062 (the owner's phone walkthrough), T063 (ADR consent) and the pull request T064. So this is not a completed module: nothing has been tried by the owner on a phone yet. Everything below was actually run on 2026-11-10 and 2026-11-11.**
+**Status (2026-11-11): all five stories and the polish and verification tasks T054 to T060 are built, tested and recorded. A clean full run exists (lint, typecheck, 630 unit and integration tests, 289 browser tests, build). `0004` and `0005` were applied to the dev project on 2026-11-11 (T061, section 7). The owner's phone walkthrough (T062) was done on 2026-11-11 and is recorded below with its limits (SC-001 not confirmed; most steps reported by the owner but not visible in the screenshots). The ADR (T063) was recorded on 2026-11-11 with the owner's consent: `history/adr/0004-pending-link-and-price-fill-write-model.md`. NOT done: the pull request T064. Everything below was actually run on 2026-11-10 and 2026-11-11.**
 
 | Check | Result |
 |---|---|
@@ -120,6 +120,25 @@ Cause (found with EXPLAIN ANALYZE on PGlite): the planner re-ran the "waiting li
 | 24: the Pending Prices flow | `db-pending-price-fill.pglite.test.ts`, `pending-prices.test.ts`, `pending-prices.spec.ts` | **blocking invoice issue until the Selling Price is set is NOT covered here**; it belongs to Module 006 |
 
 The other items of Section 17 (1, 2, 5, 8, 10 to 13, 15 to 18, 21, 23, 25) are not part of this module.
+
+### Owner's phone check on the dev project (T062)
+
+On 2026-11-11 the owner opened the app (the dev-project build, served from the PC with `next start -H 0.0.0.0`) on a phone and went through the eight steps of section 4. When asked, the owner chose "Check ho gaya" (check done), not "Masla aaya" (a problem came up). The owner then sent two phone screenshots (taken at 3:21 on the phone, page `192.168.1.7:3000/orders/...`) of the order **ORD-0004**, and gave no register time and no per-step answers. What the screenshots show, and only that:
+
+- Order ORD-0004, store "Rozi Khan", status Confirmed, created and confirmed 11 Nov 2026 15:15. One line "NORAN 20MG CAP" with "As typed: Noran 20mg cap", the badge "No selling price" and "3 Strip". "Total of priced lines" shows a dash and "1 line has no selling price".
+- Change history, newest first: "Medicine linked" at 15:20: "Noran 20mg cap" linked to an existing medicine: NORAN 20MG CAP · no price recorded; "Order confirmed" 15:15: "1 lines · priced total PKR 0.00 · 1 without a selling price"; "Order created" 15:15.
+- The header shows the business name, the bottom navigation has five items (Home, Orders, Products, Stores, Settings), and the page fits the phone width. The browser's "not secure" mark is only because the page is served over plain HTTP on the local network.
+
+So, on a real phone and the dev project: a typed line on a confirmed order was linked to an existing medicine; the typed text stayed ("As typed"); the quantity and unit did not change (3 Strip); no price was invented (the line still says "No selling price"); and the link is in the change history with its time. Because the history says "existing medicine" and the catalog already had a medicine with that name (case ignored), this was the link-to-existing path, either chosen directly or through the "Use the existing medicine" hand-over of the duplicate check; the screenshots do not show which.
+
+So:
+
+- **Reported by the owner:** "Check ho gaya" and no problem raised.
+- **SC-001 (register in under one minute): NOT confirmed.** No time was reported. The screenshots show the order confirmed at 15:15 and the link at 15:20, a 5 minute gap that includes everything else the owner did in between, so it says nothing about how long the register step takes. It is recorded as not clearly met, not as met. (In Module 003 the first timed run was also not met.)
+- **Seen on the phone (from the screenshots):** the link to an existing medicine on a confirmed order, "As typed" kept, quantity and unit unchanged, no invented price, the history entry, the five-item navigation and the phone layout.
+- **Second batch of screenshots (phone clock 4:15 and 4:20), sent with the words "these are the screenshots of all the steps":** (a) the Orders list: ORD-0007 and ORD-0006 (Shahid Medical Store, Draft, 16:13, "1 line · 1 without price" each), ORD-0005 (Shahid Medical Store, Confirmed, 16:05, "2 lines · 2 without price"), ORD-0004 (Rozi Khan, Confirmed, 15:15, "1 line · 1 without price"), ORD-0003 (Rozi Khan, Draft, 10 Nov); (b) a draft order editor, "Saved at 16:14", with one line "Zental 400 test 200mg", the badge "No selling price", quantity 1 strip; the line shows no "Not registered" badge and no "As typed" note, so it is a catalog line, not a typed one; (c) the same draft with the dialog "Confirm this order? The order has 1 line. ... 1 line has no selling price. That does not stop the order; a price is needed before an invoice."; (d) the price screen of the medicine ACOLD TAB: the notice "The price PKR 33.00 is saved for this medicine. The lines that were waiting are still waiting.", "Selling price: PKR 33.00" shown without a price field, and the button "Fill the waiting lines at PKR 33.00". Picture (d) is the phone evidence for step 6, "Save price only": the price is saved, the lines keep waiting, the price is read-only and the fill is offered.
+- **Not visible in any screenshot:** the register form and how long it takes, the duplicate block, the similar-strength warning, the proposals list, the Pending Prices review with 0 and 12.345 refused, a fill result and the repeated confirm, the two-tab check, the Home card and the empty states. The owner says all steps were done and raised no problem, but gave no per-step results, so these steps are recorded as "done according to the owner, not seen in the pictures", not as seen working.
+- **One small wording defect seen:** the "Order confirmed" history entry says "1 lines" (singular). It comes from Module 003 (`OrderHistoryLog.tsx`, commit `b012da4`), is cosmetic, and is not fixed yet.
 
 ## 7. Items checked at first apply (from research.md)
 

@@ -132,4 +132,4 @@ tests/
 
 No violations. Two deliberate limits are recorded instead: (1) undo of a link or a fill is not built (spec Assumptions, risk to revisit in Module 006); (2) registering and pricing need a connection (offline is Module 009).
 
-📋 **Architectural decision detected**: how linking and price fill use the snapshot-edit hook, the `pending_requests` idempotency table, the `typed_name` column and the new history event types. Document reasoning and tradeoffs? Run `/sp.adr pending-link-and-price-fill-write-model`. (Not created without your consent.)
+📋 **Architectural decision detected**: how linking and price fill use the snapshot-edit hook, the `pending_requests` idempotency table, the `typed_name` column and the new history event types. Document reasoning and tradeoffs? Run `/sp.adr pending-link-and-price-fill-write-model`. (Not created without your consent. Created on 2026-11-11 with the owner's consent: `history/adr/0004-pending-link-and-price-fill-write-model.md`.)
