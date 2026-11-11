@@ -55,7 +55,7 @@ Serve the dev-project build to the phone: `npm run build`, then `npm run start -
 
 ## 6. Verification results
 
-**Status (end of 2026-11-10): all five stories and the polish tasks T054 to T059 are built and tested. NOT done: T060 (a clean full verification: the last full `npm run test:e2e` had 3 failures and its rerun was stopped unfinished), the owner steps T061 to T063 and the pull request T064. So this is not a completed module. Everything below was actually run on 2026-11-10.**
+**Status (2026-11-11): all five stories and the polish and verification tasks T054 to T060 are built, tested and recorded. A clean full run exists (lint, typecheck, 630 unit and integration tests, 289 browser tests, build). NOT done: the owner steps T061 (apply `0004` and `0005` to the dev project), T062 (phone walkthrough) and T063 (ADR consent), and the pull request T064. So this is not a completed module: nothing has been tried by the owner on a phone, and the dev project does not have the migrations yet. Everything below was actually run on 2026-11-10 and 2026-11-11.**
 
 | Check | Result |
 |---|---|
@@ -94,16 +94,32 @@ Serve the dev-project build to the phone: `npm run build`, then `npm run start -
 
 Cause (found with EXPLAIN ANALYZE on PGlite): the planner re-ran the "waiting lines" aggregate once for each of the 501 medicines (about 4.5 million buffer hits), and `pending_candidates` recomputed every medicine's labels for every typed line. Fix: migration `0005_pending_perf.sql` (the aggregate is `MATERIALIZED`; labels are computed once). Only function bodies changed. On PGlite the same data went from 115 s to 0.1 s for the list and from 14.5 s to 0.05 s for the proposals. `0005` was applied to the TEST project only (see section 7); it is NOT applied to the dev project.
 
-### Full verification so far (T060, not finished)
+### Full verification (T060)
 
 | Check | Result |
 |---|---|
 | `npm run lint`, `npm run typecheck` | pass |
 | `npm test` | 60 files, 630 tests, all passed |
 | `npm run test:e2e` (mobile and desktop), first full run | 286 passed, 87 skipped by design (tests that are for one project only), **3 failed**: (1) mobile, the Need a price loading test: two `loading` elements at once, strict-mode error in my new test, fixed with `.first()`; (2) desktop, the Home card loading test: it used the shared test business, which holds other tests' data, fixed with a fresh business; (3) desktop, Module 002 "5,000-row xlsx" import: timed out at 60 s in the full run, passed in 5.9 s when run alone (csv and xlsx); the cause is not proven (load suspected) |
-| `npm run test:e2e`, rerun after the two test fixes | NOT finished: stopped by hand at about test 57 of 370. A clean full run is still needed before anything is called passed |
-| `npm run build` after the e2e run | to be run again (the e2e run builds `.next` for the TEST project) |
-| Section 17 mapping | not written yet (part of T060) |
+| `npm run test:e2e`, rerun after the two test fixes | **289 passed, 87 skipped, 0 failed**, exit code 0, 24.4 minutes (full run of 2026-11-11 after the two test fixes, as one chain with `npm test` and the build; the rerun that was stopped by hand on 2026-11-10 is not counted). The 87 skips are the tests that declare they run in one project only (mobile or desktop), the same mechanism as in Module 003. The three failures of the first run did not come back, including the Module 002 "5,000-row" import test, so its one timeout stays unexplained and not reproduced |
+| `npm run build` after the e2e run | exit code 0, run right after the e2e run, so `.next` is built for the dev environment again (the e2e run builds it for the TEST project) |
+| Section 17 mapping | the table below |
+
+**Master prompt Section 17, the items this module touches** (every file named here was part of the passing run above):
+
+| Item | Covered by | Note |
+|---|---|---|
+| 3 and 4: orders for several stores kept apart | `pending-proposals.spec.ts` (confirming one line changes only that line; the other stores' orders keep their version), `db-pending-link.pglite.test.ts` (only the chosen line changes), `db-pending-rls.pglite.test.ts`, `rls-pending.test.ts` | Module 003 covers creating the orders; here: register, link and fill never mix stores or orders |
+| 6: unknown medicines without losing quantities | `db-pending-register.pglite.test.ts`, `pending-register.spec.ts` | typed text, quantity and unit stay on the line |
+| 7: linking a newly registered product to existing pending orders | `db-pending-candidates.pglite.test.ts`, `pending-api.test.ts` (candidates), `pending-proposals.spec.ts` | one confirmed line at a time, no link-all |
+| 9: different strengths and pack sizes kept separate | `db-pending-register.pglite.test.ts` (a similar medicine needs explicit confirmation), `db-pending-candidates.pglite.test.ts` (a 40 mg line is not proposed for 20 mg), `pending-register.spec.ts`, `pending-proposals.spec.ts` (a look-alike is linked only by hand) | |
+| 14: historical prices preserved | `db-pending-price-fill.pglite.test.ts` (a line that has a price is identical byte for byte after a fill), `pending-prices.test.ts`, `pending-prices.spec.ts` | in this module: a recorded price is never changed; Module 003 covers a later catalog price change |
+| 19: RLS restrictions | `db-pending-rls.pglite.test.ts` (10), `rls-pending.test.ts` (5, two real users), `db-schema.pglite.test.ts` (`pending_requests` has RLS on) | |
+| 20: responsive layouts | `touch-targets.spec.ts` (every pending screen and dialog at 360 px), `states.spec.ts`, `shell.spec.ts` | **print output is not covered here** (this module has no print) |
+| 22: Quick Register with only name and unit, linking other stores' lines after confirmation | `pending-register.spec.ts`, `pending-link.spec.ts`, `pending-proposals.spec.ts`, `db-pending-register.pglite.test.ts`, `db-pending-link.pglite.test.ts` | |
+| 24: the Pending Prices flow | `db-pending-price-fill.pglite.test.ts`, `pending-prices.test.ts`, `pending-prices.spec.ts` | **blocking invoice issue until the Selling Price is set is NOT covered here**; it belongs to Module 006 |
+
+The other items of Section 17 (1, 2, 5, 8, 10 to 13, 15 to 18, 21, 23, 25) are not part of this module.
 
 ## 7. Items checked at first apply (from research.md)
 
