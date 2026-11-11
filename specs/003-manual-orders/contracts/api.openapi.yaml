@@ -1,0 +1,224 @@
+openapi: 3.1.0
+info:
+  title: Medicine Supply - Orders API (Module 003)
+  version: 0.1.0
+  description: >
+    REST route handlers for manual orders and order history. Every request carries the signed-in
+    user's Supabase session cookie; all data access goes through the user's own session, so Row Level
+    Security applies. Writes call database functions (order_save, order_confirm, order_cancel); the
+    handlers validate with Zod first and map the functions' reasons to the error codes below.
+    Money is always a decimal string with two decimals ("125.50"). Purchase price and MRP are never returned.
+    Medicine search and inline store creation reuse the Module 001 endpoints
+    (GET /api/products, GET /api/stores, POST /api/stores).
+servers:
+  - url: /api
+security:
+  - supabaseSession: []
+paths:
+  /orders:
+    get:
+      summary: Order history (newest first)
+      operationId: listOrders
+      parameters:
+        - { name: store_id, in: query, schema: { type: string, format: uuid } }
+        - { name: status, in: query, schema: { type: string, enum: [draft, confirmed, cancelled] } }
+        - { name: from, in: query, description: "Inclusive local day (Pakistan time), YYYY-MM-DD", schema: { type: string, format: date } }
+        - { name: to, in: query, description: "Inclusive local day (Pakistan time), YYYY-MM-DD", schema: { type: string, format: date } }
+        - { name: q, in: query, description: "Order number (12, #12, ORD-0012) or store name words", schema: { type: string, maxLength: 200 } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 50 } }
+        - { name: cursor, in: query, schema: { type: string } }
+      responses:
+        "200": { description: A page of orders, content: { application/json: { schema: { $ref: "#/components/schemas/OrderPage" } } } }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+  /orders/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+    get:
+      summary: One order with its lines, totals and change history
+      operationId: getOrder
+      responses:
+        "200": { description: The order, content: { application/json: { schema: { $ref: "#/components/schemas/Order" } } } }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    put:
+      summary: >
+        Create a draft, update a draft, or save edits to a confirmed order. The id is created on the
+        device. Safe to repeat: the same request_id returns the stored result.
+      operationId: saveOrder
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/OrderSave" } } }
+      responses:
+        "200": { description: Saved (or replayed), content: { application/json: { schema: { $ref: "#/components/schemas/OrderResult" } } } }
+        "201": { description: Created (first save of this id), content: { application/json: { schema: { $ref: "#/components/schemas/OrderResult" } } } }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "409":
+          description: >
+            version_conflict (body.current is the latest order), order_not_editable, store_locked.
+          content: { application/json: { schema: { $ref: "#/components/schemas/ApiError" } } }
+  /orders/{id}/confirm:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+    post:
+      summary: Confirm a draft (one atomic operation that records the price snapshots)
+      operationId: confirmOrder
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/OrderAction" } } }
+      responses:
+        "200": { description: Confirmed, or already confirmed (replayed = true), content: { application/json: { schema: { $ref: "#/components/schemas/OrderResult" } } } }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: version_conflict, order_empty (no lines), order_not_editable.
+          content: { application/json: { schema: { $ref: "#/components/schemas/ApiError" } } }
+  /orders/{id}/cancel:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+    post:
+      summary: Cancel (or discard) an order. A confirmed order needs a reason.
+      operationId: cancelOrder
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/OrderCancel" } } }
+      responses:
+        "200": { description: Cancelled, or already cancelled (replayed = true), content: { application/json: { schema: { $ref: "#/components/schemas/OrderResult" } } } }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: version_conflict, order_not_editable.
+          content: { application/json: { schema: { $ref: "#/components/schemas/ApiError" } } }
+components:
+  securitySchemes:
+    supabaseSession: { type: apiKey, in: cookie, name: sb-access-token }
+  responses:
+    Unauthenticated: { description: Session missing or expired (code unauthenticated), content: { application/json: { schema: { $ref: "#/components/schemas/ApiError" } } } }
+    NotFound: { description: Not found (also when the order belongs to another business), content: { application/json: { schema: { $ref: "#/components/schemas/ApiError" } } } }
+    ValidationError: { description: Invalid input (code validation_error, fields keyed by field name), content: { application/json: { schema: { $ref: "#/components/schemas/ApiError" } } } }
+  schemas:
+    Money: { type: string, pattern: '^\d{1,16}\.\d{2}$', example: "310.00" }
+    ApiError:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          enum: [unauthenticated, no_business, not_found, validation_error, version_conflict, order_not_editable, store_locked, order_empty, server_error]
+        message: { type: string }
+        fields: { type: object, additionalProperties: { type: string } }
+        current: { description: The latest order when code is version_conflict, order_not_editable or store_locked, $ref: "#/components/schemas/Order" }
+    OrderLineInput:
+      type: object
+      required: [id, quantity, unit]
+      properties:
+        id: { type: string, format: uuid, description: Created on the device }
+        product_id: { type: [string, "null"], format: uuid, description: "null for a typed (not registered) line" }
+        name: { type: [string, "null"], maxLength: 200, description: "Required when product_id is null; ignored otherwise (copied from the medicine)" }
+        quantity: { type: integer, minimum: 1, maximum: 100000 }
+        unit: { type: string, minLength: 1, maxLength: 50 }
+    OrderSave:
+      type: object
+      required: [request_id, expected_version, store_id, lines]
+      properties:
+        request_id: { type: string, format: uuid, description: Created on the device per save attempt; reused when the same attempt is retried }
+        expected_version: { type: [integer, "null"], minimum: 1, description: "null for the first save (creation); otherwise the version last received" }
+        store_id: { type: string, format: uuid }
+        notes: { type: [string, "null"], maxLength: 1000 }
+        lines: { type: array, maxItems: 200, items: { $ref: "#/components/schemas/OrderLineInput" } }
+    OrderAction:
+      type: object
+      required: [request_id, expected_version]
+      properties:
+        request_id: { type: string, format: uuid }
+        expected_version: { type: integer, minimum: 1 }
+    OrderCancel:
+      allOf:
+        - { $ref: "#/components/schemas/OrderAction" }
+        - type: object
+          properties:
+            reason: { type: [string, "null"], maxLength: 500, description: Required (non-blank) for a confirmed order }
+    OrderLine:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        position: { type: integer }
+        product_id: { type: [string, "null"], format: uuid }
+        item_status: { type: string, enum: [registered, pending_registration] }
+        name: { type: string }
+        strength: { type: [string, "null"] }
+        dosage_form: { type: [string, "null"] }
+        pack_size: { type: [string, "null"] }
+        manufacturer: { type: [string, "null"] }
+        quantity: { type: integer }
+        unit: { type: string }
+        delivered_quantity: { type: [integer, "null"] }
+        price_basis: { type: string, enum: [current, snapshot, none], description: "current = live catalog price (draft); snapshot = recorded at confirm; none = no selling price" }
+        selling_price: { oneOf: [{ $ref: "#/components/schemas/Money" }, { type: "null" }] }
+        line_total: { oneOf: [{ $ref: "#/components/schemas/Money" }, { type: "null" }] }
+        product_is_active: { type: [boolean, "null"] }
+    OrderTotals:
+      type: object
+      properties:
+        priced_total: { $ref: "#/components/schemas/Money" }
+        priced_lines: { type: integer }
+        unpriced_lines: { type: integer }
+        line_count: { type: integer }
+    OrderEvent:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        event_type: { type: string, enum: [created, confirmed, edited, cancelled] }
+        order_version: { type: integer }
+        created_at: { type: string, format: date-time }
+        detail: { type: object }
+    Order:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        order_number: { type: integer }
+        status: { type: string, enum: [draft, confirmed, cancelled, fulfilled] }
+        source: { type: string, enum: [manual, voice] }
+        notes: { type: [string, "null"] }
+        version: { type: integer }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time, description: The "last saved" time }
+        confirmed_at: { type: [string, "null"], format: date-time }
+        cancelled_at: { type: [string, "null"], format: date-time }
+        cancel_reason: { type: [string, "null"] }
+        store:
+          type: object
+          properties:
+            id: { type: string, format: uuid }
+            name: { type: string }
+            is_active: { type: boolean }
+        lines: { type: array, items: { $ref: "#/components/schemas/OrderLine" } }
+        totals: { $ref: "#/components/schemas/OrderTotals" }
+        events: { type: array, items: { $ref: "#/components/schemas/OrderEvent" } }
+    OrderResult:
+      type: object
+      properties:
+        replayed: { type: boolean, description: True when the same request_id had already been applied and nothing changed now }
+        order: { $ref: "#/components/schemas/Order" }
+    OrderSummary:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        order_number: { type: integer }
+        status: { type: string, enum: [draft, confirmed, cancelled, fulfilled] }
+        source: { type: string }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+        confirmed_at: { type: [string, "null"], format: date-time }
+        version: { type: integer }
+        store: { type: object, properties: { id: { type: string, format: uuid }, name: { type: string } } }
+        line_count: { type: integer }
+        priced_total: { $ref: "#/components/schemas/Money" }
+        unpriced_lines: { type: integer }
+    OrderPage:
+      type: object
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/OrderSummary" } }
+        next_cursor: { type: [string, "null"] }

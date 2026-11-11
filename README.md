@@ -1,7 +1,7 @@
 # Medicine Supply & Order Management
 
 Mobile-first app for a pharmaceutical supplier: stores, medicines, orders, invoices and store accounts.
-Built module by module with Spec Kit; this repository currently contains **Module 001** (login, products, stores) and **Module 002** (setup checklist, business settings, catalog import).
+Built module by module with Spec Kit; this repository currently contains **Module 001** (login, products, stores), **Module 002** (setup checklist, business settings, catalog import) and, in progress, **Module 003** (manual orders and order history; spec, plan and results in `specs/003-manual-orders/`).
 
 Product requirements: `docs/master-prompt.txt` and `docs/negative-prompt.txt`.
 Project rules: `.specify/memory/constitution.md` and `CLAUDE.md`.
@@ -21,7 +21,15 @@ Module 001 spec, plan and tasks: `specs/001-auth-products-stores/`. Module 002: 
 - **Setup checklist** on Home: three optional items derived from real data (details saved, a store exists, a medicine exists); dismissible and brought back from Settings. It never blocks any screen.
 - **Catalog import** from CSV or Excel (.xlsx): download a template, choose a file, see a preview where every row is New, Already exists, Similar, Duplicate in file, SKU already used or Invalid (with the reason), choose what to do with Similar rows, confirm. The file is read in your browser (only text rows are sent), the import is one all-or-nothing transaction, retrying creates no duplicates, and empty cells stay empty. Limits: 10,000 rows, 5 MB, 4 MB of text per request.
 
-Not included yet: orders, market list, invoices, ledger, voice, offline sync, reports.
+## What works in Module 003
+
+- **Manual orders**: choose a store (or add it on the spot with just a name), search the catalog by name, strength, dosage form, maker or code, add lines with quantity and unit, edit or remove lines, add notes, and confirm. A medicine that is not in the catalog is added as typed and marked "Not registered"; it never blocks saving or confirming.
+- **Automatic draft saving**: every change is saved as you go and survives a refresh. The screen shows only what the server confirmed ("Saving", "Saved at HH:MM", "Not saved" with Retry, "Changed elsewhere"). There is no offline mode yet: without a connection the screen says "Not saved".
+- **Prices stay as they were**: a draft shows the current catalog price; confirming records an immutable price snapshot, so later catalog changes never alter an order. A medicine without a selling price is shown as such and never counted as zero.
+- **Order history, store by store**: newest first, filter by store, status and day, search by order number or store name. A confirmed order can be edited in place (every change goes into its change history) or cancelled with a reason; a cancelled order is final.
+- Orders can only be written through database functions (`order_save`, `order_confirm`, `order_cancel`); signed-in users have read-only access to the order tables.
+
+Not included yet: market list, invoices, ledger, voice, offline sync, reports.
 
 ## Status and limits
 
@@ -41,7 +49,7 @@ cp .env.example .env.local   # then fill in your Supabase URL and anon key
 npm run dev
 ```
 
-1. Create a Supabase project. Apply `supabase/migrations/0001_init.sql` and then `supabase/migrations/0002_settings_and_import.sql` (CLI `supabase db push` or the SQL editor; the editor may warn about `drop ... if exists`, which only touches the new objects).
+1. Create a Supabase project. Apply `supabase/migrations/0001_init.sql`, then `0002_settings_and_import.sql`, then `0003_orders.sql` (CLI `supabase db push` or the SQL editor; the editor may warn about `drop ... if exists`, which only touches the new objects).
 2. In the dashboard add a user (Authentication → Users), then run `supabase/seed/provision-owner.sql`
    after replacing the email and business name placeholders. Without this the account sees "not set up".
 3. Open the app and sign in.

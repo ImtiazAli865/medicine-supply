@@ -80,7 +80,7 @@ export function PreviewList({
                 <label className="flex min-h-11 cursor-pointer items-center gap-3">
                   <input
                     type="checkbox"
-                    className="size-6"
+                    className="size-6 shrink-0"
                     data-testid={`create-similar-${row.row_no}`}
                     checked={chosen.has(row.row_no)}
                     onChange={() => onToggle(row.row_no)}

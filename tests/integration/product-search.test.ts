@@ -51,14 +51,36 @@ suite("search performance at scale (SC-002)", () => {
   }, 120_000);
 
   it("returns product search results in under 1 second for 5,000 products", async () => {
-    // Search covers name, brand, generic name, strength, manufacturer and SKU (not dosage form).
-    for (const q of ["PAN", "brufen 4", "sku-4999", "Maker 17", "250 mg"]) {
+    // Search covers name, brand, generic name, strength, manufacturer, SKU and dosage form (Module 003 order
+    // screen needs the dosage form; the same measurement stands for the 1-second goal of that screen, SC-009).
+    for (const q of ["PAN", "brufen 4", "sku-4999", "Maker 17", "250 mg", "tablet", "syrup 250", "panadol capsule"]) {
       const started = performance.now();
       const page = await listProducts(a.client, ListQuerySchema.parse({ q }));
       const elapsed = performance.now() - started;
       expect(page.items.length, `results for ${q}`).toBeGreaterThan(0);
       expect(elapsed, `search "${q}" took ${Math.round(elapsed)} ms`).toBeLessThan(1000);
     }
+  });
+
+  it("matches a dosage form word, and every word must match something", async () => {
+    const tablets = await listProducts(a.client, ListQuerySchema.parse({ q: "tablet", limit: "100" }));
+    expect(tablets.items.length).toBeGreaterThan(0);
+    expect(tablets.items.every((p) => p.dosage_form === "Tablet")).toBe(true);
+    const both = await listProducts(a.client, ListQuerySchema.parse({ q: "panadol tablet", limit: "100" }));
+    expect(both.items.length).toBeGreaterThan(0);
+    expect(both.items.every((p) => p.dosage_form === "Tablet" && p.name.startsWith("Panadol"))).toBe(true);
+    const none = await listProducts(a.client, ListQuerySchema.parse({ q: "panadol injection xyznotaword" }));
+    expect(none.items).toEqual([]);
+  });
+
+  it("treats commas, brackets, quotes, backslashes and wildcards in the search text as plain text, never as filter syntax", async () => {
+    for (const q of ["5,mg", "a)b", "(x", 'x"y', "back\slash", "50%", "a_b", "name.eq.x", "x),(y", "tablet,syrup", "'; drop"]) {
+      const page = await listProducts(a.client, ListQuerySchema.parse({ q }));
+      expect(Array.isArray(page.items), `search "${q}"`).toBe(true);
+    }
+    // a comma inside one word must not split into two filters: this finds nothing instead of everything
+    const comma = await listProducts(a.client, ListQuerySchema.parse({ q: "tablet,syrup" }));
+    expect(comma.items).toEqual([]);
   });
 
   it("pages through all matches without repeats", async () => {

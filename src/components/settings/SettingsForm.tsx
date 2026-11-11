@@ -147,7 +147,7 @@ export function SettingsForm({ initial }: { initial: Settings }) {
             <input
               type="checkbox"
               id="summary"
-              className="mt-1 size-6"
+              className="mt-1 size-6 shrink-0"
               checked={values.summary}
               onChange={(e) => set("summary", e.target.checked)}
             />

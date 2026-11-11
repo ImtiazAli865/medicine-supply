@@ -90,7 +90,7 @@ export function SetupChecklist({ state }: { state: SetupState }) {
                 {item.title} <span className="sr-only">{item.done ? "(done)" : "(not done)"}</span>
               </p>
               <p className="text-sm text-muted">{item.hint}</p>
-              <Link href={item.href} className="inline-flex min-h-11 items-center font-medium text-primary underline">
+              <Link href={item.href} className="inline-flex min-h-11 min-w-11 items-center font-medium text-primary underline">
                 {item.done ? "Open" : item.action}
               </Link>
             </div>

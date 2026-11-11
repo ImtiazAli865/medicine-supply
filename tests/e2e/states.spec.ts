@@ -4,6 +4,7 @@ import { expect, signIn, test } from "./fixtures";
 for (const list of [
   { name: "stores", path: "/stores", api: "**/api/stores?**", empty: "Add your first store" },
   { name: "products", path: "/products", api: "**/api/products?**", empty: "Add your first medicine" },
+  { name: "orders", path: "/orders", api: "**/api/orders?**", empty: "Take your first order", noMatch: /No orders match/ },
 ]) {
   test.describe(`${list.name} list states`, () => {
     test.beforeEach(async ({ page, tenant }) => {
@@ -43,11 +44,11 @@ for (const list of [
       await expect(empty.getByRole("link", { name: list.empty })).toBeVisible();
     });
 
-    test("a search with no matches shows 'No ... found' with an add link, not the first-time empty state", async ({ page }) => {
+    test("a search with no matches shows its own 'no match' message, not the first-time empty state", async ({ page }) => {
       await page.route(list.api, (route) => route.fulfill({ status: 200, json: { items: [], next_cursor: null } }));
       await page.goto(list.path);
       await page.getByRole("searchbox").fill("zzzz-nothing");
-      await expect(page.getByTestId("empty-state")).toContainText(/No .* found/);
+      await expect(page.getByTestId("empty-state")).toContainText(list.noMatch ?? /No .* found/);
     });
   });
 }
