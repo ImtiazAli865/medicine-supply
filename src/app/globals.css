@@ -58,3 +58,16 @@ body {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* Printing (the market list): one A4 page layout without the application navigation (those parts use print:hidden). */
+@media print {
+  @page {
+    size: A4;
+    margin: 12mm;
+  }
+  body {
+    background: #fff;
+    color: #000;
+    font-size: 12px;
+  }
+}

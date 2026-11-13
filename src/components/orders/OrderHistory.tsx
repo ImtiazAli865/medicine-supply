@@ -115,10 +115,15 @@ export function OrderHistory() {
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-3">
         <h1 className="text-2xl font-semibold">Orders</h1>
-        <ButtonLink href="/orders/new" data-testid="new-order">
-          <Plus size={20} aria-hidden="true" />
-          New order
-        </ButtonLink>
+        <div className="flex flex-wrap justify-end gap-2">
+          <ButtonLink href="/market-list" variant="secondary" className="" data-testid="market-list-link">
+            Market list
+          </ButtonLink>
+          <ButtonLink href="/orders/new" data-testid="new-order">
+            <Plus size={20} aria-hidden="true" />
+            New order
+          </ButtonLink>
+        </div>
       </div>
 
       <div className="relative">

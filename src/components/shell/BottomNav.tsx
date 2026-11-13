@@ -22,7 +22,7 @@ export function BottomNav() {
   return (
     <nav
       aria-label="Main"
-      className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-surface pb-[env(safe-area-inset-bottom)] md:static md:w-56 md:shrink-0 md:border-r md:border-t-0 md:pb-0"
+      className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-surface pb-[env(safe-area-inset-bottom)] print:hidden md:static md:w-56 md:shrink-0 md:border-r md:border-t-0 md:pb-0"
     >
       <ul className="grid grid-cols-5 md:grid-cols-1 md:gap-1 md:p-3">
         {items.map(({ href, label, icon: Icon }) => {
