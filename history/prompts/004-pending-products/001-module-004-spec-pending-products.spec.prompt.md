@@ -24,7 +24,7 @@ tests:
 
 ## Prompt
 
-Haan, shuru karo
+Yes, start. (translated from Roman Urdu)
 
 (the owner's go-ahead to start Module 004; the feature description given to /sp.specify was composed from docs/master-prompt.txt sections 7A and 8, the Module 003 spec's Module 004 compatibility notes, and ADR-0003:)
 

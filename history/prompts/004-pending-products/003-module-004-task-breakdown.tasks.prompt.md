@@ -23,7 +23,7 @@ tests:
 
 ## Prompt
 
-Haan, tasks banao
+Yes, create the tasks. (translated from Roman Urdu)
 
 ## Response snapshot
 

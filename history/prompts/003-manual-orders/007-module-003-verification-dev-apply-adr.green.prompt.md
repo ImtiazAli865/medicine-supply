@@ -33,9 +33,9 @@ tests:
 
 ## Prompt
 
-Dev project par migration, ADR aur PR ko karo
+Do the migration on the dev project, the ADR and the PR. (translated from Roman Urdu)
 
-(and, later in the same work: "is e2e completed", "me supabase me sign in kar liya he")
+(and, later in the same work: "is e2e completed", "I have signed in to Supabase")
 
 ## Response snapshot
 

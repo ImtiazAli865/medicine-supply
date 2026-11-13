@@ -26,7 +26,7 @@ tests:
 
 ## Prompt
 
-Haan, ADR banao
+Yes, create the ADR. (translated from Roman Urdu)
 
 (the owner's consent to the ADR suggested in plan.md; the command run was `/sp.adr pending-link-and-price-fill-write-model`)
 

@@ -27,12 +27,12 @@ tests:
 
 ## Prompt
 
-Messages in this stretch (the publishable key value is omitted here on purpose):
+Messages in this stretch (the publishable key value is omitted here on purpose; messages 2 to 4 are translated from Roman Urdu):
 
 1. "https://github.com/ImtiazAli865/medicine-supply.git push it on github"
-2. "[screenshot of Supabase API Keys page] ye API key hoti he"
-3. "agar me ye don claude code ko do wo .env.local file bana dega"
-4. "[publishable key] https://sdzacjtlltiggvajxato.supabase.co/rest/v1/ iska prompt bana do"
+2. "[screenshot of Supabase API Keys page] Is this the API key?"
+3. "If I give this to Claude Code, it will create the .env.local file"
+4. "[publishable key] https://sdzacjtlltiggvajxato.supabase.co/rest/v1/ make a prompt for this"
 5. "Yes, apply it"
 6. "medicine-supply-dev / imtiazkind143@gmail.com / this is my bussiness name and email"
 7. "continue"

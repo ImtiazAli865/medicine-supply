@@ -24,9 +24,9 @@ tests:
 
 ## Prompt
 
-ok ye do kaam kardo phr module 003 ko implement karenge
+ok, do these two tasks, then we will implement Module 003. (translated from Roman Urdu)
 
-(Then: "kiya hogye dono step")
+(Then: "Are both steps done?")
 
 ## Response snapshot
 

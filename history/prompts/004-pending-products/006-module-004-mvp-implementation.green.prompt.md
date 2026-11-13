@@ -54,7 +54,7 @@ tests:
 
 ## Prompt
 
-Haan, shuru karo
+Yes, start. (translated from Roman Urdu)
 
 (the owner's go-ahead to start implementing Module 004; this stage covers the MVP agreed in the plan: Setup, Foundational and User Story 1)
 

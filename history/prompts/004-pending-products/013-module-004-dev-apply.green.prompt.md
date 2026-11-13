@@ -25,7 +25,7 @@ tests:
 
 ## Prompt
 
-Dev par apply karo
+Apply to dev. (translated from Roman Urdu)
 
 ## Response snapshot
 

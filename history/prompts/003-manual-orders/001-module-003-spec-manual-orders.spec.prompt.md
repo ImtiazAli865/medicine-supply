@@ -25,7 +25,7 @@ tests:
 
 ## Prompt
 
-PR 1 ko merge aro pehle phr next
+Merge PR 1 first, then next. (translated from Roman Urdu)
 
 (PR #1 was merged first. "Next" was taken as Module 003, the next module in the agreed order. The /sp.specify description was drafted by the assistant from docs/master-prompt.txt sections 4C, 4D, 7, 7A and 16 and run with this text:)
 

@@ -35,7 +35,7 @@ tests:
 
 ## Prompt
 
-ok implementation start karo
+ok, start the implementation. (translated from Roman Urdu)
 
 ## Response snapshot
 

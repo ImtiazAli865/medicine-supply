@@ -28,7 +28,7 @@ tests:
 
 ## Prompt
 
-Haan, plan chalao
+Yes, run the plan. (translated from Roman Urdu)
 
 ## Response snapshot
 

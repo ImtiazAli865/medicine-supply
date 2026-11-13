@@ -24,9 +24,9 @@ tests:
 ## Prompt
 
 @"C:\Users\IDC\Downloads\aqib.HTM.html"
-isme jo medicine hen wo add kardo
+Add the medicines that are in it. (translated from Roman Urdu)
 
-(Follow-up answers to my questions: Rate column meaning -> "ye srif test k lye filhal"; unit -> "Sab ke liye 'pack'".)
+(Follow-up answers to my questions: Rate column meaning -> "This is only for testing for now"; unit -> "'pack' for all of them".)
 
 ## Response snapshot
 

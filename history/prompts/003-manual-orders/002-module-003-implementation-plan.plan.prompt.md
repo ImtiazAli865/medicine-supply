@@ -28,7 +28,7 @@ tests:
 
 ## Prompt
 
-Theek, plan chalao
+OK, run the plan. (translated from Roman Urdu)
 
 (The owner accepted the four assumptions from the spec: snapshot at confirm, confirmed orders edited in place, draft store locked once it has a line, cancelled orders final.)
 

@@ -27,7 +27,7 @@ tests:
 
 ## Prompt
 
-ab continue karo ... ye commit it now ... abhi kiya running kaam ho raha he
+now continue ... commit it now ... what work is running right now? (translated from Roman Urdu)
 
 (the owner asked to continue, then to commit while the verification chain was still running, then asked what was running)
 

@@ -38,7 +38,7 @@ tests:
 
 commit then run
 
-(the owner chose "Implement aage chalao (US2)" when asked what "run" meant)
+(the owner chose "Implement, carry on (US2)" when asked what "run" meant)
 
 ## Response snapshot
 
