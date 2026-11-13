@@ -40,7 +40,17 @@ Not included yet: market list, invoices, ledger, voice, offline sync, reports.
 - **Visible**: Home shows "Needs attention" with the typed medicines to register and the medicines that need a price (the numbers equal the lists). The Pending screen has two tabs, "To register" and "Need a price". There is no sixth item in the bottom navigation.
 - All of it runs through database functions (migration `0004_pending_products.sql`); purchase price and MRP are only ever typed in the register form and never shown on order or pricing screens.
 
-Not included yet: market list and purchases, invoices (and the check that blocks an invoice while a price is missing), ledger, voice, offline sync, reports. Module 004 results, gaps and the owner's phone check are in `specs/004-pending-products/quickstart.md`, sections 6 and 7.
+Not included yet: invoices (and the check that blocks an invoice while a price is missing), ledger, voice, offline sync, reports. Module 004 results, gaps and the owner's phone check are in `specs/004-pending-products/quickstart.md`, sections 6 and 7.
+
+## What works in Module 005 (in progress, see its quickstart for what has been verified)
+
+- **Market list**: one combined list of the orders confirmed on a Pakistan day (today by default, any day can be chosen). Each medicine appears once (a different strength, form, manufacturer, pack size or unit is its own row) with the total, each store's share, how much is bought and how much remains. Draft and cancelled orders are never counted. Typed medicines that are not registered yet are in their own group "Not yet registered", so no requested quantity is left out. Search, a status filter (all, still to buy, bought) and a store filter are available; the choices stay in the page address.
+- **Record purchases**: on a row, "Record purchase" saves the quantity really bought (partial purchases are fine, an optional cost per unit, supplier and reference). Only a recorded quantity marks something bought; "Bought all remaining" just fills the field and still needs Save. A wrong entry is cancelled with a reason (it stays in the history), never edited or deleted. A repeated save records one entry. After a purchase with a cost the app asks whether to update the medicine's purchase price; nothing changes unless you say yes.
+- **Print and CSV**: a compact A4 print page and a CSV file of the same rows. Neither ever shows a price, cost, MRP or profit. Thermal printing comes with invoices.
+- **Visible**: Home shows how many medicines are still to buy today, and the Orders screen links to the list. There is no sixth item in the bottom navigation.
+- It runs through database functions (migration `0006_market_list_purchases.sql`): the list is computed on every read, and purchase entries are append-only.
+
+Not included yet: invoices, ledger, voice, offline sync, reports.
 
 ## Status and limits
 
@@ -60,7 +70,7 @@ cp .env.example .env.local   # then fill in your Supabase URL and anon key
 npm run dev
 ```
 
-1. Create a Supabase project. Apply `supabase/migrations/0001_init.sql`, then `0002_settings_and_import.sql`, then `0003_orders.sql`, then `0004_pending_products.sql`, then `0005_pending_perf.sql` (CLI `supabase db push` or the SQL editor; the editor may warn about `drop ... if exists`, which only touches the new objects).
+1. Create a Supabase project. Apply `supabase/migrations/0001_init.sql`, then `0002_settings_and_import.sql`, then `0003_orders.sql`, then `0004_pending_products.sql`, then `0005_pending_perf.sql`, then `0006_market_list_purchases.sql` (CLI `supabase db push` or the SQL editor; the editor may warn about `drop ... if exists`, which only touches the new objects).
 2. In the dashboard add a user (Authentication → Users), then run `supabase/seed/provision-owner.sql`
    after replacing the email and business name placeholders. Without this the account sees "not set up".
 3. Open the app and sign in.

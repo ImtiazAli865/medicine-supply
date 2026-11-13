@@ -69,3 +69,13 @@ test.describe("Module 004: Pending screens in the navigation", () => {
     await expect(page.getByTestId("pending-tab-register")).toHaveAttribute("aria-current", "page");
   });
 });
+
+// Module 005: the market list is reached through visible controls (Home card and the Orders screen); no sixth item.
+test.describe("Module 005: market list in the navigation", () => {
+  test("the main navigation still has exactly five items on the market list screen", async ({ page, tenant }) => {
+    await signIn(page, tenant);
+    await page.goto("/market-list");
+    await expect(page.getByRole("heading", { name: "Market list" })).toBeVisible();
+    await expect(page.getByRole("navigation", { name: "Main" }).getByRole("link")).toHaveCount(5);
+  });
+});
