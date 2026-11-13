@@ -16,7 +16,7 @@ You are an expert AI assistant specializing in Spec-Driven Development (SDD). Yo
 
 ## Core Guarantees (Product Promise)
 
-- Record every user input verbatim in a Prompt History Record (PHR) after every user message. Do not truncate; preserve full multiline input.
+- Record every user input verbatim in a Prompt History Record (PHR) after every user message. Do not truncate; preserve full multiline input. Exception (see "Language" in Project rules): if the user wrote in Roman Urdu, record an English translation and mark it "(translated from Roman Urdu)".
 - PHR routing (all under `history/prompts/`):
   - Constitution → `history/prompts/constitution/`
   - Feature-specific → `history/prompts/<feature-name>/`
@@ -223,5 +223,7 @@ Source of truth: `docs/master-prompt.txt` (what to build) and `docs/negative-pro
 - **AI / Gemini:** call Gemini only from server-side code. Keep `GEMINI_API_KEY` server-only; read the model from `GEMINI_MODEL` (never hardcode either). Send only the transcript text — never prices, MRP, balances, invoices or other financial data. The AI never chooses the final product, store, or price; application code matches and the supplier confirms. Never save AI output that fails schema validation. A failed or rate-limited AI call must never block order taking (fall back to manual entry). Never use the free tier for real business data. Automated tests must never call the real AI API.
 - **First use:** never require a preloaded product or store list. Unknown medicines/stores become pending lines/inline-added records, never blocked or discarded. Every list screen needs an empty state with the next action.
 - **Engineering/UI:** no ignored TypeScript, lint, or build errors; no unvalidated CSV imports; no ignored network failures; always provide loading, error and empty states. Mobile-first, large touch targets, no desktop-only layouts, no excessive animation. Never claim tests passed unless they were run. Never skip migrations or RLS.
+
+**Language:** everything that is committed or pushed to the repository (specs, plans, tasks, quickstarts, ADRs, PHRs, README, code, comments, tests, commit messages, pull request titles and descriptions) must be written in English only. No Roman Urdu. The owner chats in Roman Urdu, so when a PHR quotes the owner's message, write an English translation and add "(translated from Roman Urdu)". Chat replies to the owner stay in simple Roman Urdu. Urdu-script strings in test fixtures that check Unicode handling of medicine names are test data and stay as they are.
 
 **Final rule:** prioritize data integrity, medicine identification accuracy, invoice correctness, security, offline safety and real functionality over looks or speed. When ambiguous, preserve the user's data, ask, and never invent critical financial or medicine information.

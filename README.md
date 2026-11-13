@@ -1,7 +1,7 @@
 # Medicine Supply & Order Management
 
 Mobile-first app for a pharmaceutical supplier: stores, medicines, orders, invoices and store accounts.
-Built module by module with Spec Kit; this repository currently contains **Module 001** (login, products, stores), **Module 002** (setup checklist, business settings, catalog import) and, in progress, **Module 003** (manual orders and order history; spec, plan and results in `specs/003-manual-orders/`).
+Built module by module with Spec Kit; this repository currently contains **Module 001** (login, products, stores), **Module 002** (setup checklist, business settings, catalog import) **Module 003** (manual orders and order history; `specs/003-manual-orders/`) and, in progress, **Module 004** (pending products: Quick Register, linking, Pending Prices; `specs/004-pending-products/`).
 
 Product requirements: `docs/master-prompt.txt` and `docs/negative-prompt.txt`.
 Project rules: `.specify/memory/constitution.md` and `CLAUDE.md`.
@@ -31,6 +31,17 @@ Module 001 spec, plan and tasks: `specs/001-auth-products-stores/`. Module 002: 
 
 Not included yet: market list, invoices, ledger, voice, offline sync, reports.
 
+## What works in Module 004
+
+- **Register a typed medicine**: on an order line marked "Not registered", choose "Register this medicine". Only the name and unit are needed; everything else stays empty unless you fill it. Creating the medicine and linking the line is one all-or-nothing step, retrying never creates a second medicine, and the typed text and quantity stay on the line. The same name, strength, form, pack size and maker is never created twice; a similar one with a different strength, form or pack size needs your explicit confirmation and is never merged.
+- **Link to an existing medicine**: "This is an existing medicine" shows the typed text next to the medicine you picked, so a different strength or form is visible before you confirm.
+- **Other orders with the same typed text**: after a register or a link, matching lines in other orders are listed. You confirm each line yourself; there is no "link all", and look-alikes ("Noran 40mg" for "Noran 20mg") are only listed under "Looks different" and never proposed.
+- **Pending Prices**: medicines without a selling price, and confirmed order lines still waiting for one, grouped by medicine. Type the price once (PKR, two decimals, never filled in for you), review the exact lines, confirm. Only lines that have no price yet are filled; **a recorded price is never changed**. Each fill is in the order's history, a retry changes nothing twice, and a list that changed since the review is refused and shown again.
+- **Visible**: Home shows "Needs attention" with the typed medicines to register and the medicines that need a price (the numbers equal the lists). The Pending screen has two tabs, "To register" and "Need a price". There is no sixth item in the bottom navigation.
+- All of it runs through database functions (migration `0004_pending_products.sql`); purchase price and MRP are only ever typed in the register form and never shown on order or pricing screens.
+
+Not included yet: market list and purchases, invoices (and the check that blocks an invoice while a price is missing), ledger, voice, offline sync, reports. Module 004 results, gaps and the owner's phone check are in `specs/004-pending-products/quickstart.md`, sections 6 and 7.
+
 ## Status and limits
 
 See `specs/001-auth-products-stores/quickstart.md`, section 8 "Verification results". In short: lint,
@@ -49,7 +60,7 @@ cp .env.example .env.local   # then fill in your Supabase URL and anon key
 npm run dev
 ```
 
-1. Create a Supabase project. Apply `supabase/migrations/0001_init.sql`, then `0002_settings_and_import.sql`, then `0003_orders.sql` (CLI `supabase db push` or the SQL editor; the editor may warn about `drop ... if exists`, which only touches the new objects).
+1. Create a Supabase project. Apply `supabase/migrations/0001_init.sql`, then `0002_settings_and_import.sql`, then `0003_orders.sql`, then `0004_pending_products.sql`, then `0005_pending_perf.sql` (CLI `supabase db push` or the SQL editor; the editor may warn about `drop ... if exists`, which only touches the new objects).
 2. In the dashboard add a user (Authentication → Users), then run `supabase/seed/provision-owner.sql`
    after replacing the email and business name placeholders. Without this the account sees "not set up".
 3. Open the app and sign in.

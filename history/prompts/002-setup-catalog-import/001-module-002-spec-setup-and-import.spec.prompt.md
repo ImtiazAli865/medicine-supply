@@ -25,7 +25,7 @@ tests:
 
 ## Prompt
 
-User message: "yes abhi shuru karna he" (start Module 002 now), after I proposed Module 002 (setup checklist and CSV import). I then ran /sp.specify with this description (summarized here; the full text is the command argument):
+User message: "yes, we want to start now" (start Module 002 now; translated from Roman Urdu), after I proposed Module 002 (setup checklist and CSV import). I then ran /sp.specify with this description (summarized here; the full text is the command argument):
 
 Module 002 Setup and catalog import for the Medicine Supply & Order Management app (builds on Module 001: login, products, stores). Scope ONLY: (1) skippable first-time setup checklist on the home screen with three optional items (business details and invoice settings; add stores; optional catalog import), done/not-done, dismissible, reappears from Settings; (2) business settings screen (name, phone, address, thermal paper width mm default 80, Account Summary default off, owner-only editor, validated); (3) optional catalog import from CSV or Excel (.xlsx) with template download, PREVIEW before saving with every row classified (new, exact duplicate, similar, duplicate inside file, conflicting code, invalid with reason), supplier decisions on problem rows, atomic and retry-safe confirmed import, summary of created and skipped; never invent values; 5,000-row files; clear errors for bad files. Out of scope: orders, invoices, ledger, voice, offline sync, reports, multi-user roles, importing stores or balances. Follow docs/master-prompt.txt, docs/negative-prompt.txt and the constitution. Testable success criteria including preview/import agreement, retry without duplicates, RLS isolation, and a 5,000-row time limit.
 

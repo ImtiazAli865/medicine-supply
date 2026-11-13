@@ -48,3 +48,24 @@ test.describe("US4: app shell and navigation", () => {
     await expect(page.getByRole("link", { name: /home/i }).first()).toBeVisible();
   });
 });
+
+// Module 004: the Pending screens are reached through visible controls, and the bottom navigation keeps its five items.
+test.describe("Module 004: Pending screens in the navigation", () => {
+  test.beforeEach(async ({ page, tenant }) => {
+    await signIn(page, tenant);
+  });
+
+  test("the main navigation still has exactly five items", async ({ page }) => {
+    await expect(page.getByRole("navigation", { name: "Main" }).getByRole("link")).toHaveCount(5);
+  });
+
+  test("Pending Prices is reachable from Products, and the Pending screen has both tabs", async ({ page }) => {
+    await page.getByRole("navigation", { name: "Main" }).getByRole("link", { name: "Products" }).click();
+    await page.getByRole("link", { name: "Pending prices" }).click();
+    await expect(page).toHaveURL(/\/pending\?tab=prices/);
+    await expect(page.getByRole("heading", { name: "Pending", level: 1 })).toBeVisible();
+    await page.getByTestId("pending-tab-register").click();
+    await expect(page).toHaveURL(/\/pending\?tab=register/);
+    await expect(page.getByTestId("pending-tab-register")).toHaveAttribute("aria-current", "page");
+  });
+});

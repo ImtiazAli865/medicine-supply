@@ -12,6 +12,8 @@ export interface EditorState {
 
 export interface LineInfo {
   name: string;
+  /** The text the supplier typed, kept after the line was linked to a medicine (Module 004); null otherwise. */
+  typed_name: string | null;
   strength: string | null;
   dosage_form: string | null;
   pack_size: string | null;
@@ -47,6 +49,7 @@ export function stateFromOrder(order: Order): EditorState {
 export function infoFromLine(line: OrderLine): LineInfo {
   return {
     name: line.name,
+    typed_name: line.typed_name ?? null,
     strength: line.strength,
     dosage_form: line.dosage_form,
     pack_size: line.pack_size,
@@ -65,6 +68,7 @@ export function infoFromOrder(order: Order): Record<string, LineInfo> {
 export function infoFromProduct(product: Product): LineInfo {
   return {
     name: product.name,
+    typed_name: null,
     strength: product.strength,
     dosage_form: product.dosage_form,
     pack_size: product.pack_size,
@@ -76,7 +80,7 @@ export function infoFromProduct(product: Product): LineInfo {
 }
 
 export function infoForTyped(name: string): LineInfo {
-  return { name, strength: null, dosage_form: null, pack_size: null, manufacturer: null, selling_price: null, price_basis: "none", typed: true };
+  return { name, typed_name: null, strength: null, dosage_form: null, pack_size: null, manufacturer: null, selling_price: null, price_basis: "none", typed: true };
 }
 
 /** The body of a save request for the current state. */

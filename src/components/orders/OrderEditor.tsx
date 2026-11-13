@@ -9,6 +9,8 @@ import { ConfirmOrderDialog } from "@/components/orders/ConfirmOrderDialog";
 import { MedicineSearch } from "@/components/orders/MedicineSearch";
 import { OrderLineRow } from "@/components/orders/OrderLineRow";
 import { OrderStatusBadge } from "@/components/orders/OrderStatusBadge";
+import { PendingLineActions } from "@/components/pending/PendingLineActions";
+import { usePendingProposals } from "@/components/pending/ProposalsFlow";
 import { OrderTotals } from "@/components/orders/OrderTotals";
 import { SaveStatus } from "@/components/orders/SaveStatus";
 import { StoreSelector } from "@/components/orders/StoreSelector";
@@ -58,6 +60,7 @@ export function OrderEditor({
   const editing = mode === "edit";
   const editor = useOrderEditor({ orderId, initialOrder, storeId, mode });
   const { state, snapshot, info } = editor;
+  const proposals = usePendingProposals(orderId, (order) => editor.adoptServerOrder(order));
 
   const [storeName, setStoreName] = useState(initialStoreName);
   const [searchOpen, setSearchOpen] = useState(false);
@@ -236,6 +239,12 @@ export function OrderEditor({
         </Banner>
       ) : null}
 
+      {state.lines.some((l) => l.product_id === null) ? (
+        <Link href="/pending?tab=register" data-testid="pending-link" className="inline-flex min-h-11 items-center font-medium text-primary underline">
+          Medicines waiting to be registered
+        </Link>
+      ) : null}
+
       <section aria-label="Order lines" className="space-y-3">
         {hasLines ? (
           <ul className="space-y-3" data-testid="order-lines">
@@ -254,6 +263,18 @@ export function OrderEditor({
                   onChange={(patch) => editor.updateLine(line.id, patch)}
                   onRemove={() => (editing ? setRemoveId(line.id) : editor.removeLine(line.id))}
                   onValidity={handleValidity}
+                  actions={
+                    line.product_id === null ? (
+                      <PendingLineActions
+                        orderId={orderId}
+                        orderStatus={editing ? "confirmed" : "draft"}
+                        line={{ id: line.id, name: info[line.id]?.name ?? line.name ?? "", unit: line.unit, quantity: line.quantity }}
+                        getVersion={editor.prepareForPending}
+                        onOrderChanged={(order) => editor.adoptServerOrder(order)}
+                        onLinked={(product) => void proposals.offer(product)}
+                      />
+                    ) : undefined
+                  }
                 />
               );
             })}
@@ -378,6 +399,7 @@ export function OrderEditor({
         unpricedCount={unpriced}
       />
       <CancelOrderDialog open={discardOpen} mode="draft" onClose={() => setDiscardOpen(false)} onConfirm={discard} busy={busy} error={actionError} />
+      {proposals.element}
     </div>
   );
 }

@@ -28,7 +28,7 @@ tests:
 
 ## Prompt
 
-Haan, fixes apply karo
+Yes, apply the fixes. (translated from Roman Urdu)
 
 ## Response snapshot
 

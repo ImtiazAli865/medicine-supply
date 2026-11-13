@@ -23,7 +23,7 @@ tests:
 
 ## Prompt
 
-Haan, analyze karo
+Yes, run the analysis. (translated from Roman Urdu)
 
 ## Response snapshot
 

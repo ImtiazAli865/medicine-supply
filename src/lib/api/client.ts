@@ -8,6 +8,8 @@ export class ClientApiError extends Error {
   readonly fields?: Record<string, string>;
   readonly matches?: unknown[];
   readonly current?: unknown;
+  readonly current_lines?: unknown[];
+  readonly current_price?: string;
 
   constructor(code: ErrorCode | "network", status: number, message: string, body?: Partial<ApiErrorBody>) {
     super(message);
@@ -16,6 +18,8 @@ export class ClientApiError extends Error {
     this.fields = body?.fields;
     this.matches = body?.matches;
     this.current = body?.current;
+    this.current_lines = body?.current_lines;
+    this.current_price = body?.current_price;
   }
 }
 

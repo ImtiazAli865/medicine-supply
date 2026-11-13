@@ -24,7 +24,7 @@ tests:
 
 ## Prompt
 
-ok ADR bana do
+ok, create the ADR (translated from Roman Urdu)
 
 (The /sp.adr skill was then run with the argument `import-classification-in-sql-browser-parsing`.)
 

@@ -24,9 +24,9 @@ tests:
 
 ## Prompt
 
-ye do kaam kardo phr module 003 ko implement karenge
+Do these two tasks, then we will implement Module 003. (translated from Roman Urdu)
 
-(The two tasks were quoted from the previous message: "Manual walk-through jis mein SC-001 ka waqt naapna tha (T073)" and "Module 001 ka ADR (T075), jo sirf aap ki ijazat se banega." The owner's request is the consent for the ADR. The /sp.adr skill was then run with the argument: REST route handlers over RLS-enforced Supabase access with client-generated IDs.)
+(The two tasks were quoted from the previous message: "The manual walk-through in which the SC-001 time was to be measured (T073)" and "The ADR for Module 001 (T075), which will be written only with your permission." The owner's request is the consent for the ADR. The /sp.adr skill was then run with the argument: REST route handlers over RLS-enforced Supabase access with client-generated IDs.)
 
 ## Response snapshot
 

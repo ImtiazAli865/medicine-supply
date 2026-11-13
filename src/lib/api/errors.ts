@@ -14,6 +14,12 @@ export type ErrorCode =
   | "order_not_editable"
   | "store_locked"
   | "order_empty"
+  | "line_not_pending"
+  | "line_not_found"
+  | "product_inactive"
+  | "list_changed"
+  | "price_differs"
+  | "invalid_price"
   | "server_error";
 
 const STATUS: Record<ErrorCode, number> = {
@@ -30,6 +36,12 @@ const STATUS: Record<ErrorCode, number> = {
   order_not_editable: 409,
   store_locked: 409,
   order_empty: 409,
+  line_not_pending: 409,
+  line_not_found: 404,
+  product_inactive: 409,
+  list_changed: 409,
+  price_differs: 409,
+  invalid_price: 400,
   server_error: 500,
 };
 
@@ -39,6 +51,8 @@ export interface ApiErrorBody {
   fields?: Record<string, string>;
   matches?: unknown[];
   current?: unknown;
+  current_lines?: unknown[];
+  current_price?: string;
 }
 
 export class ApiError extends Error {
@@ -47,14 +61,22 @@ export class ApiError extends Error {
   readonly fields?: Record<string, string>;
   readonly matches?: unknown[];
   readonly current?: unknown;
+  readonly current_lines?: unknown[];
+  readonly current_price?: string;
 
-  constructor(code: ErrorCode, message: string, extra: Partial<Pick<ApiErrorBody, "fields" | "matches" | "current">> = {}) {
+  constructor(
+    code: ErrorCode,
+    message: string,
+    extra: Partial<Pick<ApiErrorBody, "fields" | "matches" | "current" | "current_lines" | "current_price">> = {},
+  ) {
     super(message);
     this.code = code;
     this.status = STATUS[code];
     this.fields = extra.fields;
     this.matches = extra.matches;
     this.current = extra.current;
+    this.current_lines = extra.current_lines;
+    this.current_price = extra.current_price;
   }
 
   toBody(): ApiErrorBody {
@@ -62,6 +84,8 @@ export class ApiError extends Error {
     if (this.fields) body.fields = this.fields;
     if (this.matches) body.matches = this.matches;
     if (this.current !== undefined) body.current = this.current;
+    if (this.current_lines) body.current_lines = this.current_lines;
+    if (this.current_price !== undefined) body.current_price = this.current_price;
     return body;
   }
 }

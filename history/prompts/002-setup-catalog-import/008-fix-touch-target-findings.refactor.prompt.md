@@ -29,9 +29,9 @@ tests:
 
 ## Prompt
 
-Haan, theek karo
+Yes, fix them. (translated from Roman Urdu)
 
-(Answer to: "Touch-target ki 2 chhoti kharabiyan abhi theek karun?")
+(Answer to: "Should I fix the 2 small touch-target defects now?")
 
 ## Response snapshot
 

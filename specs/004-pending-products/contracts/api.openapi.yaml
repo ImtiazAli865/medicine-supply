@@ -1,0 +1,351 @@
+openapi: 3.1.0
+info:
+  title: Medicine Supply - Pending Products API (Module 004)
+  version: 0.1.0
+  description: >
+    REST route handlers for Quick Register, linking typed order lines, and Pending Prices. Every request
+    carries the signed-in user's Supabase session cookie; all data access goes through the user's own session,
+    so Row Level Security applies. Writes call database functions (pending_line_register, pending_line_link,
+    pending_price_apply); the handlers validate with Zod first and map the functions' reasons to the error codes
+    below. Money is always a decimal string with two decimals ("125.50"). Purchase price and MRP are never
+    returned by any endpoint of this module. Medicine search for linking reuses GET /api/products (Module 001).
+    Every write is safe to repeat: the same request_id returns the stored result with replayed = true.
+servers:
+  - url: /api
+security:
+  - supabaseSession: []
+paths:
+  /orders/{id}/lines/{lineId}/register:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      - { name: lineId, in: path, required: true, schema: { type: string, format: uuid } }
+    post:
+      summary: >
+        Quick Register: create a medicine from a typed line and link the line to it, in one all-or-nothing step.
+        Only name and unit are required; nothing is defaulted or parsed from the typed text.
+      operationId: registerLine
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/RegisterBody" } } }
+      responses:
+        "200": { description: Registered and linked (or replayed), content: { application/json: { schema: { $ref: "#/components/schemas/LinkResult" } } } }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: >
+            version_conflict (body.current is the latest order), order_not_editable, line_not_pending (the line is
+            already linked, body.current is the latest order), duplicate_product (body.matches lists the existing
+            medicines: offer "Use the existing medicine"), similar_products (body.matches lists them: needs
+            confirm_similar), sku_conflict.
+          content: { application/json: { schema: { $ref: "#/components/schemas/ApiError" } } }
+  /orders/{id}/lines/{lineId}/link:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      - { name: lineId, in: path, required: true, schema: { type: string, format: uuid } }
+    post:
+      summary: >
+        Link a typed line to an existing active medicine the supplier picked and confirmed. Never links more than
+        this one line.
+      operationId: linkLine
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/LinkBody" } } }
+      responses:
+        "200": { description: Linked (or replayed), content: { application/json: { schema: { $ref: "#/components/schemas/LinkResult" } } } }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: version_conflict, order_not_editable, line_not_pending, product_inactive.
+          content: { application/json: { schema: { $ref: "#/components/schemas/ApiError" } } }
+  /pending/summary:
+    get:
+      summary: Counts for the Home card (computed when called, never cached)
+      operationId: pendingSummary
+      responses:
+        "200": { description: Counts, content: { application/json: { schema: { $ref: "#/components/schemas/PendingSummary" } } } }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+  /pending/typed:
+    get:
+      summary: Typed (not registered) lines grouped by their exact typed text, with store, order and quantity
+      operationId: listTypedGroups
+      parameters:
+        - { name: q, in: query, schema: { type: string, maxLength: 200 } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 50 } }
+        - { name: cursor, in: query, schema: { type: string } }
+      responses:
+        "200": { description: A page of groups, content: { application/json: { schema: { $ref: "#/components/schemas/TypedGroupPage" } } } }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+  /pending/candidates:
+    get:
+      summary: >
+        After a medicine is registered or linked: typed lines that clearly match it (proposed) and look-alike lines
+        that are listed but never proposed (not_proposed). Nothing here is linked until the supplier confirms
+        each line through the link endpoint.
+      operationId: pendingCandidates
+      parameters:
+        - { name: product_id, in: query, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200": { description: Candidates, content: { application/json: { schema: { $ref: "#/components/schemas/Candidates" } } } }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /pending/prices:
+    get:
+      summary: >
+        Pending Prices: active medicines without a selling price, and priced medicines that still have confirmed
+        order lines waiting for a price, with the number of lines and orders waiting.
+      operationId: listPendingPrices
+      parameters:
+        - { name: q, in: query, schema: { type: string, maxLength: 200 } }
+        - { name: waiting, in: query, description: "1 = only medicines that have confirmed lines waiting", schema: { type: string, enum: ["0", "1"], default: "0" } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 50 } }
+        - { name: cursor, in: query, schema: { type: string } }
+      responses:
+        "200": { description: A page of medicines, content: { application/json: { schema: { $ref: "#/components/schemas/PendingPricePage" } } } }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+  /pending/prices/{productId}/preview:
+    parameters:
+      - { name: productId, in: path, required: true, schema: { type: string, format: uuid } }
+    get:
+      summary: The exact lines that would receive this price, and how many priced lines will not be touched
+      operationId: previewPriceFill
+      parameters:
+        - { name: price, in: query, required: true, description: "PKR greater than zero, at most two decimals", schema: { $ref: "#/components/schemas/Money" } }
+      responses:
+        "200": { description: The review list, content: { application/json: { schema: { $ref: "#/components/schemas/PriceFillPreview" } } } }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: price_differs (the medicine already has another selling price; change it on the Products screen).
+          content: { application/json: { schema: { $ref: "#/components/schemas/ApiError" } } }
+  /pending/prices/{productId}/apply:
+    parameters:
+      - { name: productId, in: path, required: true, schema: { type: string, format: uuid } }
+    post:
+      summary: >
+        Set the medicine's selling price (only when it has none) and, when fill_lines is true, give that price to
+        exactly the reviewed lines, all or nothing. fill_lines = false saves the price only.
+      operationId: applyPriceFill
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/PriceApplyBody" } } }
+      responses:
+        "200": { description: Applied (or replayed), content: { application/json: { schema: { $ref: "#/components/schemas/PriceApplyResult" } } } }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: >
+            list_changed (body.current_lines is the new waiting list: review again, nothing was changed),
+            price_differs, product_inactive.
+          content: { application/json: { schema: { $ref: "#/components/schemas/ApiError" } } }
+components:
+  securitySchemes:
+    supabaseSession: { type: apiKey, in: cookie, name: sb-access-token }
+  responses:
+    Unauthenticated: { description: Session missing or expired (code unauthenticated), content: { application/json: { schema: { $ref: "#/components/schemas/ApiError" } } } }
+    NotFound: { description: Not found (also when the order, line or medicine belongs to another business), content: { application/json: { schema: { $ref: "#/components/schemas/ApiError" } } } }
+    ValidationError: { description: Invalid input (code validation_error, fields keyed by field name), content: { application/json: { schema: { $ref: "#/components/schemas/ApiError" } } } }
+  schemas:
+    Money: { type: string, pattern: '^\d{1,10}\.\d{2}$', example: "125.50" }
+    ApiError:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          enum: [unauthenticated, no_business, not_found, validation_error, version_conflict, order_not_editable, line_not_pending, duplicate_product, similar_products, sku_conflict, product_inactive, list_changed, price_differs, invalid_price, server_error]
+        message: { type: string }
+        fields: { type: object, additionalProperties: { type: string } }
+        current: { description: The latest order when code is version_conflict, order_not_editable or line_not_pending, $ref: "#/components/schemas/Order" }
+        matches: { type: array, items: { $ref: "#/components/schemas/MedicineBrief" }, description: "Existing medicines when code is duplicate_product, similar_products or sku_conflict" }
+        current_lines: { type: array, items: { $ref: "#/components/schemas/WaitingLine" }, description: "When code is list_changed" }
+        current_price: { $ref: "#/components/schemas/Money", description: "When code is price_differs" }
+    MedicineBrief:
+      type: object
+      required: [id, name, unit, is_active]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        unit: { type: string }
+        strength: { type: [string, "null"] }
+        dosage_form: { type: [string, "null"] }
+        pack_size: { type: [string, "null"] }
+        manufacturer: { type: [string, "null"] }
+        selling_price: { oneOf: [{ $ref: "#/components/schemas/Money" }, { type: "null" }] }
+        is_active: { type: boolean }
+    RegisterProduct:
+      type: object
+      required: [id, name, unit]
+      description: Only name and unit are required. Every other field stays empty unless the supplier typed it.
+      properties:
+        id: { type: string, format: uuid, description: Created on the device }
+        name: { type: string, minLength: 1, maxLength: 200 }
+        unit: { type: string, minLength: 1, maxLength: 50 }
+        brand: { type: [string, "null"], maxLength: 200 }
+        generic_name: { type: [string, "null"], maxLength: 200 }
+        strength: { type: [string, "null"], maxLength: 100 }
+        dosage_form: { type: [string, "null"], maxLength: 100 }
+        manufacturer: { type: [string, "null"], maxLength: 200 }
+        pack_size: { type: [string, "null"], maxLength: 100 }
+        sku: { type: [string, "null"], maxLength: 100 }
+        purchase_price: { oneOf: [{ $ref: "#/components/schemas/Money" }, { type: "null" }] }
+        selling_price: { oneOf: [{ $ref: "#/components/schemas/Money" }, { type: "null" }] }
+        mrp: { oneOf: [{ $ref: "#/components/schemas/Money" }, { type: "null" }] }
+    RegisterBody:
+      type: object
+      required: [request_id, expected_version, product]
+      properties:
+        request_id: { type: string, format: uuid }
+        expected_version: { type: integer, minimum: 1, description: The order version the screen last received }
+        product: { $ref: "#/components/schemas/RegisterProduct" }
+        confirm_similar: { type: boolean, default: false, description: "true only after the supplier saw the similar medicines and chose 'Create as a separate medicine'" }
+        apply_price: { type: boolean, default: false, description: "true only after the supplier confirmed using the medicine's selling price for this line (confirmed orders only)" }
+    LinkBody:
+      type: object
+      required: [request_id, expected_version, product_id]
+      properties:
+        request_id: { type: string, format: uuid }
+        expected_version: { type: integer, minimum: 1 }
+        product_id: { type: string, format: uuid }
+        how: { type: string, enum: [existing, proposal], default: existing }
+        apply_price: { type: boolean, default: false }
+    LinkResult:
+      type: object
+      required: [done, replayed, price_applied, order]
+      properties:
+        done: { type: boolean, const: true }
+        replayed: { type: boolean }
+        price_applied: { type: boolean, description: "true when the line received the medicine's selling price (only after apply_price and only when the line had none)" }
+        product: { $ref: "#/components/schemas/MedicineBrief" }
+        order: { $ref: "#/components/schemas/Order" }
+    Order:
+      type: object
+      description: >
+        The order as in Module 003 (lines, totals, events). Each line gains typed_name: the text the supplier
+        typed, kept after linking (null for lines that were never typed). Event types gain linked and price_filled.
+      properties:
+        id: { type: string, format: uuid }
+        version: { type: integer }
+        status: { type: string, enum: [draft, confirmed, cancelled] }
+        lines:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: string, format: uuid }
+              product_id: { type: [string, "null"], format: uuid }
+              item_status: { type: string, enum: [registered, pending_registration] }
+              name: { type: string }
+              typed_name: { type: [string, "null"] }
+              quantity: { type: integer }
+              unit: { type: string }
+              price_basis: { type: string, enum: [none, current, snapshot] }
+              selling_price: { oneOf: [{ $ref: "#/components/schemas/Money" }, { type: "null" }] }
+              line_total: { oneOf: [{ $ref: "#/components/schemas/Money" }, { type: "null" }] }
+        events:
+          type: array
+          items:
+            type: object
+            properties:
+              event_type: { type: string, enum: [created, confirmed, edited, cancelled, linked, price_filled] }
+              order_version: { type: integer }
+              created_at: { type: string, format: date-time }
+              detail: { type: object }
+    PendingSummary:
+      type: object
+      required: [typed_lines, typed_groups, price_items, price_items_with_waiting_lines, lines_waiting]
+      properties:
+        typed_lines: { type: integer, description: Typed lines on draft and confirmed orders }
+        typed_groups: { type: integer, description: The same lines grouped by exact typed text }
+        price_items: { type: integer, description: "Items of the unfiltered Need a price list: active medicines without a selling price, plus priced medicines that still have waiting lines. Always equals that list's length" }
+        price_items_with_waiting_lines: { type: integer, description: "How many of price_items have at least one confirmed line waiting for a price (a subset of price_items)" }
+        lines_waiting: { type: integer, description: Confirmed linked lines without a price }
+    TypedLine:
+      type: object
+      properties:
+        line_id: { type: string, format: uuid }
+        order_id: { type: string, format: uuid }
+        order_number: { type: integer }
+        order_status: { type: string, enum: [draft, confirmed] }
+        store_id: { type: string, format: uuid }
+        store_name: { type: string }
+        typed_text: { type: string }
+        quantity: { type: integer }
+        unit: { type: string }
+    TypedGroupPage:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            type: object
+            properties:
+              typed_text: { type: string }
+              line_count: { type: integer }
+              lines: { type: array, items: { $ref: "#/components/schemas/TypedLine" } }
+        next_cursor: { type: [string, "null"] }
+    Candidates:
+      type: object
+      properties:
+        proposed: { type: array, maxItems: 200, items: { $ref: "#/components/schemas/TypedLine" } }
+        not_proposed: { type: array, maxItems: 200, items: { $ref: "#/components/schemas/TypedLine" } }
+    PendingPricePage:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            type: object
+            properties:
+              product_id: { type: string, format: uuid }
+              name: { type: string }
+              strength: { type: [string, "null"] }
+              dosage_form: { type: [string, "null"] }
+              pack_size: { type: [string, "null"] }
+              manufacturer: { type: [string, "null"] }
+              unit: { type: string }
+              selling_price: { oneOf: [{ $ref: "#/components/schemas/Money" }, { type: "null" }] }
+              lines_waiting: { type: integer }
+              orders_waiting: { type: integer }
+        next_cursor: { type: [string, "null"] }
+    WaitingLine:
+      type: object
+      properties:
+        line_id: { type: string, format: uuid }
+        order_id: { type: string, format: uuid }
+        order_number: { type: integer }
+        store_name: { type: string }
+        quantity: { type: integer }
+        line_total: { $ref: "#/components/schemas/Money" }
+    PriceFillPreview:
+      type: object
+      properties:
+        product: { $ref: "#/components/schemas/MedicineBrief" }
+        price: { $ref: "#/components/schemas/Money" }
+        lines: { type: array, items: { $ref: "#/components/schemas/WaitingLine" } }
+        untouched_priced_lines: { type: integer, description: The medicine's lines that already carry a price and will not be changed }
+        total_waiting: { type: integer, description: "All confirmed lines waiting for a price for this medicine; when it is more than batch_limit, lines holds only the first batch_limit (oldest orders first) and the screen says how many remain" }
+        batch_limit: { type: integer, const: 1000 }
+    PriceApplyBody:
+      type: object
+      required: [request_id, price, line_ids, fill_lines]
+      properties:
+        request_id: { type: string, format: uuid }
+        price: { $ref: "#/components/schemas/Money" }
+        line_ids: { type: array, maxItems: 1000, items: { type: string, format: uuid }, description: The exact lines the supplier reviewed; empty when fill_lines is false }
+        fill_lines: { type: boolean }
+    PriceApplyResult:
+      type: object
+      properties:
+        done: { type: boolean, const: true }
+        replayed: { type: boolean }
+        product: { $ref: "#/components/schemas/MedicineBrief" }
+        filled_count: { type: integer }
+        orders_touched: { type: integer }
+        filled: { type: array, items: { $ref: "#/components/schemas/WaitingLine" } }
