@@ -20,6 +20,8 @@ export type ErrorCode =
   | "list_changed"
   | "price_differs"
   | "invalid_price"
+  | "request_reused"
+  | "list_too_large"
   | "server_error";
 
 const STATUS: Record<ErrorCode, number> = {
@@ -42,6 +44,8 @@ const STATUS: Record<ErrorCode, number> = {
   list_changed: 409,
   price_differs: 409,
   invalid_price: 400,
+  request_reused: 409,
+  list_too_large: 409,
   server_error: 500,
 };
 

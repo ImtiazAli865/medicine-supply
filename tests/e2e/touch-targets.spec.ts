@@ -161,3 +161,68 @@ test.describe("pending screens at 360 px", () => {
     await check("confirmed order with a registered line");
   });
 });
+
+// Module 005: the market list screens and their dialogs at 360 px.
+test.describe("Module 005: market list touch targets and layout at 360 px", () => {
+  test.skip(({ viewport }) => !viewport || viewport.width > 400, "mobile project only");
+
+  test("the list, the purchase dialogs, the price offer, the print page and the Home card", async ({ page, freshTenant }) => {
+    const { seedMarketDay } = await import("./market-helpers");
+    await seedMarketDay(freshTenant);
+    await signIn(page, freshTenant);
+
+    const check = async (label: string) => {
+      expect(await smallTargets(page), `small targets: ${label}`).toEqual([]);
+      const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+      expect(overflow, `horizontal overflow: ${label}`).toBeLessThanOrEqual(1);
+    };
+
+    await page.goto("/");
+    await expect(page.getByTestId("market-summary-count")).toBeVisible();
+    await check("home with the market card");
+
+    await page.goto("/market-list");
+    await expect(page.getByTestId("market-row")).toHaveCount(3);
+    await page.waitForLoadState("networkidle");
+    await check("market list with rows");
+    await page.getByTestId("store-filter").locator("summary").click();
+    await check("market list with the store filter open");
+    await page.getByTestId("store-filter").locator("summary").click();
+
+    const panadol = page.getByTestId("market-row").filter({ hasText: "500 mg" });
+    await panadol.getByTestId("record-purchase").click();
+    await expect(page.getByRole("dialog").getByLabel(/Quantity bought/)).toBeVisible();
+    await check("record purchase dialog");
+    await page.getByRole("dialog").getByLabel("Purchase date").fill("2026-01-05");
+    await expect(page.getByText(/This purchase will count for/)).toBeVisible();
+    await check("record purchase dialog with the date notice");
+    await page.getByRole("dialog").getByLabel("Purchase date").fill(new Date(Date.now() + 5 * 3600_000).toISOString().slice(0, 10));
+    await page.getByRole("dialog").getByLabel(/Quantity bought/).fill("5");
+    await page.getByRole("dialog").getByLabel(/Cost per unit/).fill("88.5");
+    await page.getByRole("dialog").getByTestId("save-purchase").click();
+    await expect(page.getByTestId("update-cost-offer")).toBeVisible();
+    await check("purchase price offer");
+    await page.getByTestId("keep-cost").click();
+
+    await panadol.getByTestId("purchase-history-open").click();
+    await expect(page.getByTestId("purchase-entry")).toHaveCount(1);
+    await check("purchase history dialog");
+    await page.getByTestId("cancel-entry").click();
+    await expect(page.getByTestId("cancel-entry-form")).toBeVisible();
+    await check("cancel entry form");
+    await page.keyboard.press("Escape");
+
+    await page.goto("/market-list/print");
+    await expect(page.getByTestId("print-rows")).toBeVisible();
+    await check("print page");
+  });
+
+  test("the empty list", async ({ page, freshTenant }) => {
+    await signIn(page, freshTenant);
+    await page.goto("/market-list");
+    await expect(page.getByTestId("empty-state")).toBeVisible();
+    await page.waitForLoadState("networkidle");
+    expect(await smallTargets(page)).toEqual([]);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(1);
+  });
+});

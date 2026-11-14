@@ -60,8 +60,9 @@ function LineRow({ line, onChanged, offer }: { line: TypedLine; onChanged: () =>
  * Typed (not registered) medicines on draft and confirmed orders, grouped by what was typed, so the same
  * medicine typed in several orders is seen once. Each line can be registered or linked to an existing medicine.
  */
-export function TypedGroupList() {
-  const [query, setQuery] = useState("");
+export function TypedGroupList({ initialQuery = "" }: { initialQuery?: string } = {}) {
+  // The market list links here with the typed text, so the supplier lands on the right group (Module 005).
+  const [query, setQuery] = useState(initialQuery);
   const list = useSearchList<TypedGroup>("/api/pending/typed", query, "active");
   // A line linked from the proposals list must also leave this list.
   const proposals = usePendingProposals(null, undefined, list.retry);

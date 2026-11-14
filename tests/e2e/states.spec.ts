@@ -136,3 +136,33 @@ test.describe("Home: Needs attention card states", () => {
     await expect(page.getByTestId("pending-summary-clear")).toBeVisible();
   });
 });
+
+// Module 005: the purchase history dialog has a loading state, an error with Retry, and an empty state.
+test.describe("Module 005: purchase history states", () => {
+  test.skip(({ viewport }) => !viewport || viewport.width > 400, "mobile project only");
+
+  test("shows loading, an error with Retry that recovers, and an empty state with the next action", async ({ page, freshTenant }) => {
+    const { seedMarketDay } = await import("./market-helpers");
+    await seedMarketDay(freshTenant);
+    await signIn(page, freshTenant);
+    await page.goto("/market-list");
+    const panadol = page.getByTestId("market-row").filter({ hasText: "500 mg" });
+    await expect(panadol).toHaveCount(1);
+
+    let release: () => void = () => {};
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    await page.route("**/api/purchases?**", async (route) => {
+      await gate;
+      await route.fulfill({ status: 500, json: { code: "server_error", message: "Something went wrong. Please try again." } });
+    });
+    await panadol.getByTestId("purchase-history-open").click();
+    await expect(page.getByText("Loading purchases…")).toBeVisible();
+    release();
+    await expect(page.getByTestId("error-state")).toBeVisible();
+    await expect(page.getByTestId("empty-state")).toHaveCount(0); // a failure is never shown as "nothing recorded"
+
+    await page.unroute("**/api/purchases?**");
+    await page.getByTestId("error-state").getByRole("button", { name: "Retry" }).click();
+    await expect(page.getByTestId("empty-state")).toContainText("No purchases recorded yet");
+  });
+});

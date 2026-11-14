@@ -1,0 +1,226 @@
+openapi: 3.1.0
+info:
+  title: Medicine Supply - Market List and Purchases API (Module 005)
+  version: 0.1.0
+  description: >
+    REST route handlers for the consolidated market list, purchase recording, the market list print page data
+    and the CSV export. Every request carries the signed-in user's Supabase session cookie; all data access goes
+    through the user's own session, so Row Level Security applies. Reads call database functions (market_list,
+    market_summary, purchase_entries_list); writes call purchase_record and purchase_void. The handlers validate
+    with Zod first and map the functions' reasons to the error codes below. Money is a decimal string with two
+    decimals ("125.50"). The market list, its summary, its print data and its CSV never contain a purchase price,
+    an actual unit cost, a selling price or an MRP; the unit cost appears only in the purchase entry endpoints
+    (the purchase recording screens). Writes are safe to repeat: a purchase uses the client-created entry id as
+    its request id and a repeat returns the stored entry with replayed = true. The medicine's purchase price is
+    updated, only after the supplier confirms, through the existing PATCH /api/products/{id} (Module 001).
+servers:
+  - url: /api
+security:
+  - supabaseSession: []
+paths:
+  /market-list:
+    get:
+      summary: The consolidated market list of one Pakistan business day.
+      operationId: getMarketList
+      parameters:
+        - { name: date, in: query, required: false, description: "YYYY-MM-DD, Pakistan day. Default today (Pakistan).", schema: { type: string, format: date } }
+        - { name: q, in: query, required: false, description: "Search in name, strength, form, manufacturer, typed text. Max 100 characters.", schema: { type: string, maxLength: 100 } }
+        - { name: status, in: query, required: false, schema: { type: string, enum: [all, to_buy, bought], default: all } }
+        - { name: stores, in: query, required: false, description: "Comma-separated store ids (max 50). Limits the rows and the listed stores; bought and remaining figures still refer to the whole day.", schema: { type: string } }
+      responses:
+        "200": { description: The list, content: { application/json: { schema: { $ref: "#/components/schemas/MarketList" } } } }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+  /market-list/summary:
+    get:
+      summary: Counts for the Home card (rows still to buy today).
+      operationId: getMarketSummary
+      parameters:
+        - { name: date, in: query, required: false, schema: { type: string, format: date } }
+      responses:
+        "200": { description: Counts, content: { application/json: { schema: { $ref: "#/components/schemas/MarketSummary" } } } }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+  /market-list/export:
+    get:
+      summary: CSV export of the same rows (one line per medicine and store). Never contains a cost or a price.
+      operationId: exportMarketList
+      parameters:
+        - { name: date, in: query, required: false, schema: { type: string, format: date } }
+        - { name: q, in: query, required: false, schema: { type: string, maxLength: 100 } }
+        - { name: status, in: query, required: false, schema: { type: string, enum: [all, to_buy, bought], default: all } }
+        - { name: stores, in: query, required: false, schema: { type: string } }
+      responses:
+        "200":
+          description: A CSV file (UTF-8 with a byte order mark, comma separated). Cells starting with = + - @ tab or carriage return are prefixed with an apostrophe.
+          headers:
+            Content-Disposition: { schema: { type: string }, description: 'attachment; filename="market-list-YYYY-MM-DD.csv"' }
+          content: { text/csv: { schema: { type: string } } }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "409": { description: The list has more than 2,000 rows (code list_too_large); narrow it first., content: { application/json: { schema: { $ref: "#/components/schemas/ApiError" } } } }
+  /purchases:
+    get:
+      summary: Purchase entries of one medicine, unit and date, including cancelled ones (purchase recording screen).
+      operationId: listPurchases
+      parameters:
+        - { name: product, in: query, required: true, schema: { type: string, format: uuid } }
+        - { name: unit, in: query, required: true, schema: { type: string, minLength: 1, maxLength: 50 } }
+        - { name: date, in: query, required: true, schema: { type: string, format: date } }
+      responses:
+        "200": { description: The entries, content: { application/json: { schema: { $ref: "#/components/schemas/PurchaseEntries" } } } }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    post:
+      summary: Record one purchase entry. The body id is the request id; a repeat returns the stored entry.
+      operationId: recordPurchase
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/RecordPurchaseBody" } } }
+      responses:
+        "200": { description: Recorded (replayed = false) or repeated (replayed = true), content: { application/json: { schema: { $ref: "#/components/schemas/PurchaseResult" } } } }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { description: request_reused (the same id was used with different content)., content: { application/json: { schema: { $ref: "#/components/schemas/ApiError" } } } }
+  /purchases/{id}/void:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+    post:
+      summary: Cancel one purchase entry with a reason. The entry stays in the history. Cancelling twice cancels once.
+      operationId: voidPurchase
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/VoidPurchaseBody" } } }
+      responses:
+        "200": { description: Cancelled (replayed = false) or already cancelled (replayed = true), content: { application/json: { schema: { $ref: "#/components/schemas/PurchaseResult" } } } }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "404": { $ref: "#/components/responses/NotFound" }
+components:
+  securitySchemes:
+    supabaseSession: { type: apiKey, in: cookie, name: sb-access-token }
+  responses:
+    Unauthenticated: { description: Not signed in (code unauthenticated; code no_business when the user has no business)., content: { application/json: { schema: { $ref: "#/components/schemas/ApiError" } } } }
+    ValidationError: { description: Invalid input; body.fields holds a message per field., content: { application/json: { schema: { $ref: "#/components/schemas/ApiError" } } } }
+    NotFound: { description: The record does not exist or belongs to another business (the same answer for both)., content: { application/json: { schema: { $ref: "#/components/schemas/ApiError" } } } }
+  schemas:
+    ApiError:
+      type: object
+      required: [code, message]
+      properties:
+        code: { type: string, enum: [unauthenticated, no_business, not_found, validation_error, request_reused, list_too_large, server_error] }
+        message: { type: string }
+        fields: { type: object, additionalProperties: { type: string } }
+    StoreQuantity:
+      type: object
+      required: [store_id, store_name, quantity]
+      properties:
+        store_id: { type: string, format: uuid }
+        store_name: { type: string }
+        quantity: { type: integer, minimum: 1 }
+    PurchaseStatus: { type: string, enum: [not_bought, partly_bought, fully_bought, bought_extra] }
+    MarketRow:
+      type: object
+      description: A registered medicine and unit, or (typed_name set, product_id null) a typed line group. No price or cost fields exist.
+      required: [key, unit, total_requested, shown_requested, purchased, remaining, extra, status, can_record, stores]
+      properties:
+        key: { type: string, description: "product_id:unit or typed:normalized-text:unit, stable for the day" }
+        product_id: { type: [string, "null"], format: uuid }
+        name: { type: [string, "null"] }
+        typed_name: { type: [string, "null"], description: "The first typed spelling in the group; set only for typed rows" }
+        strength: { type: [string, "null"] }
+        dosage_form: { type: [string, "null"] }
+        pack_size: { type: [string, "null"] }
+        manufacturer: { type: [string, "null"] }
+        unit: { type: string }
+        total_requested: { type: integer, description: Whole day, all stores }
+        shown_requested: { type: integer, description: Only the selected stores }
+        purchased: { type: integer }
+        remaining: { type: integer, minimum: 0 }
+        extra: { type: integer, minimum: 0 }
+        status: { $ref: "#/components/schemas/PurchaseStatus" }
+        can_record: { type: boolean, description: false for typed rows (register or link first) }
+        stores: { type: array, items: { $ref: "#/components/schemas/StoreQuantity" } }
+    MarketList:
+      type: object
+      required: [date, generated_at, stores, rows, typed_rows, totals, truncated]
+      properties:
+        date: { type: string, format: date }
+        generated_at: { type: string, format: date-time }
+        business_name: { type: string, description: "For the print header" }
+        stores: { type: array, items: { type: object, required: [id, name], properties: { id: { type: string, format: uuid }, name: { type: string } } }, description: "Stores that have confirmed orders on the day (the filter choices)" }
+        rows: { type: array, items: { $ref: "#/components/schemas/MarketRow" } }
+        typed_rows: { type: array, items: { $ref: "#/components/schemas/MarketRow" }, description: 'The group "Not yet registered"' }
+        totals:
+          type: object
+          required: [requested, purchased, remaining, rows, typed_rows]
+          properties:
+            requested: { type: integer, description: "Sum of total_requested of all rows and typed rows (equals the day's confirmed order line quantities when no filter is set)" }
+            purchased: { type: integer }
+            remaining: { type: integer }
+            rows: { type: integer }
+            typed_rows: { type: integer }
+        truncated: { type: boolean }
+    MarketSummary:
+      type: object
+      required: [date, rows_total, rows_to_buy, typed_rows, typed_to_buy]
+      properties:
+        date: { type: string, format: date }
+        rows_total: { type: integer, description: Registered rows plus typed rows }
+        rows_to_buy: { type: integer, description: Rows with remaining greater than 0 (typed rows included); equals the length of the "to_buy" list }
+        typed_rows: { type: integer }
+        typed_to_buy: { type: integer }
+    RecordPurchaseBody:
+      type: object
+      required: [id, product_id, unit, purchase_date, quantity]
+      properties:
+        id: { type: string, format: uuid, description: "Created by the device; the request id of this purchase" }
+        product_id: { type: string, format: uuid }
+        unit: { type: string, minLength: 1, maxLength: 50 }
+        purchase_date: { type: string, format: date, description: "Today or earlier (Pakistan), not before 2000-01-01" }
+        quantity: { type: integer, minimum: 1, maximum: 100000 }
+        unit_cost: { type: [string, "null"], pattern: '^[0-9]{1,10}(\.[0-9]{1,2})?$', description: "PKR, optional" }
+        supplier_name: { type: [string, "null"], maxLength: 200 }
+        reference: { type: [string, "null"], maxLength: 100 }
+    VoidPurchaseBody:
+      type: object
+      required: [reason]
+      properties:
+        reason: { type: string, minLength: 1, maxLength: 500 }
+    PurchaseEntry:
+      type: object
+      required: [id, product_id, unit, purchase_date, quantity, created_at, recorded_by_me, cancelled]
+      properties:
+        id: { type: string, format: uuid }
+        product_id: { type: string, format: uuid }
+        unit: { type: string }
+        purchase_date: { type: string, format: date }
+        quantity: { type: integer }
+        unit_cost: { type: [string, "null"] }
+        supplier_name: { type: [string, "null"] }
+        reference: { type: [string, "null"] }
+        created_at: { type: string, format: date-time }
+        recorded_by_me: { type: boolean, description: "true when the signed-in user recorded it (shown as You)" }
+        cancelled: { type: boolean }
+        void:
+          type: [object, "null"]
+          properties:
+            reason: { type: string }
+            voided_at: { type: string, format: date-time }
+            by_me: { type: boolean, description: "true when the signed-in user cancelled it (shown as You)" }
+    PurchaseEntries:
+      type: object
+      required: [entries, purchased, requested]
+      properties:
+        entries: { type: array, items: { $ref: "#/components/schemas/PurchaseEntry" } }
+        purchased: { type: integer }
+        requested: { type: integer }
+    PurchaseResult:
+      type: object
+      required: [done, replayed, entry]
+      properties:
+        done: { type: boolean }
+        replayed: { type: boolean }
+        entry: { $ref: "#/components/schemas/PurchaseEntry" }

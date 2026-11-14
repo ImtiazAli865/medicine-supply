@@ -11,7 +11,9 @@ type TabId = "register" | "prices";
 
 export default async function PendingPage({ searchParams }: PageProps<"/pending">) {
   const { supabase } = await requirePageContext();
-  const { tab } = await searchParams;
+  const { tab, q } = await searchParams;
+  // An optional search text (the market list links to a typed medicine this way). Limited like the search box.
+  const initialQuery = (Array.isArray(q) ? q[0] : q)?.slice(0, 200) ?? "";
   // The counts on the tabs come from the same summary as Home. If it cannot be read the tabs simply have no counts.
   const summary = await pendingSummary(supabase).catch(() => null);
 
@@ -38,7 +40,7 @@ export default async function PendingPage({ searchParams }: PageProps<"/pending"
           </Link>
         ))}
       </nav>
-      {active === "register" ? <TypedGroupList /> : <PendingPricesList />}
+      {active === "register" ? <TypedGroupList initialQuery={initialQuery} /> : <PendingPricesList />}
     </div>
   );
 }
