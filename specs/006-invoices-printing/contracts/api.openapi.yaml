@@ -1,0 +1,364 @@
+openapi: 3.1.0
+info:
+  title: Medicine Supply - Invoices (Module 006)
+  version: 0.1.0
+  description: >
+    REST route handlers for invoice drafts, issuing, cancelling, the invoices list and the "to invoice" list.
+    Every request carries the signed-in user's Supabase session cookie; all data access goes through the user's
+    own session, so Row Level Security applies. Reads call database functions (invoice_get, invoice_list,
+    invoice_todo, invoice_summary, invoice_orders_summary); writes call invoice_create, invoice_set_quantities,
+    invoice_refresh, invoice_discard, invoice_issue and invoice_cancel. The handlers validate with Zod first and
+    map the functions' reasons to the error codes below. Money is a decimal string with two decimals ("125.50").
+    No response of this API ever contains a purchase price, an MRP, a cost, a margin or a profit (the invoice
+    tables have no such column). Writes are safe to repeat: creating a draft uses the client-created invoice id
+    as its request id; issuing and cancelling an already issued or cancelled invoice return the stored result
+    with replayed = true. The print pages (/invoices/{id}/print, /orders/{id}/print, /orders/print) are
+    server-rendered pages, not endpoints of this API; they read the same functions plus order_sheet and
+    order_sheet_day.
+servers:
+  - url: /api
+security:
+  - supabaseSession: []
+paths:
+  /invoices:
+    get:
+      summary: A page of invoices, newest first.
+      operationId: listInvoices
+      parameters:
+        - { name: status, in: query, required: false, schema: { type: string, enum: [all, draft, issued, cancelled], default: all } }
+        - { name: store, in: query, required: false, schema: { type: string, format: uuid } }
+        - { name: from, in: query, required: false, description: "YYYY-MM-DD, Pakistan day (inclusive). Drafts use their creation day.", schema: { type: string, format: date } }
+        - { name: to, in: query, required: false, schema: { type: string, format: date } }
+        - { name: order, in: query, required: false, description: "Only the invoices of this order (the order screen).", schema: { type: string, format: uuid } }
+        - { name: q, in: query, required: false, description: "Invoice number (INV-000012 or 12) or part of the store name. Max 100 characters.", schema: { type: string, maxLength: 100 } }
+        - { name: limit, in: query, required: false, schema: { type: integer, minimum: 1, maximum: 50, default: 20 } }
+        - { name: offset, in: query, required: false, schema: { type: integer, minimum: 0, default: 0 } }
+      responses:
+        "200": { description: A page, content: { application/json: { schema: { $ref: "#/components/schemas/InvoicePage" } } } }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+    post:
+      summary: Create the invoice draft of a confirmed order. The body's id is the request id.
+      operationId: createInvoice
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/CreateInvoiceBody" } } }
+      responses:
+        "200":
+          description: >
+            The draft. created = true for a new draft; replayed = true when the same id was already used for this
+            order; existing = true when the order already has a live invoice (that invoice is returned, no second
+            one is made).
+          content: { application/json: { schema: { $ref: "#/components/schemas/InvoiceResult" } } }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+  /invoices/summary:
+    get:
+      summary: Counts for the Home card (orders still to invoice).
+      operationId: getInvoiceSummary
+      responses:
+        "200": { description: Counts, content: { application/json: { schema: { $ref: "#/components/schemas/InvoiceSummary" } } } }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+  /invoices/to-invoice:
+    get:
+      summary: The confirmed orders that still need an invoice. The Home count is the length of this list.
+      operationId: listToInvoice
+      parameters:
+        - { name: q, in: query, required: false, description: "Order number or part of the store name.", schema: { type: string, maxLength: 100 } }
+        - { name: limit, in: query, required: false, schema: { type: integer, minimum: 1, maximum: 50, default: 20 } }
+        - { name: offset, in: query, required: false, schema: { type: integer, minimum: 0, default: 0 } }
+      responses:
+        "200": { description: A page, content: { application/json: { schema: { $ref: "#/components/schemas/ToInvoicePage" } } } }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+  /invoices/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+    get:
+      summary: One invoice with its lines and history.
+      operationId: getInvoice
+      responses:
+        "200": { description: The invoice, content: { application/json: { schema: { $ref: "#/components/schemas/Invoice" } } } }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    patch:
+      summary: Change the delivered (billed) quantities of a draft.
+      operationId: updateInvoiceQuantities
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/UpdateQuantitiesBody" } } }
+      responses:
+        "200": { description: The updated draft, content: { application/json: { schema: { $ref: "#/components/schemas/InvoiceResult" } } } }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+  /invoices/{id}/refresh:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+    post:
+      summary: Rebuild a stale draft from its order (delivered quantities return to the order lines' values).
+      operationId: refreshInvoice
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/VersionBody" } } }
+      responses:
+        "200": { description: The rebuilt draft, content: { application/json: { schema: { $ref: "#/components/schemas/InvoiceResult" } } } }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+  /invoices/{id}/discard:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+    post:
+      summary: Discard a draft (no invoice number was ever used). An issued invoice cannot be discarded.
+      operationId: discardInvoice
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/VersionBody" } } }
+      responses:
+        "200": { description: Discarded, content: { application/json: { schema: { type: object, required: [done], properties: { done: { type: boolean, const: true }, order_id: { type: string, format: uuid } } } } } }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+  /invoices/{id}/issue:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+    post:
+      summary: Issue a draft: take the next invoice number, freeze the invoice and mark the order fulfilled, atomically.
+      operationId: issueInvoice
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/VersionBody" } } }
+      responses:
+        "200": { description: The issued invoice. replayed = true when it was already issued., content: { application/json: { schema: { $ref: "#/components/schemas/InvoiceResult" } } } }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/NotReady" }
+  /invoices/{id}/cancel:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+    post:
+      summary: Cancel an issued invoice with a required reason. The order returns to Confirmed.
+      operationId: cancelInvoice
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/CancelInvoiceBody" } } }
+      responses:
+        "200": { description: The cancelled invoice. replayed = true when it was already cancelled (the first reason is kept)., content: { application/json: { schema: { $ref: "#/components/schemas/InvoiceResult" } } } }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+components:
+  securitySchemes:
+    supabaseSession: { type: apiKey, in: cookie, name: sb-access-token }
+  responses:
+    ValidationError:
+      description: The request is malformed or a field is invalid (code validation_error; invalid quantities list the field).
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+    Unauthenticated:
+      description: The session expired (code unauthenticated).
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+    NotFound:
+      description: The record does not exist or belongs to another business (code not_found; the two look the same).
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+    Conflict:
+      description: >
+        The state does not allow the change. Codes: version_conflict (the screen is out of date; current holds the
+        latest invoice), invoice_not_draft, invoice_not_issued, order_not_confirmed, order_changed (the draft no
+        longer matches its order; refresh it), request_reused (the id was used for another order).
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+    NotReady:
+      description: >
+        The invoice cannot be issued yet. Codes: not_ready (blockers lists the billed lines without a verified
+        selling price) or nothing_to_bill (no line has a delivered quantity above 0). Nothing was changed and no invoice number
+        was used. (A cancel without a reason, or with only spaces, is refused earlier by validation with 400
+        validation_error and fields.reason; reason_required is only the function's own backstop, mapped to 422.)
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+  schemas:
+    Money:
+      type: string
+      pattern: '^\d+\.\d{2}$'
+    Error:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          enum: [unauthenticated, no_business, not_found, validation_error, version_conflict, invoice_not_draft, invoice_not_issued, order_not_confirmed, order_empty, order_changed, nothing_to_bill, not_ready, reason_required, request_reused, server_error]
+        message: { type: string }
+        fields: { type: object, additionalProperties: { type: string } }
+        current: { description: "The latest invoice (version_conflict).", $ref: "#/components/schemas/Invoice" }
+        blockers: { type: array, items: { $ref: "#/components/schemas/Blocker" } }
+    CreateInvoiceBody:
+      type: object
+      required: [id, order_id]
+      additionalProperties: false
+      properties:
+        id: { type: string, format: uuid, description: "Created by the client; also the request id." }
+        order_id: { type: string, format: uuid }
+    VersionBody:
+      type: object
+      required: [expected_version]
+      additionalProperties: false
+      properties:
+        expected_version: { type: integer, minimum: 1 }
+    UpdateQuantitiesBody:
+      type: object
+      required: [expected_version, lines]
+      additionalProperties: false
+      properties:
+        expected_version: { type: integer, minimum: 1 }
+        lines:
+          type: array
+          minItems: 1
+          maxItems: 200
+          items:
+            type: object
+            required: [line_id, delivered_quantity]
+            additionalProperties: false
+            properties:
+              line_id: { type: string, format: uuid }
+              delivered_quantity: { type: integer, minimum: 0, maximum: 100000 }
+    CancelInvoiceBody:
+      type: object
+      required: [reason]
+      additionalProperties: false
+      properties:
+        reason: { type: string, minLength: 1, maxLength: 500 }
+    Blocker:
+      type: object
+      required: [line_id, name, reason]
+      properties:
+        line_id: { type: string, format: uuid }
+        name: { type: string }
+        reason: { type: string, enum: [typed, needs_price] }
+    InvoiceLine:
+      type: object
+      required: [id, position, name, unit, ordered_quantity, delivered_quantity, selling_price, line_total, billed, needs_price, typed, more_than_ordered]
+      properties:
+        id: { type: string, format: uuid }
+        position: { type: integer }
+        name: { type: string }
+        strength: { type: [string, "null"] }
+        dosage_form: { type: [string, "null"] }
+        pack_size: { type: [string, "null"] }
+        manufacturer: { type: [string, "null"] }
+        unit: { type: string }
+        ordered_quantity: { type: integer }
+        delivered_quantity: { type: integer }
+        selling_price: { oneOf: [{ $ref: "#/components/schemas/Money" }, { type: "null" }] }
+        line_total: { oneOf: [{ $ref: "#/components/schemas/Money" }, { type: "null" }] }
+        billed: { type: boolean }
+        needs_price: { type: boolean }
+        typed: { type: boolean }
+        more_than_ordered: { type: boolean }
+    InvoiceEvent:
+      type: object
+      required: [id, event_type, created_at, mine, detail]
+      properties:
+        id: { type: string, format: uuid }
+        event_type: { type: string, enum: [created, edited, refreshed, issued, cancelled, discarded] }
+        created_at: { type: string, format: date-time }
+        mine: { type: boolean }
+        detail: { type: object }
+    Invoice:
+      type: object
+      required: [id, order_id, order_number, order_status, status, version, stale, ready_to_issue, nothing_to_bill, blockers, grand_total, business, store, lines]
+      properties:
+        id: { type: string, format: uuid }
+        order_id: { type: string, format: uuid }
+        order_number: { type: integer }
+        order_status: { type: string, enum: [draft, confirmed, cancelled, fulfilled], description: "The order's own status; a draft whose order is no longer confirmed cannot be issued and can only be discarded." }
+        status: { type: string, enum: [draft, issued, cancelled] }
+        invoice_number: { type: [integer, "null"] }
+        number_label: { type: [string, "null"], description: "INV-000001 form; null for a draft." }
+        invoice_date: { type: [string, "null"], format: date }
+        issued_at: { type: [string, "null"], format: date-time }
+        cancelled_at: { type: [string, "null"], format: date-time }
+        cancel_reason: { type: [string, "null"] }
+        version: { type: integer }
+        stale: { type: boolean, description: "A draft whose order changed after the lines were built." }
+        ready_to_issue: { type: boolean }
+        nothing_to_bill: { type: boolean }
+        blockers: { type: array, items: { $ref: "#/components/schemas/Blocker" } }
+        grand_total: { $ref: "#/components/schemas/Money" }
+        business:
+          type: object
+          required: [name]
+          properties:
+            name: { type: string }
+            phone: { type: [string, "null"] }
+            address: { type: [string, "null"] }
+        store:
+          type: object
+          required: [id, name]
+          properties:
+            id: { type: string, format: uuid }
+            name: { type: string }
+            contact_person: { type: [string, "null"] }
+            phone: { type: [string, "null"] }
+            address: { type: [string, "null"] }
+        lines: { type: array, items: { $ref: "#/components/schemas/InvoiceLine" } }
+        events: { type: array, items: { $ref: "#/components/schemas/InvoiceEvent" } }
+    InvoiceResult:
+      type: object
+      required: [done, invoice]
+      properties:
+        done: { type: boolean, const: true }
+        created: { type: boolean }
+        replayed: { type: boolean }
+        existing: { type: boolean }
+        invoice: { $ref: "#/components/schemas/Invoice" }
+    InvoiceSummaryRow:
+      type: object
+      required: [id, status, order_id, order_number, store_id, store_name, grand_total, created_at]
+      properties:
+        id: { type: string, format: uuid }
+        status: { type: string, enum: [draft, issued, cancelled] }
+        number_label: { type: [string, "null"] }
+        invoice_date: { type: [string, "null"], format: date }
+        order_id: { type: string, format: uuid }
+        order_number: { type: integer }
+        store_id: { type: string, format: uuid }
+        store_name: { type: string }
+        grand_total: { $ref: "#/components/schemas/Money" }
+        created_at: { type: string, format: date-time }
+    InvoicePage:
+      type: object
+      required: [items, total]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/InvoiceSummaryRow" } }
+        total: { type: integer }
+    ToInvoiceRow:
+      type: object
+      required: [order_id, order_number, store_id, store_name, confirmed_at, line_count, lines_without_price]
+      properties:
+        order_id: { type: string, format: uuid }
+        order_number: { type: integer }
+        store_id: { type: string, format: uuid }
+        store_name: { type: string }
+        confirmed_at: { type: string, format: date-time }
+        line_count: { type: integer }
+        lines_without_price: { type: integer }
+        draft_invoice_id: { type: [string, "null"], format: uuid }
+    ToInvoicePage:
+      type: object
+      required: [items, total]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/ToInvoiceRow" } }
+        total: { type: integer }
+    InvoiceSummary:
+      type: object
+      required: [to_invoice, drafts, issued_today]
+      properties:
+        to_invoice: { type: integer }
+        drafts: { type: integer }
+        issued_today: { type: integer }
