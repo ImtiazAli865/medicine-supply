@@ -3,6 +3,7 @@
 import { ChevronLeft, FileQuestion, Pencil } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { OrderInvoiceAction } from "@/components/invoices/OrderInvoiceAction";
 import { CancelOrderDialog } from "@/components/orders/CancelOrderDialog";
 import { OrderEditor } from "@/components/orders/OrderEditor";
 import { OrderHistoryLog } from "@/components/orders/OrderHistoryLog";
@@ -160,7 +161,17 @@ export function OrderScreen({ id, storeParam }: { id: string; storeParam: string
         {back}
         <OrderView
           order={order}
-          actions={order.status === "confirmed" ? <ConfirmedActions order={order} onEdit={() => setEditing(true)} onCancelled={setOverride} /> : null}
+          actions={
+            <div className="space-y-3">
+              {order.status === "confirmed" ? <ConfirmedActions order={order} onEdit={() => setEditing(true)} onCancelled={setOverride} /> : null}
+              <OrderInvoiceAction key={order.version} orderId={order.id} orderStatus={order.status} />
+              {order.status === "confirmed" || order.status === "fulfilled" ? (
+                <Link href={`/orders/${order.id}/print`} data-testid="print-order-sheet" className="inline-flex min-h-11 items-center font-medium text-primary underline">
+                  Print order sheet
+                </Link>
+              ) : null}
+            </div>
+          }
           renderLineActions={(line) =>
             line.product_id === null ? (
               <PendingLineActions

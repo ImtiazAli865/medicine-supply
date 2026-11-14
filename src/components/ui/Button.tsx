@@ -44,14 +44,16 @@ export function ButtonLink({
   variant = "primary",
   children,
   className = "",
+  testId,
 }: {
   href: string;
   variant?: Variant;
   children: ReactNode;
   className?: string;
+  testId?: string;
 }) {
   return (
-    <Link href={href} className={buttonClass(variant, className)}>
+    <Link href={href} className={buttonClass(variant, className)} data-testid={testId}>
       {children}
     </Link>
   );

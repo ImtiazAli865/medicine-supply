@@ -22,6 +22,13 @@ export type ErrorCode =
   | "invalid_price"
   | "request_reused"
   | "list_too_large"
+  | "invoice_not_draft"
+  | "invoice_not_issued"
+  | "order_not_confirmed"
+  | "order_changed"
+  | "nothing_to_bill"
+  | "not_ready"
+  | "reason_required"
   | "server_error";
 
 const STATUS: Record<ErrorCode, number> = {
@@ -46,6 +53,13 @@ const STATUS: Record<ErrorCode, number> = {
   invalid_price: 400,
   request_reused: 409,
   list_too_large: 409,
+  invoice_not_draft: 409,
+  invoice_not_issued: 409,
+  order_not_confirmed: 409,
+  order_changed: 409,
+  nothing_to_bill: 422,
+  not_ready: 422,
+  reason_required: 422,
   server_error: 500,
 };
 
@@ -57,6 +71,7 @@ export interface ApiErrorBody {
   current?: unknown;
   current_lines?: unknown[];
   current_price?: string;
+  blockers?: unknown[];
 }
 
 export class ApiError extends Error {
@@ -67,11 +82,12 @@ export class ApiError extends Error {
   readonly current?: unknown;
   readonly current_lines?: unknown[];
   readonly current_price?: string;
+  readonly blockers?: unknown[];
 
   constructor(
     code: ErrorCode,
     message: string,
-    extra: Partial<Pick<ApiErrorBody, "fields" | "matches" | "current" | "current_lines" | "current_price">> = {},
+    extra: Partial<Pick<ApiErrorBody, "fields" | "matches" | "current" | "current_lines" | "current_price" | "blockers">> = {},
   ) {
     super(message);
     this.code = code;
@@ -81,6 +97,7 @@ export class ApiError extends Error {
     this.current = extra.current;
     this.current_lines = extra.current_lines;
     this.current_price = extra.current_price;
+    this.blockers = extra.blockers;
   }
 
   toBody(): ApiErrorBody {
@@ -90,6 +107,7 @@ export class ApiError extends Error {
     if (this.current !== undefined) body.current = this.current;
     if (this.current_lines) body.current_lines = this.current_lines;
     if (this.current_price !== undefined) body.current_price = this.current_price;
+    if (this.blockers) body.blockers = this.blockers;
     return body;
   }
 }

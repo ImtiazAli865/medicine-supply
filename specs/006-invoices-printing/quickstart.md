@@ -62,4 +62,69 @@ npm run build             # run again after e2e so .next matches the DEV env
 
 ## 6. Results
 
-Empty on purpose until real runs exist.
+### Baseline before any change (T001, 2026-11-14, branch 006-invoices-printing from master 4c98bf6 plus the planning commit)
+
+- `npm run lint`: exit 0 (secrets check passed). `npm run typecheck`: exit 0.
+- `npm test`: 76 files, 816 tests, all passed (duration 623 s, TEST project reachable).
+
+### Database layer (T004 to T011, 2026-11-14, PGlite)
+
+- `tests/integration/db-invoice-schema.pglite.test.ts`: 41 tests passed (four tables with RLS and business_id, no cost-like column, the constraints and shape rules, one live invoice per order, per-business numbers, select-only privileges, the guard triggers, the three Module 003 changes). Honest note: the migration file was already in place when this suite was first run, so the "tests fail first" step was not observed; the first run failed only because of a seeding helper bug (duplicate medicine names), not because of the migration.
+- All PGlite suites after migration 0007: 29 files, 408 tests passed (the older order, pending and market suites are unchanged and green). Unit suites: 23 files, 304 tests passed (includes the new invoice status and validation tests). `npm run typecheck` and `npm run lint`: exit 0.
+
+### Module 006 code written before the TEST migration (2026-11-14, nothing run against Supabase yet)
+
+- PGlite database tests for create, quantities, stale and refresh, discard, totals, issue, immutability, market list unchanged, cancel, no cost, list and to-invoice, order sheets and isolation: all PGlite suites together, 41 files and 497 tests passed (the older suites are unchanged and green). Unit suites: 23 files, 304 tests passed. `npm run typecheck` and `npm run lint`: exit 0.
+- Not yet run: the Supabase integration tests (T021, T030, T043, T048, T056, T057), the Playwright tests (T022, T031, T037, T040, T042, T048, T053, T058) and the build. They need migration 0007 on the TEST project (T015, owner step).
+- Finding from the market-list test: a typed line with delivered 0 on an invoiced order stays on the market list and cannot be registered while the order is fulfilled (the known limitation of the spec; the test documents it and checks that cancelling the invoice makes registering work).
+- Change outside the module folders: the Orders list can now be filtered by Fulfilled (the API accepted only draft, confirmed and cancelled), and the unit test that expected "fulfilled" to be refused was updated.
+
+### Supabase integration and scale (TEST project, 2026-11-14, after migration 0007 was applied)
+
+- `invoices-api`: 10 tests passed (create, replay and existing, the documented refusals, quantities with a stale version, stale and refresh, discard, issue with the order fulfilled and the delivered quantities written back, blockers, cancel and replacement, list and search and the to-invoice count equal to its list, order sheets; every response scanned for forbidden keys and cost values, every returned line and grand total re-added).
+- `invoices-concurrency`: 7 tests passed against the real project (10 simultaneous identical creates give one draft; 10 creates with different ids for one order give one live invoice; 10 simultaneous issues give one number and nine replays; two different drafts issued at once get two numbers; 10 different drafts issued at once get the numbers 1 to 10 with no gap and no duplicate; refused issues use no number; 10 simultaneous cancels give one cancellation with the first reason).
+- `rls-invoices`: 6 tests passed with two real users (reads and every write by business B answer exactly like a missing id and change nothing of A; the same invoice id in two businesses stays separate and each business counts from 1; direct table writes and the counter are refused; the internal helpers return nothing for another business and the write helpers cannot be called; a signed-out visitor can call nothing).
+- `invoices-scale` (1,000 invoices over 50 stores, 200 more confirmed orders to invoice, five runs each, times include the network round trip, maximum in ms; the goals were 3,000 for lists, 2,000 for create and issue): first page of 1,000 invoices 741; status filter 502; one store 213; by number 600; by store name 572; last page 458; to-invoice list 235; summary 247; create a draft with 20 lines 316; issue an invoice with 60 lines 488; read it back 407. A first run before a seeding fix showed one list page at 2,209 ms and others near 1,300 ms (network jitter on the hosted project); the final run is above. No performance migration (0008) was needed.
+- Two mistakes in the first runs of these tests were test seeding errors, not product bugs (a seeded invoice number clashing with the counter, and orders without lines that correctly do not appear in the to-invoice list); both were fixed in the tests.
+
+### Browser tests on the mobile project (360 px, production build against the TEST project, 2026-11-14)
+
+Specs: `invoice-draft` (9 tests), `invoice-issue` (5), `invoice-print` (7), `invoice-cancel` (3), `invoices-list` (6), `invoices-home` (2), `order-sheets` (3), `invoice-layout` (3, touch targets and layout), `invoice-states` (2). All of them passed at least once; they were run in several batches while fixing mistakes in the tests themselves, not in the app: a strict-mode locator, a missing wait after a filter click (a stale list was read), print media set after the page opened (the text was read without line breaks the first time), a store label locator, a heading that matched two texts, a test timeout of 60 s for the longest print test (raised to 150 s), and a wrong expected invoice count in the layout test. No app code was changed because of these runs. A full run of everything together is recorded under the full verification below.
+
+- Print is checked under print-media emulation and with a generated PDF that is only checked to be a real, non-empty PDF (no PDF text reader is installed). Checked: business name, phone and address from Settings, number, date, store, lines, grand total, the draft and CANCELLED marks, a line with delivered 0 not printed, the thermal page width equal to the Settings value (80 mm gives about 280 CSS pixels, 58 mm gives under 215) with no sideways overflow, a 60-line invoice keeps every line and the grand total in both layouts, a very long product name wraps, a reprint after a catalog price change and a rename is identical, no purchase, MRP, cost, margin or profit word in any print or order sheet, and at most 5 taps from the confirmed order to the printed A4 invoice (SC-001).
+- **No real printer was used.** A real 80 mm thermal printer is not tested.
+
+### Sweeps (T059 and T060, 2026-11-14)
+
+- Searched the invoice code (`src/lib/invoices`, `src/components/invoices`, `src/app/api/invoices`, the invoice and order sheet pages) for purchase price, MRP, cost, margin and profit: the only hits are comments that state the rule, and the CSS `margin: 3mm` of the thermal page. None of these fields is read, selected or rendered.
+- No use of `localStorage`, `sessionStorage` or `indexedDB` for invoice data (the optional remembered print layout was not built), no `any`, no `ts-ignore`, no lint suppression, no "synced" or "saved on this device" wording, no key or secret in browser code (the lint secrets check passes), no control that edits or deletes an issued invoice (a browser test asserts this), no money arithmetic in the browser (the draft shows the totals the server calculated; only quantities are parsed), no invented price or number, and no claim of server-side PDF or of a real printer.
+- Quantities (Principle II): the invoice stores the ordered and the delivered quantity as separate columns; the market list still reads the ordered quantity only; Module 006 changes an order line delivered quantity only inside `invoice_issue` (written from the invoice) and `invoice_cancel` (reset to the ordered quantity). The default delivered = ordered is still set by the Module 003 functions when an order is confirmed or a confirmed line is edited, as before.
+
+### Full verification run (T062, 2026-11-14 and 2026-11-15, TEST project)
+
+- `npm run lint` exit 0 (secrets check passed). `npm run typecheck` exit 0.
+- `npm test`: 95 files, 1,007 tests: 1,006 passed and 1 failed. The failure was `setup-api` (a Module 002 test), which timed out because the PC was suspended during the run (the run reports 3.2 hours); it passed when run alone straight afterwards (7 tests passed). The Module 006 suites inside this run passed: PGlite database tests, Supabase `invoices-api`, `invoices-concurrency`, `rls-invoices` and `invoices-scale`, and the unit tests.
+- `npm run test:e2e` (mobile and desktop): a first attempt was interrupted when the session ended (226 results, 2 failures that looked like slowness under load: the `invoices-list` filter test, which passed in the batches above, and the older Module 003 spec `orders-typed`). It was run again from the start: **359 passed, 156 skipped, 1 failed** in 35.7 minutes. The skips are by design (the Module 005 and 006 specs run on the mobile project only, plus the older mobile-only specs). The one failure was the older Module 001 spec `shell` on the desktop project (the heading "Add medicine" was not found within 10 seconds); run alone it passed (6 tests). In this second run `invoices-list` and `orders-typed` passed.
+- `npm run build`: exit 0, and it was run again after the e2e run so `.next` matches the DEV environment.
+- Honest summary: no test failed twice, but three tests (`setup-api`, `shell` on desktop and, in the interrupted run, `orders-typed`) failed once under load or after a PC suspension and passed when run again. The cause is not proven; it is recorded as an inference (timing under load), the same as for the two older specs in Module 005.
+- Master prompt Section 17 mapping (applicable items): 4 (separate store records: order sheets, `db-order-sheet`, `order-sheets`), 7 (a pending line blocks the invoice, not the order: `db-invoice-issue`, `invoice-draft`), 12 (invoice line and grand totals: `db-invoice-totals`, `invoices-api`), 13 (no purchase price, MRP or profit on invoices: `db-invoice-nocost`, `invoice-print`, `invoices-api`), 14 (historical prices after a catalog update: `db-invoice-create`, `db-invoice-immutable`, `invoice-print`), 15 (no duplicate invoices on retry: `db-invoice-issue`, `invoices-concurrency`).
+- Not covered: a real printer (A4 or 80 mm thermal), the owner phone check, the DEV project, and the items of later modules (the Account Summary, payments, voice, offline).
+
+## 7. Migration 0007 on the TEST project (T015, 2026-11-14)
+
+Applied at the owner request, through the owner signed-in Supabase tab (project `medicine-supply-test`, SQL Editor, the whole file as one run; the generic "destructive operations" warning was confirmed for this migration only). Result: "Success. No rows returned."
+
+| Check | Before | After |
+|-------|--------|-------|
+| medicines / stores / orders / order lines / order events / purchase entries | 28 / 7 / 6 / 11 / 7 / 1 | 28 / 7 / 6 / 11 / 7 / 1 (identical) |
+| sum of `delivered_quantity` and an md5 of every order line id with its delivered quantity | 66, `d2e79db8...66c4d` | 66, `d2e79db8...66c4d` (identical) |
+| invoice tables | 0 | 4 (`invoices`, `invoice_lines`, `invoice_events`, `invoice_counters`), Row Level Security on for all 4 |
+| triggers on the three invoice tables | none | 5 |
+| public functions of the module (writes, reads, helpers, order sheets) | none | 16, all executable by signed-in users, none by anon |
+| internal write helpers (`invoice_build_lines`, `invoice_recompute_total`) | none | not executable by signed-in users or anon |
+| table privileges | none | signed-in users: select on `invoices`, no insert, no access to `invoice_counters`; anon: no select |
+| order line delivered quantity check | `>= 1` | `>= 0` |
+| order event kinds | 6 | 8 (adds `invoiced` and `invoice_cancelled`) |
+
+These are catalog checks and counts only; no invoice was created on the TEST project by this step.
+
