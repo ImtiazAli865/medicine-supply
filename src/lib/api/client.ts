@@ -10,6 +10,7 @@ export class ClientApiError extends Error {
   readonly current?: unknown;
   readonly current_lines?: unknown[];
   readonly current_price?: string;
+  readonly blockers?: unknown[];
 
   constructor(code: ErrorCode | "network", status: number, message: string, body?: Partial<ApiErrorBody>) {
     super(message);
@@ -20,6 +21,7 @@ export class ClientApiError extends Error {
     this.current = body?.current;
     this.current_lines = body?.current_lines;
     this.current_price = body?.current_price;
+    this.blockers = body?.blockers;
   }
 }
 

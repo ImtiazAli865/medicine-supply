@@ -1,3 +1,4 @@
+import { formatInvoiceMoney } from "@/lib/invoices/status";
 import { formatPKR } from "@/lib/money";
 import { formatPakistanDateTime } from "@/lib/orders/dates";
 import type { OrderEvent } from "@/lib/orders/types";
@@ -82,6 +83,21 @@ function describeEvent(event: OrderEvent, lineNames: Record<string, string>): { 
         return `Price ${formatPKR(entry.new_price ?? null)} recorded for ${entry.quantity ?? "?"} × ${name} (no price before)`;
       });
       return { title: "Price recorded", lines: entries };
+    }
+    case "invoiced": {
+      const invoiced = (event.detail as { invoiced?: { number_label?: string; grand_total?: string; delivered_changes?: Array<{ name?: string; old?: number | null; new?: number }> } }).invoiced ?? {};
+      const delivered = (invoiced.delivered_changes ?? []).map((c) => `${c.name ?? "Line"}: delivered ${c.old ?? "?"} → ${c.new ?? "?"}`);
+      return {
+        title: `Invoice ${invoiced.number_label ?? ""} issued`.replace("  ", " "),
+        lines: [`Total ${formatInvoiceMoney(invoiced.grand_total ?? null)}`, ...delivered],
+      };
+    }
+    case "invoice_cancelled": {
+      const cancelled = (event.detail as { invoice_cancelled?: { number_label?: string; reason?: string } }).invoice_cancelled ?? {};
+      return {
+        title: `Invoice ${cancelled.number_label ?? ""} cancelled`.replace("  ", " "),
+        lines: cancelled.reason ? [`Reason: ${cancelled.reason}`, "The order is confirmed again."] : ["The order is confirmed again."],
+      };
     }
     default:
       // A kind this screen does not know yet: show it plainly instead of breaking the history.

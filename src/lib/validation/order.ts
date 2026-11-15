@@ -83,7 +83,7 @@ const day = z
 export const OrderListQuerySchema = z
   .object({
     store_id: z.uuid("Not a valid store.").optional(),
-    status: z.enum(["draft", "confirmed", "cancelled"]).optional(),
+    status: z.enum(["draft", "confirmed", "cancelled", "fulfilled"]).optional(),
     from: day.optional(),
     to: day.optional(),
     q: z.string().max(200).optional().default(""),

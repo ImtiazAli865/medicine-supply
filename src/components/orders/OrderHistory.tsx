@@ -20,6 +20,7 @@ const STATUSES = [
   { value: "", label: "All" },
   { value: "draft", label: "Draft" },
   { value: "confirmed", label: "Confirmed" },
+  { value: "fulfilled", label: "Fulfilled" },
   { value: "cancelled", label: "Cancelled" },
 ] as const;
 
@@ -118,6 +119,12 @@ export function OrderHistory() {
         <div className="flex flex-wrap justify-end gap-2">
           <ButtonLink href="/market-list" variant="secondary" className="" data-testid="market-list-link">
             Market list
+          </ButtonLink>
+          <ButtonLink href="/invoices" variant="secondary" testId="invoices-link">
+            Invoices
+          </ButtonLink>
+          <ButtonLink href={`/orders/print?date=${today}`} variant="secondary" testId="order-sheets-link">
+            Order sheets
           </ButtonLink>
           <ButtonLink href="/orders/new" data-testid="new-order">
             <Plus size={20} aria-hidden="true" />

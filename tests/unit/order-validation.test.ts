@@ -132,7 +132,8 @@ describe("OrderListQuerySchema", () => {
   });
 
   it("refuses unknown statuses, bad dates, a reversed range and a limit over 100", () => {
-    expect(() => OrderListQuerySchema.parse({ status: "fulfilled" })).toThrow();
+    // Module 006: an order with an issued invoice is fulfilled, so the list can be filtered by it.
+    expect(OrderListQuerySchema.parse({ status: "fulfilled" })).toMatchObject({ status: "fulfilled" });
     expect(() => OrderListQuerySchema.parse({ status: "shipped" })).toThrow();
     expect(() => OrderListQuerySchema.parse({ from: "06-11-2026" })).toThrow();
     expect(() => OrderListQuerySchema.parse({ from: "2026-02-30" })).toThrow();

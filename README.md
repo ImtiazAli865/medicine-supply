@@ -52,6 +52,17 @@ Not included yet: invoices (and the check that blocks an invoice while a price i
 
 Not included yet: invoices, ledger, voice, offline sync, reports.
 
+## What works in Module 006 (in progress, see its quickstart for what has been verified)
+
+- **Invoice draft**: on a confirmed order, "Create invoice" makes one draft (a double tap, a refresh or a second device never makes a second one). Every line is priced only from the price taken for that order line, never from the current catalog price. The delivered (billed) quantity of each line can be changed on the draft (0 means not billed); the ordered quantity is never changed. A typed or unpriced billed line blocks issuing and links to the Pending screens. If the order changes after the draft was made, the draft says so and is rebuilt with "Refresh from order".
+- **Issue**: one atomic step: the invoice gets the next invoice number (INV-000001, per business, only at issue, never reused), is frozen (lines, prices, totals, the business and store details), and the order becomes Fulfilled. A second tap or a reload gives the same number. An issued invoice cannot be edited or deleted; a mistake is corrected by cancelling it with a reason (the invoice stays, marked Cancelled, and the order returns to Confirmed) and issuing a new one.
+- **Print**: the invoice prints on A4 or as a thermal receipt (the paper width is the setting in Settings, 80 mm by default). It shows only the business details, the invoice number and date, the store, and each billed line with product, quantity, selling price and line total, then the grand total. No purchase price, MRP, cost, margin or profit exists in any invoice data, so none can be printed. A draft prints as "DRAFT, not an invoice", a cancelled invoice as "CANCELLED". Printing uses the browser print dialog (and its own "save as PDF"); the layouts are checked in print emulation, a real printer is not claimed.
+- **Order sheets**: option A (one order) and option B (the orders of a day, one separate section per store) with quantities and units only, never a price.
+- **Visible**: Home shows how many confirmed orders still need an invoice (equal to the "To invoice" list); the Invoices screen lists invoices with status, store and date filters, a search and the "To invoice" tab; the order screen has "Create invoice" or "View invoice". There is no sixth item in the bottom navigation.
+- It runs through database functions (migration `0007_invoices.sql`): invoice tables are written only by functions, an issued invoice is protected by database triggers, and the history is append-only.
+
+Not included yet: the Account Summary and payments (Module 007), paid statuses, discounts, server-side PDF files, voice, offline sync, reports. Known limitation: a typed medicine with delivered 0 on an invoiced order cannot be registered until the invoice is cancelled.
+
 ## Status and limits
 
 See `specs/001-auth-products-stores/quickstart.md`, section 8 "Verification results". In short: lint,

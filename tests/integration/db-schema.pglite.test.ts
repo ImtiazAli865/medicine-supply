@@ -64,7 +64,8 @@ describe("migration applies and guards every table", () => {
     });
     const names = rows.map((r) => r.table_name).sort();
     expect(names).toEqual([
-      "business_settings", "businesses", "imports", "order_counters", "order_events", "order_lines", "orders",
+      "business_settings", "businesses", "imports", "invoice_counters", "invoice_events", "invoice_lines", "invoices",
+      "order_counters", "order_events", "order_lines", "orders",
       "pending_requests", "products", "profiles", "purchase_entries", "purchase_voids", "stores",
     ]);
     for (const row of rows) {

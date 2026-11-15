@@ -37,7 +37,7 @@ export interface OrderTotals {
   line_count: number;
 }
 
-export type OrderEventType = "created" | "confirmed" | "edited" | "cancelled" | "linked" | "price_filled";
+export type OrderEventType = "created" | "confirmed" | "edited" | "cancelled" | "linked" | "price_filled" | "invoiced" | "invoice_cancelled";
 
 export interface OrderEvent {
   id: string;
