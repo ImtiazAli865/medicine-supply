@@ -110,6 +110,23 @@ Specs: `invoice-draft` (9 tests), `invoice-issue` (5), `invoice-print` (7), `inv
 - Master prompt Section 17 mapping (applicable items): 4 (separate store records: order sheets, `db-order-sheet`, `order-sheets`), 7 (a pending line blocks the invoice, not the order: `db-invoice-issue`, `invoice-draft`), 12 (invoice line and grand totals: `db-invoice-totals`, `invoices-api`), 13 (no purchase price, MRP or profit on invoices: `db-invoice-nocost`, `invoice-print`, `invoices-api`), 14 (historical prices after a catalog update: `db-invoice-create`, `db-invoice-immutable`, `invoice-print`), 15 (no duplicate invoices on retry: `db-invoice-issue`, `invoices-concurrency`).
 - Not covered: a real printer (A4 or 80 mm thermal), the owner phone check, the DEV project, and the items of later modules (the Account Summary, payments, voice, offline).
 
+### Owner phone walkthrough (T064, 2026-11-16, DEV project, production build served to the phone on the local network)
+
+The owner followed the steps of section 3 on a phone against the DEV project (migration 0007 applied first, section 8). Evidence level: **reported, not seen**, except where a screenshot is named.
+
+| Step | Owner report | Evidence |
+|------|--------------|----------|
+| 1 to 3 (settings, draft from a confirmed order, change a delivered quantity) | Done; the owner reported that all of these steps worked. | One screenshot seen at step 3: ordered 1, delivered 2, the line shows "More than ordered", grand total PKR 280.00 (the ordered quantity stayed 1). |
+| 4 (Create invoice again, refresh) | "Tap Create invoice again and refresh the page: still only one draft." (translated from Roman Urdu) | Reported, not seen |
+| 5 (typed medicine blocks, register and price it, refresh the draft) | Done and confirmed. While doing it the owner asked why the selling price is not compulsory on the registration form. Answer given: by design (Module 004) only name and unit are required so that taking an order is never blocked; the invoice is what refuses to issue without a verified selling price, and the price is set on the registration form or on the Pending Prices screen. | Reported, not seen |
+| 6 to 11 (issue and the same number on a second tap, A4 and thermal print, reprint after a price change, cancel and replacement, Invoices list and To invoice, order sheets A and B) | "All steps have been done and confirmed." (translated from Roman Urdu) | Reported, not seen |
+
+Not reported by the owner, so **not recorded as met**: the number of taps from the order screen to a printed A4 invoice (SC-001, goal 5), the time to cancel a wrong invoice and issue the replacement (SC-013, goal 2 minutes), and any result from a real A4 or 80 mm thermal printer. The thermal and A4 layouts are therefore verified only by print-media emulation and generated PDF text (see the sweeps above); a real printer is **not tested**.
+
+Finding from the walkthrough (not a defect): the registration form reached from an invoice draft does not say that a selling price is needed for the invoice. A hint on that form is a possible small improvement; the price stays optional on the form. Not implemented.
+
+The phone server (port 3000) was stopped afterwards.
+
 ## 7. Migration 0007 on the TEST project (T015, 2026-11-14)
 
 Applied at the owner request, through the owner signed-in Supabase tab (project `medicine-supply-test`, SQL Editor, the whole file as one run; the generic "destructive operations" warning was confirmed for this migration only). Result: "Success. No rows returned."
@@ -127,4 +144,22 @@ Applied at the owner request, through the owner signed-in Supabase tab (project 
 | order event kinds | 6 | 8 (adds `invoiced` and `invoice_cancelled`) |
 
 These are catalog checks and counts only; no invoice was created on the TEST project by this step.
+
+## 8. Migration 0007 on the DEV project (T063, 2026-11-16)
+
+Applied at the owner request ("Migration 0007 DEV par lagao", translated from Roman Urdu: apply migration 0007 to DEV), through the owner signed-in Supabase tab (project `medicine-supply-dev`, SQL Editor, the whole file as one run; the generic "destructive operations" warning was confirmed for this migration only). Result: "Success. No rows returned."
+
+| Check | Before | After |
+|-------|--------|-------|
+| medicines / stores / orders / order lines / order events / purchase entries | 159 / 5 / 21 / 38 / 48 / 10 | 159 / 5 / 21 / 38 / 48 / 10 (identical) |
+| sum of `delivered_quantity` and an md5 of every order line id with its delivered quantity | 140, `fc56efb2...a22c` | 140, `fc56efb2...a22c` (identical) |
+| invoice tables | 0 | 4, Row Level Security on for all 4 |
+| triggers on the three invoice tables | none | 5 |
+| public functions of the module | none | 16, all executable by signed-in users, none by anon |
+| internal write helpers | none | not executable by signed-in users or anon |
+| table privileges | none | signed-in users: select on `invoices`, no insert, no access to `invoice_counters`; anon: no select |
+| order line delivered quantity check | `>= 1` | `>= 0` |
+| order event kinds | 6 | 8 |
+
+These are catalog checks and counts only; no invoice was created on the DEV project by this step. The owner phone walkthrough (T064) is the next step; the production build in this folder was made against the DEV environment after the last e2e run.
 
