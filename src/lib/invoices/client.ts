@@ -10,19 +10,22 @@ export type InvoiceTab = "invoices" | "to-invoice";
 export interface InvoiceListParams {
   tab: InvoiceTab;
   status: "all" | "draft" | "issued" | "cancelled";
+  /** The derived paid status filter (issued invoices that are in the account). */
+  payment: "all" | "unpaid" | "partially_paid" | "paid";
   store: string;
   from: string;
   to: string;
   q: string;
 }
 
-export const DEFAULT_LIST_PARAMS: InvoiceListParams = { tab: "invoices", status: "all", store: "", from: "", to: "", q: "" };
+export const DEFAULT_LIST_PARAMS: InvoiceListParams = { tab: "invoices", status: "all", payment: "all", store: "", from: "", to: "", q: "" };
 
 /** Only what differs from the defaults goes into the address. */
 export function listQuery(params: InvoiceListParams): string {
   const search = new URLSearchParams();
   if (params.tab !== "invoices") search.set("tab", params.tab);
   if (params.status !== "all") search.set("status", params.status);
+  if (params.payment !== "all") search.set("pay", params.payment);
   if (params.store !== "") search.set("store", params.store);
   if (params.from !== "") search.set("from", params.from);
   if (params.to !== "") search.set("to", params.to);
@@ -36,12 +39,15 @@ export const invoicesScreenUrl = (params: InvoiceListParams = DEFAULT_LIST_PARAM
 };
 
 export const invoiceUrl = (id: string) => `/invoices/${id}`;
-export const invoicePrintUrl = (id: string, layout: "a4" | "thermal") => `/invoices/${id}/print?layout=${layout}`;
+/** The print page address. `summary` is the "Show Account Summary" choice; when it is left out the Settings default decides. */
+export const invoicePrintUrl = (id: string, layout: "a4" | "thermal", summary?: boolean) =>
+  `/invoices/${id}/print?layout=${layout}${summary === undefined ? "" : `&summary=${summary ? 1 : 0}`}`;
 export const orderSheetUrl = (orderId: string) => `/orders/${orderId}/print`;
 
-export function invoicesApiUrl(params: Pick<InvoiceListParams, "status" | "store" | "from" | "to" | "q">, page: { limit: number; offset: number }, order?: string): string {
+export function invoicesApiUrl(params: Pick<InvoiceListParams, "status" | "payment" | "store" | "from" | "to" | "q">, page: { limit: number; offset: number }, order?: string): string {
   const search = new URLSearchParams();
   if (params.status !== "all") search.set("status", params.status);
+  if (params.payment !== "all") search.set("payment_status", params.payment);
   if (params.store !== "") search.set("store", params.store);
   if (params.from !== "") search.set("from", params.from);
   if (params.to !== "") search.set("to", params.to);
@@ -85,8 +91,10 @@ export async function postDiscard(id: string, expectedVersion: number): Promise<
   return (await fetchJson<{ done: true; order_id: string }>(`/api/invoices/${id}/discard`, { json: { expected_version: expectedVersion } })).data;
 }
 
-export async function postIssue(id: string, expectedVersion: number): Promise<InvoiceResult> {
-  return (await fetchJson<InvoiceResult>(`/api/invoices/${id}/issue`, { json: { expected_version: expectedVersion } })).data;
+/** Issues a draft, with an optional payment received now (a money string above 0). */
+export async function postIssue(id: string, expectedVersion: number, paymentReceived: string | null = null): Promise<InvoiceResult> {
+  const json = paymentReceived ? { expected_version: expectedVersion, payment_received: paymentReceived } : { expected_version: expectedVersion };
+  return (await fetchJson<InvoiceResult>(`/api/invoices/${id}/issue`, { json })).data;
 }
 
 export async function postCancel(id: string, reason: string): Promise<InvoiceResult> {

@@ -36,6 +36,13 @@ const STATUSES = [
   { value: "cancelled", label: "Cancelled" },
 ] as const;
 
+const PAYMENTS = [
+  { value: "all", label: "All payments" },
+  { value: "unpaid", label: "Unpaid" },
+  { value: "partially_paid", label: "Partly paid" },
+  { value: "paid", label: "Paid" },
+] as const;
+
 const chip = (active: boolean) =>
   `inline-flex min-h-11 items-center rounded-lg px-4 text-base font-medium ${active ? "bg-primary text-white" : "border border-border bg-surface text-foreground"}`;
 const inputClass = "min-h-11 w-full rounded-lg border border-border bg-surface px-3 py-2 text-base";
@@ -103,6 +110,7 @@ export function InvoicesScreen() {
     return {
       tab: search.get("tab") === "to-invoice" ? "to-invoice" : "invoices",
       status: status === "draft" || status === "issued" || status === "cancelled" ? status : "all",
+      payment: ((p) => (p === "unpaid" || p === "partially_paid" || p === "paid" ? p : "all"))(search.get("pay")),
       store: search.get("store") ?? "",
       from: search.get("from") ?? "",
       to: search.get("to") ?? "",
@@ -143,7 +151,7 @@ export function InvoicesScreen() {
   const tab: InvoiceTab = params.tab;
   const active = tab === "invoices" ? invoiceList : todoList;
   const current = active.current;
-  const filtering = tab === "invoices" ? Boolean(params.status !== "all" || params.store || params.from || params.to || params.q.trim()) : Boolean(params.q.trim());
+  const filtering = tab === "invoices" ? Boolean(params.status !== "all" || params.payment !== "all" || params.store || params.from || params.to || params.q.trim()) : Boolean(params.q.trim());
 
   return (
     <div className="space-y-4">
@@ -190,6 +198,13 @@ export function InvoicesScreen() {
             {STATUSES.map((s) => (
               <button key={s.value} type="button" aria-pressed={params.status === s.value} data-testid={`status-${s.value}`} className={chip(params.status === s.value)} onClick={() => setParams({ status: s.value })}>
                 {s.label}
+              </button>
+            ))}
+          </div>
+          <div className="flex flex-wrap gap-2" role="group" aria-label="Filter by payment">
+            {PAYMENTS.map((p) => (
+              <button key={p.value} type="button" aria-pressed={params.payment === p.value} data-testid={`payment-${p.value}`} className={chip(params.payment === p.value)} onClick={() => setParams({ payment: p.value })}>
+                {p.label}
               </button>
             ))}
           </div>

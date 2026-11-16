@@ -29,6 +29,9 @@ export type ErrorCode =
   | "nothing_to_bill"
   | "not_ready"
   | "reason_required"
+  | "already_reversed"
+  | "entry_is_reversal"
+  | "entry_is_invoice"
   | "server_error";
 
 const STATUS: Record<ErrorCode, number> = {
@@ -60,6 +63,9 @@ const STATUS: Record<ErrorCode, number> = {
   nothing_to_bill: 422,
   not_ready: 422,
   reason_required: 422,
+  already_reversed: 409,
+  entry_is_reversal: 409,
+  entry_is_invoice: 409,
   server_error: 500,
 };
 

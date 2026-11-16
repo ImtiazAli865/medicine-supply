@@ -1,3 +1,4 @@
+import { AccountSummaryBlock } from "@/components/invoices/AccountSummaryBlock";
 import { formatInvoiceMoney } from "@/lib/invoices/status";
 import type { Invoice, InvoiceLine } from "@/lib/invoices/types";
 import type { PrintLayout } from "@/lib/invoices/status";
@@ -35,8 +36,20 @@ function Mark({ invoice }: { invoice: Invoice }) {
  * grand total. No purchase price, MRP, cost, margin or profit exists in the invoice data, so none can be printed.
  * A line with a delivered quantity of 0 is not billed and is not printed. Missing business details are left out.
  */
-export function InvoicePrintView({ invoice, layout, thermalWidthMm }: { invoice: Invoice; layout: PrintLayout; thermalWidthMm: number }) {
+export function InvoicePrintView({
+  invoice,
+  layout,
+  thermalWidthMm,
+  showSummary = false,
+}: {
+  invoice: Invoice;
+  layout: PrintLayout;
+  thermalWidthMm: number;
+  /** Show the Account Summary block (only for an issued invoice that has a saved snapshot). */
+  showSummary?: boolean;
+}) {
   const billed = invoice.lines.filter((l) => l.billed);
+  const summary = showSummary && invoice.status === "issued" ? invoice.account_summary : null;
   const heading = invoice.number_label ?? "Draft preview";
   const dateText = invoice.invoice_date ?? "Draft: no invoice date yet";
 
@@ -88,6 +101,7 @@ export function InvoicePrintView({ invoice, layout, thermalWidthMm }: { invoice:
           <span>TOTAL</span>
           <span data-testid="print-grand-total">{formatInvoiceMoney(invoice.grand_total)}</span>
         </p>
+        {summary ? <AccountSummaryBlock summary={summary} layout="thermal" /> : null}
       </article>
     );
   }
@@ -158,6 +172,7 @@ export function InvoicePrintView({ invoice, layout, thermalWidthMm }: { invoice:
         <span>Grand total</span>
         <span data-testid="print-grand-total">{formatInvoiceMoney(invoice.grand_total)}</span>
       </p>
+      {summary ? <AccountSummaryBlock summary={summary} layout="a4" /> : null}
     </article>
   );
 }

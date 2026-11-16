@@ -2,6 +2,7 @@
 // Money is always a decimal string with two decimals. No type here has a purchase price, MRP, cost, margin or
 // profit field, because no invoice table has such a column.
 
+import type { AccountSummarySnapshot, PaymentStatus } from "@/lib/accounts/types";
 import type { OrderStatus } from "@/lib/orders/types";
 
 export type InvoiceStatus = "draft" | "issued" | "cancelled";
@@ -81,6 +82,14 @@ export interface Invoice {
   nothing_to_bill: boolean;
   blockers: Blocker[];
   grand_total: string;
+  /** True for an invoice issued by Module 007 or later; false for one issued before the store accounts (and for a draft). */
+  in_account: boolean;
+  /** Derived from the ledger; null for a draft, a cancelled invoice or an invoice that is not in the account. */
+  payment_status: PaymentStatus | null;
+  amount_paid: string | null;
+  amount_outstanding: string | null;
+  /** The five figures saved at issue; null when the invoice is not in the account. */
+  account_summary: AccountSummarySnapshot | null;
   business: InvoiceBusiness;
   store: InvoiceStore;
   lines: InvoiceLine[];
@@ -106,6 +115,8 @@ export interface InvoiceSummaryRow {
   store_id: string;
   store_name: string;
   grand_total: string;
+  in_account: boolean;
+  payment_status: PaymentStatus | null;
   created_at: string;
 }
 

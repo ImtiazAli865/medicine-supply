@@ -53,7 +53,16 @@ export function InvoiceActions({ invoice, onInvoiceChange }: { invoice: Invoice;
           Cancel invoice
         </Button>
       ) : null}
-      <CancelInvoiceDialog open={open} label={invoice.number_label ?? "this invoice"} onClose={() => setOpen(false)} onConfirm={(reason) => void cancel(reason)} busy={busy} error={error} />
+      <CancelInvoiceDialog
+        open={open}
+        label={invoice.number_label ?? "this invoice"}
+        onClose={() => setOpen(false)}
+        onConfirm={(reason) => void cancel(reason)}
+        busy={busy}
+        error={error}
+        inAccount={invoice.in_account}
+        paymentReceived={invoice.account_summary?.payment_received ?? null}
+      />
     </div>
   );
 }

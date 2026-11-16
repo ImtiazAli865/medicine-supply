@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { MAX_DELIVERED_QUANTITY } from "@/lib/invoices/status";
+import { canonicalMoney, parseMoneyToPaisa } from "@/lib/money";
 import { isRealDay } from "@/lib/validation/market";
 
 // Queries and request bodies of the Module 006 API. The database functions decide everything that matters (the
@@ -28,6 +29,10 @@ const SearchText = z.string().trim().max(100, "Use at most 100 characters.").opt
 export const InvoiceListQuerySchema = z
   .object({
     status: z.preprocess(emptyToUndefined, z.enum(["all", "draft", "issued", "cancelled"], "Choose all, draft, issued or cancelled.").optional().default("all")),
+    payment_status: z.preprocess(
+      emptyToUndefined,
+      z.enum(["all", "unpaid", "partially_paid", "paid"], "Choose all, unpaid, partially paid or paid.").optional().default("all"),
+    ),
     store: OptionalUuid,
     from: OptionalDay,
     to: OptionalDay,
@@ -50,7 +55,27 @@ export const CreateInvoiceBodySchema = z.object({
   order_id: z.uuid("A valid order id is required."),
 });
 
-/** The body of refresh, discard and issue. */
+const PAYMENT_MESSAGE = "Enter an amount above 0 with at most two decimals.";
+
+/** An optional payment received now: a money string above 0, returned in canonical two-decimal form. */
+const PaymentReceived = z
+  .string(PAYMENT_MESSAGE)
+  .trim()
+  .refine((text) => {
+    const paisa = parseMoneyToPaisa(text);
+    return paisa !== null && paisa > 0;
+  }, PAYMENT_MESSAGE)
+  .transform((text) => canonicalMoney(text) as string)
+  .nullish()
+  .transform((value) => value ?? null);
+
+/** POST /api/invoices/{id}/issue: the version, and an optional payment received now (issued together, atomically). */
+export const IssueInvoiceBodySchema = z.object({
+  expected_version: z.number("Reload the invoice and try again.").int().min(1, "Reload the invoice and try again."),
+  payment_received: PaymentReceived.optional().default(null),
+});
+
+/** The body of refresh and discard. */
 export const VersionBodySchema = z.object({
   expected_version: z.number("Reload the invoice and try again.").int().min(1, "Reload the invoice and try again."),
 });
@@ -94,5 +119,6 @@ export type InvoiceListQuery = z.infer<typeof InvoiceListQuerySchema>;
 export type ToInvoiceQuery = z.infer<typeof ToInvoiceQuerySchema>;
 export type CreateInvoiceBody = z.infer<typeof CreateInvoiceBodySchema>;
 export type VersionBody = z.infer<typeof VersionBodySchema>;
+export type IssueInvoiceBody = z.infer<typeof IssueInvoiceBodySchema>;
 export type UpdateQuantitiesBody = z.infer<typeof UpdateQuantitiesBodySchema>;
 export type CancelInvoiceBody = z.infer<typeof CancelInvoiceBodySchema>;

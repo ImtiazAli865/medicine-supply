@@ -6,7 +6,7 @@ import { ApiError } from "@/lib/api/errors";
 import { isUuid } from "@/lib/ids";
 import { invoiceUrl } from "@/lib/invoices/client";
 import { getInvoice } from "@/lib/invoices/repository";
-import { parseLayout } from "@/lib/invoices/status";
+import { parseLayout, parseSummaryChoice } from "@/lib/invoices/status";
 import { getSettings } from "@/lib/settings/repository";
 
 export const metadata = { title: "Print invoice · Medicine Supply" };
@@ -31,11 +31,23 @@ export default async function InvoicePrintPage({ params, searchParams }: PagePro
   const settings = await getSettings(supabase).catch(() => null);
   const width = settings?.thermal_paper_mm ?? 80;
 
+  // The Account Summary: shown only for an issued invoice that has a saved snapshot. The box starts from the Settings
+  // default (off unless the supplier turned it on) and the address carries the choice for this print only.
+  const available = invoice.status === "issued" && invoice.in_account && invoice.account_summary !== null;
+  const on = available && parseSummaryChoice(raw.summary, settings?.account_summary_default ?? false);
+  const unavailableReason = available
+    ? null
+    : invoice.status === "draft"
+      ? "A draft has no Account Summary yet."
+      : invoice.status === "cancelled"
+        ? "A cancelled invoice is printed without an Account Summary."
+        : "No Account Summary was saved for this invoice (it was issued before store accounts were added).";
+
   return (
     <div className="space-y-4">
-      <PrintLayoutToolbar invoiceId={id} layout={layout} backHref={invoiceUrl(id)} backLabel="Invoice" />
+      <PrintLayoutToolbar invoiceId={id} layout={layout} backHref={invoiceUrl(id)} backLabel="Invoice" summary={{ available, on, unavailableReason }} />
       {layout === "thermal" ? <style>{`@page { size: ${width}mm auto; margin: 3mm; }`}</style> : null}
-      <InvoicePrintView invoice={invoice} layout={layout} thermalWidthMm={width} />
+      <InvoicePrintView invoice={invoice} layout={layout} thermalWidthMm={width} showSummary={on} />
     </div>
   );
 }
