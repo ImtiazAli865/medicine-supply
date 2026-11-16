@@ -89,6 +89,7 @@ Recorded as they were actually run on 2026-11-16 (Windows laptop, hosted Supabas
 | Module 007 e2e specs, mobile (360 px) | `account-opening`, `account-payment`, `account-adjust-reverse`, `account-statement`, `accounts-list-home`, `account-invoice-entry`, `account-issue-payment`, `invoices-paid-status`, `account-summary-print` (including the thermal layout and a real PDF), the account blocks of `touch-targets` (also the invoices list, the invoice and the print page) and `states`, and `shell`: all passed. The first runs had 5 failures: 4 wrong test expectations (the browser itself refuses a future date and an empty required reason before the app shows its own message; the not-found page answers status 200 with "Not found") and 1 real finding fixed in the app: the invoice number link on an entry was 19 px high, now 44 px. A few of these specs were added or extended after the full e2e run and were run separately (all passed). |
 | Honesty sweep (T069) | Searched `src/` and the migration: no purchase price, MRP, cost, margin or profit is read, selected or rendered in any ledger, account, statement or summary code (the words appear only in comments that say there is none); no `localStorage`, `sessionStorage` or `indexedDB` in the account code; no service-role or secret key in `src/`; no "pending sync" or "saved on this device" wording (the e2e specs assert its absence); the only browser arithmetic is the informational advance hint on the issue dialog (paisa helpers); balances, allocation and paid status are all worked out by the database. |
 | Ledger review (T070) | `ledger_entries` has exactly one insert statement, inside `ledger_insert_entry`, which only the four ledger writes, `invoice_issue` and `invoice_cancel` call; users cannot execute it (tested); no column stores a balance or a paid status; entries are refused on update and delete (the service role may delete for test cleanup only); a draft never writes an entry (tested); the invoice guard from ADR-0006 is unchanged and still freezes the four snapshot columns. Module 006 behaviour (numbers, order status, delivered quantities, market list) passed its unchanged suites. |
+| Final run before the pull request (after the DEV apply) | `npm run lint`, `npm run typecheck` and `npm run build` exit 0. `npm test`: 116 files, 1,210 of 1,212 tests passed; the 2 that failed are the timing tests of `pending-scale.test.ts` (Module 004, 2-second goals; 7.2 s and 12.5 s in the busy full run), which passed 5 of 5 when run alone straight after. This module changed no pending function; the failure is treated as load and network timing of the full run, and it is listed here because it was seen, not hidden. The two earlier failing tests (Module 006 unit tests and the product search timing) passed in this run. |
 | Not covered | A real printer and real PDF files (print media and the browser PDF output are checked, not a printer); offline payments and "pending sync" (Module 009); the owner phone walkthrough (T073); the DEV project (T072). |
 
 ## 7. Migration 0008 on the TEST project
@@ -111,4 +112,17 @@ No existing row changed. The TEST project has no invoices, so the check that old
 
 ## 8. Migration 0008 on the DEV project
 
-(Empty until the owner says to apply it.)
+Applied on 2026-11-16 to the DEV project (`medicine-supply-dev`) through the Supabase SQL Editor, signed in by the owner, after the owner chose "DEV apply + PR". The file ran as one transaction and the editor answered "Success. No rows returned". The editor warning about destructive operations was expected (the migration replaces the old `invoice_issue` and `invoice_list`).
+
+| Count (read only) | Before | After |
+|---|---|---|
+| invoices | 3 | 3 |
+| issued / cancelled / draft | 1 / 1 / 1 | 1 / 1 / 1 |
+| invoices with `in_account = true` | column absent | 0 (the three existing invoices are not in the account, as decided) |
+| order lines | 45 | 45 |
+| order events | 57 | 57 |
+| stores | 5 | 5 |
+| `ledger_entries` rows | table absent | 0 (table exists, the khata starts empty) |
+| functions named `ledger%` in `public` | none | 17 |
+
+No existing row changed. The owner phone walkthrough (section 3) is **not done yet**; it is the owner step T073.
