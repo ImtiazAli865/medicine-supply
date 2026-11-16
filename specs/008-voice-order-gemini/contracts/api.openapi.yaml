@@ -1,0 +1,166 @@
+openapi: 3.0.3
+info:
+  title: Voice order entry API (Module 008)
+  version: 0.1.0
+  description: |
+    Server routes added by Module 008. All routes need a signed-in business user (the session cookie) and return
+    `no_store` JSON. Errors use the app-wide envelope `{ code, message, fields? }`.
+
+    Rules that hold for every route:
+    - Only the transcript text is ever sent to the AI provider. No route accepts or returns a price, MRP, cost,
+      balance or invoice field.
+    - The AI key, the raw AI answer and the AI request never appear in a response.
+    - Creating the draft order is NOT a route of this module: it is the existing order save
+      (`PUT /api/orders/{id}`) with `source` and `spoken_text` added to the body.
+paths:
+  /api/voice/parse:
+    post:
+      summary: Turn a transcript into a preview (parse, then match by application code)
+      description: |
+        For the AI parser only, checks the per-minute limit first (20 AI parses per business per minute; the rules parser is never limited or counted), then parses with the chosen parser,
+        validates the answer, and matches the store and the medicines against the business's own active records.
+        Nothing is saved. A doubtful result is a normal 200 with flags, not an error.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [transcript, parser]
+              properties:
+                transcript:
+                  type: string
+                  minLength: 1
+                  maxLength: 2000
+                  description: The words of the order; spaces are trimmed; an empty or blank text is refused.
+                parser:
+                  type: string
+                  enum: [ai, rules]
+      responses:
+        '200':
+          description: A preview. `parser` says which parser produced it.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Preview'
+        '400':
+          description: validation_error (empty transcript, over 2,000 characters, unknown parser).
+        '429':
+          description: rate_limited ("Too many voice requests. Wait a moment and try again."). Nothing was sent to the AI.
+        '502':
+          description: ai_invalid ("The answer could not be understood. Try again or edit the text.") or ai_unavailable ("The voice service could not be reached. Try again or use the simple reader.").
+        '503':
+          description: ai_busy ("The voice service is busy. Try again in a moment.") or ai_not_configured ("Voice understanding is not set up on the server. Use the simple reader or take the order by hand.").
+        '504':
+          description: ai_timeout ("The voice service took too long. Try again or use the simple reader.").
+  /api/voice/diagnostics:
+    get:
+      summary: Recent voice diagnostic records of the caller's business, newest first (read only)
+      parameters:
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 50, default: 20 } }
+        - { name: offset, in: query, schema: { type: integer, minimum: 0, default: 0 } }
+      responses:
+        '200':
+          description: A page.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, total]
+                properties:
+                  total: { type: integer }
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/DiagnosticRecord' }
+  /api/orders/{id}:
+    put:
+      summary: Existing order save, extended (create a voice draft)
+      description: |
+        Unchanged for manual orders. For a new order the body may carry `source: "voice"` and `spoken_text`
+        (1 to 2,000 characters, required for voice, refused for manual). Both are ignored on later saves of the same
+        order. The order id, `request_id` and every line id are made on the device before the first call, so repeating
+        the call returns the stored order (`replayed: true`) and never creates a second order, line set or number.
+        The order is created as a draft; it is never confirmed, priced or invoiced by this call.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/OrderSaveBody'
+                - type: object
+                  properties:
+                    source: { type: string, enum: [manual, voice], default: manual }
+                    spoken_text: { type: string, minLength: 1, maxLength: 2000, nullable: true }
+      responses:
+        '200': { description: The saved order (the Module 003 order object, now with `source` and `spoken_text`). }
+        '400': { description: validation_error (a voice order without spoken text, spoken text on a manual order, a bad line). }
+        '409': { description: product_inactive, version_conflict or another Module 003 refusal; nothing was created partly. }
+components:
+  schemas:
+    OrderSaveBody:
+      type: object
+      description: The existing Module 003 body (request_id, expected_version, store_id, notes, lines). Unchanged.
+    Candidate:
+      type: object
+      required: [id, name, is_exact]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        brand: { type: string, nullable: true }
+        strength: { type: string, nullable: true }
+        dosage_form: { type: string, nullable: true }
+        manufacturer: { type: string, nullable: true }
+        pack_size: { type: string, nullable: true }
+        unit: { type: string, description: 'Medicines only.' }
+        contact_person: { type: string, nullable: true, description: 'Stores only.' }
+        phone: { type: string, nullable: true, description: 'Stores only.' }
+        is_exact: { type: boolean }
+    StoreResolution:
+      type: object
+      required: [spoken, state, candidates]
+      properties:
+        spoken: { type: string, nullable: true, description: The store as spoken, or null when none was named. }
+        state: { type: string, enum: [matched, choose_one, unknown, not_named] }
+        candidates: { type: array, maxItems: 5, items: { $ref: '#/components/schemas/Candidate' } }
+        storeId: { type: string, format: uuid, nullable: true, description: Set only when state is matched. }
+    PreviewLine:
+      type: object
+      required: [key, spoken, state, candidates, flags]
+      properties:
+        key: { type: string }
+        spoken: { type: string, description: The product name exactly as the parser returned it. }
+        state: { type: string, enum: [matched, choose_one, unknown] }
+        candidates: { type: array, maxItems: 5, items: { $ref: '#/components/schemas/Candidate' } }
+        productId: { type: string, format: uuid, nullable: true, description: Set only when state is matched. }
+        quantity: { type: integer, minimum: 1, maximum: 100000, nullable: true }
+        unit: { type: string, nullable: true, maxLength: 50 }
+        flags:
+          type: array
+          items:
+            type: string
+            enum: [missing_quantity, quantity_not_whole, quantity_too_small, quantity_too_large, unit_not_heard, duplicate_spoken]
+    Preview:
+      type: object
+      required: [parser, store, lines, unreadable, more_than_one_store]
+      properties:
+        parser: { type: string, enum: [ai, rules] }
+        store: { $ref: '#/components/schemas/StoreResolution' }
+        more_than_one_store: { type: boolean }
+        lines: { type: array, maxItems: 200, items: { $ref: '#/components/schemas/PreviewLine' } }
+        unreadable: { type: array, items: { type: string }, description: Parts of the transcript the parse did not use. }
+    DiagnosticRecord:
+      type: object
+      required: [id, created_at, kind, parser, item_count, doubtful_count, unreadable_count, transcript_length]
+      properties:
+        id: { type: string, format: uuid }
+        created_at: { type: string, format: date-time }
+        kind: { type: string, enum: [ai_busy, ai_timeout, ai_invalid, ai_not_configured, ai_unavailable, rate_limited, rules_unreadable, low_confidence] }
+        parser: { type: string, enum: [ai, rules] }
+        item_count: { type: integer }
+        doubtful_count: { type: integer }
+        unreadable_count: { type: integer }
+        transcript_length: { type: integer }
+        message: { type: string, nullable: true }
