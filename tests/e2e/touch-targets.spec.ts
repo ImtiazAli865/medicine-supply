@@ -226,3 +226,77 @@ test.describe("Module 005: market list touch targets and layout at 360 px", () =
     expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(1);
   });
 });
+
+// Module 007 (SC-010): the store account screens and their dialogs at 360 px.
+test.describe("store account screens at 360 px", () => {
+  test.skip(({ viewport }) => !viewport || viewport.width > 400, "mobile project only");
+
+  test("every account screen and dialog has no small targets and no sideways scroll", async ({ page, freshTenant }) => {
+    const { accountStore, addOpening, addPayment, issueFor, TODAY } = await import("./account-helpers");
+    const store = await accountStore(freshTenant, "Nimer Medical Store");
+    await addOpening(freshTenant, store.id, "12000.00", "owes", "2026-10-01", "From the paper khata");
+    const invoice = await issueFor(freshTenant, store.id, "500.00");
+    const payment = await addPayment(freshTenant, store.id, "200.00");
+    expect(payment).toBeTruthy();
+
+    const check = async (what: string) => {
+      expect(await smallTargets(page), `small targets: ${what}`).toEqual([]);
+      const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+      expect(overflow, `horizontal overflow: ${what}`).toBeLessThanOrEqual(1);
+    };
+
+    await signIn(page, freshTenant);
+    await page.goto("/");
+    await expect(page.getByTestId("accounts-summary-text")).toBeVisible();
+    await check("Home with the accounts card");
+
+    await page.goto("/accounts");
+    await expect(page.getByTestId("account-item")).toHaveCount(1);
+    await check("accounts list");
+
+    await page.goto(`/accounts/${store.id}`);
+    await expect(page.getByTestId("entry-row").first()).toBeVisible();
+    await page.waitForLoadState("networkidle");
+    await check("account screen");
+
+    for (const [open, label] of [
+      ["open-opening", "opening balance dialog"],
+      ["open-payment", "payment dialog"],
+      ["open-adjustment", "adjustment dialog"],
+    ] as const) {
+      await page.getByTestId(open).click();
+      await expect(page.getByRole("dialog")).toBeVisible();
+      if (open === "open-payment") {
+        await page.getByTestId("payment-amount").fill("100");
+        await expect(page.getByTestId("payment-preview")).toBeVisible();
+      }
+      await check(label);
+      await page.keyboard.press("Escape");
+      await expect(page.getByRole("dialog")).toHaveCount(0);
+    }
+
+    await page.locator('[data-testid="entry-row"][data-entry-type="payment"]').getByTestId("entry-reverse").click();
+    await expect(page.getByRole("dialog")).toBeVisible();
+    await check("reverse dialog");
+    await page.keyboard.press("Escape");
+
+    await page.goto(`/accounts/${store.id}/statement?from=2026-10-01&to=${TODAY}`);
+    await expect(page.getByTestId("statement")).toBeVisible();
+    await page.waitForLoadState("networkidle");
+    await check("statement");
+
+    // the invoice side: the list with paid status chips, the invoice with its store account section, the print page
+    await page.goto("/invoices");
+    await expect(page.getByTestId("invoice-item-payment")).toBeVisible();
+    await page.waitForLoadState("networkidle");
+    await check("invoices list with paid status");
+    await page.goto(`/invoices/${invoice.invoiceId}`);
+    await expect(page.getByTestId("invoice-account")).toBeVisible();
+    await page.waitForLoadState("networkidle");
+    await check("invoice with store account section");
+    await page.goto(`/invoices/${invoice.invoiceId}/print?summary=1`);
+    await expect(page.getByTestId("account-summary")).toBeVisible();
+    await page.waitForLoadState("networkidle");
+    await check("print page with Account Summary");
+  });
+});

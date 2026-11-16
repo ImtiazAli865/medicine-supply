@@ -30,6 +30,17 @@ export function parseLayout(value: string | string[] | undefined | null): PrintL
   return text === "thermal" ? "thermal" : "a4";
 }
 
+/**
+ * Reads the `summary` query value of the print page: "1" shows the Account Summary, "0" hides it, and anything else (the
+ * value is absent) means the Settings default decides.
+ */
+export function parseSummaryChoice(value: string | string[] | undefined | null, settingsDefault: boolean): boolean {
+  const text = Array.isArray(value) ? value[0] : value;
+  if (text === "1") return true;
+  if (text === "0") return false;
+  return settingsDefault;
+}
+
 /** Why a billed line blocks issuing, in the words the supplier sees. */
 export function blockerText(reason: BlockerReason): string {
   return reason === "typed"

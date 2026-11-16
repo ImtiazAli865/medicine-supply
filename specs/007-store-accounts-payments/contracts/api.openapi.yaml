@@ -1,0 +1,396 @@
+openapi: 3.1.0
+info:
+  title: Medicine Supply - Store accounts (Module 007)
+  version: 0.1.0
+  description: >
+    REST route handlers for the store ledger (khata): the stores list with balances, one store account, the payment
+    preview, recording a payment, an opening balance or an adjustment, reversing an entry, and the Store Statement
+    data. It also lists the two changes to the Module 006 invoice routes (issue with an optional payment, and the
+    paid-status filter of the invoice list). Every request carries the signed-in user's Supabase session cookie;
+    all data access goes through the user's own session, so Row Level Security applies. Reads call database
+    functions (ledger_stores, ledger_summary, ledger_account, ledger_payment_preview, ledger_statement); writes call
+    ledger_opening_add, ledger_payment_add, ledger_adjustment_add, ledger_entry_reverse and the changed
+    invoice_issue and invoice_cancel. The handlers validate with Zod first and map the functions' reasons to the
+    error codes below. Money is a decimal string with two decimals ("125.50"); a balance is signed text (a positive
+    number is what the store owes, a negative number is an advance). No response of this API ever contains a
+    purchase price, an MRP, a cost, a margin or a profit (no ledger or invoice table has such a column). Every write
+    takes a client-created UUID as its request id (the entry id), so a repeat with the same body returns the stored
+    entry with replayed = true, and the same id with a different body is refused with request_reused. The balance,
+    the allocation and the paid statuses are always worked out from the entries; no endpoint accepts a balance or a
+    status. The print pages (/invoices/{id}/print with ?summary=, /accounts/{storeId}/statement) are server-rendered
+    pages, not endpoints of this API.
+servers:
+  - url: /api
+security:
+  - supabaseSession: []
+paths:
+  /accounts:
+    get:
+      summary: Every store with its balance (stores without entries show 0.00), searchable.
+      operationId: listAccounts
+      parameters:
+        - { name: q, in: query, required: false, description: "Part of the store name. Max 100 characters.", schema: { type: string, maxLength: 100 } }
+        - { name: only_owing, in: query, required: false, description: "Only stores whose balance is above 0.", schema: { type: boolean, default: false } }
+        - { name: limit, in: query, required: false, schema: { type: integer, minimum: 1, maximum: 50, default: 20 } }
+        - { name: offset, in: query, required: false, schema: { type: integer, minimum: 0, default: 0 } }
+      responses:
+        "200": { description: A page, content: { application/json: { schema: { $ref: "#/components/schemas/AccountPage" } } } }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+  /accounts/summary:
+    get:
+      summary: Totals for the Home card. total_owed is the sum of the positive balances; advances are not subtracted.
+      operationId: getAccountsSummary
+      responses:
+        "200": { description: Totals, content: { application/json: { schema: { $ref: "#/components/schemas/AccountsSummary" } } } }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+  /accounts/{storeId}:
+    get:
+      summary: One store account - the balance, the open items and a page of entries (newest first) with the running balance.
+      operationId: getAccount
+      parameters:
+        - { name: storeId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: limit, in: query, required: false, schema: { type: integer, minimum: 1, maximum: 50, default: 30 } }
+        - { name: offset, in: query, required: false, schema: { type: integer, minimum: 0, default: 0 } }
+      responses:
+        "200": { description: The account, content: { application/json: { schema: { $ref: "#/components/schemas/Account" } } } }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /accounts/{storeId}/payment-preview:
+    get:
+      summary: What a payment would do (balance after and the items it settles, oldest first). Nothing is written.
+      operationId: previewPayment
+      parameters:
+        - { name: storeId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: amount, in: query, required: true, schema: { $ref: "#/components/schemas/Money" } }
+      responses:
+        "200": { description: The preview, content: { application/json: { schema: { $ref: "#/components/schemas/PaymentPreview" } } } }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /accounts/{storeId}/payments:
+    post:
+      summary: Record a payment received from the store (cash now). The body's id is the request id.
+      operationId: recordPayment
+      parameters:
+        - { name: storeId, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/PaymentBody" } } }
+      responses:
+        "200":
+          description: >
+            The entry and the new balance. replayed = true when the same id was already recorded with the same
+            content (the balance fell once).
+          content: { application/json: { schema: { $ref: "#/components/schemas/PaymentResult" } } }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+  /accounts/{storeId}/opening-balances:
+    post:
+      summary: Add an opening balance (the store owes, or has paid in advance) as on a date. Allowed on any day.
+      operationId: addOpeningBalance
+      parameters:
+        - { name: storeId, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/OpeningBalanceBody" } } }
+      responses:
+        "200": { description: The entry, content: { application/json: { schema: { $ref: "#/components/schemas/EntryResult" } } } }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+  /accounts/{storeId}/adjustments:
+    post:
+      summary: Reduce or increase what the store owes by a small amount. A reason is required.
+      operationId: addAdjustment
+      parameters:
+        - { name: storeId, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/AdjustmentBody" } } }
+      responses:
+        "200": { description: The entry, content: { application/json: { schema: { $ref: "#/components/schemas/EntryResult" } } } }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+  /accounts/{storeId}/entries/{entryId}/reverse:
+    post:
+      summary: >
+        Reverse a payment, an opening balance or an adjustment with a required reason. The body's id is the id of the
+        new reversal entry. An invoice entry cannot be reversed here (cancel the invoice instead), a reversal cannot
+        be reversed, and an entry can be reversed once.
+      operationId: reverseEntry
+      parameters:
+        - { name: storeId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: entryId, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/ReverseBody" } } }
+      responses:
+        "200": { description: The reversal entry, content: { application/json: { schema: { $ref: "#/components/schemas/EntryResult" } } } }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+  /accounts/{storeId}/statement:
+    get:
+      summary: The Store Statement data for a date range (at most 2,000 lines; truncated = true when cut).
+      operationId: getStatement
+      parameters:
+        - { name: storeId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: from, in: query, required: true, schema: { type: string, format: date } }
+        - { name: to, in: query, required: true, schema: { type: string, format: date } }
+      responses:
+        "200": { description: The statement, content: { application/json: { schema: { $ref: "#/components/schemas/Statement" } } } }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /invoices:
+    get:
+      summary: "CHANGED (Module 006 route): a new payment_status filter, and each row gains in_account and payment_status."
+      operationId: listInvoices
+      parameters:
+        - { name: payment_status, in: query, required: false, description: "Only issued invoices that are in the account with this derived status.", schema: { type: string, enum: [all, unpaid, partially_paid, paid], default: all } }
+      responses:
+        "200": { description: A page (the other parameters and the page shape are those of Module 006, with the two extra keys per row) }
+  /invoices/{id}/issue:
+    post:
+      summary: >
+        CHANGED (Module 006 route): the body may carry payment_received (a money string above 0). Issuing the invoice,
+        its number, the invoice entry, the payment and the Account Summary snapshot happen in one atomic operation; a
+        refusal uses no number and records nothing. A repeat on an issued invoice returns it with replayed = true and
+        never records a second payment, whatever payment_received the repeat carries.
+      operationId: issueInvoice
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/IssueInvoiceBody" } } }
+      responses:
+        "200": { description: The issued invoice, now with in_account, payment_status and account_summary }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { description: not_ready or nothing_to_bill, as in Module 006 }
+  /invoices/{id}/cancel:
+    post:
+      summary: >
+        CHANGED behaviour, same request (Module 006 route): cancelling an invoice that is in the account also adds
+        one reversal entry in the same operation (a payment received with it stays on the account); cancelling an
+        invoice issued before this module adds nothing.
+      operationId: cancelInvoice
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200": { description: The cancelled invoice (replayed = true on a repeat, with no second reversal) }
+components:
+  securitySchemes:
+    supabaseSession: { type: apiKey, in: cookie, name: sb-access-token }
+  responses:
+    ValidationError:
+      description: >
+        The request is malformed or a field is invalid (code validation_error with fields). Covers amounts that are
+        zero, negative, have more than two decimals or are too large (fields.amount), dates in the future or before
+        2000-01-01 (fields.date), and a missing or too long reason (fields.reason).
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+    Unauthenticated:
+      description: The session expired (code unauthenticated).
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+    NotFound:
+      description: The store, entry or invoice does not exist or belongs to another business (code not_found; the two look the same).
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+    Conflict:
+      description: >
+        The state does not allow the change. Codes: request_reused (the id was used for a different entry),
+        already_reversed (the entry already has a reversal), entry_is_reversal (a reversal cannot be reversed),
+        entry_is_invoice (an invoice entry is reversed only by cancelling its invoice), plus the Module 006 codes for
+        the invoice routes.
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+  schemas:
+    Money:
+      type: string
+      pattern: '^\d{1,10}\.\d{2}$'
+    SignedMoney:
+      type: string
+      description: "Positive = the store owes the supplier; negative = an advance."
+      pattern: '^-?\d+\.\d{2}$'
+    Error:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          enum: [unauthenticated, no_business, not_found, validation_error, request_reused, already_reversed, entry_is_reversal, entry_is_invoice, version_conflict, invoice_not_draft, invoice_not_issued, order_not_confirmed, order_changed, nothing_to_bill, not_ready, reason_required, server_error]
+        message: { type: string }
+        fields: { type: object, additionalProperties: { type: string } }
+        blockers: { type: array, items: { type: object } }
+    PaymentBody:
+      type: object
+      required: [id, amount, date]
+      additionalProperties: false
+      properties:
+        id: { type: string, format: uuid, description: "Created by the browser once per open form; the request id." }
+        amount: { $ref: "#/components/schemas/Money" }
+        date: { type: string, format: date, description: "Not in the future (Pakistan time), not before 2000-01-01." }
+        method: { type: string, enum: [cash], default: cash }
+        reference: { type: [string, "null"], maxLength: 100 }
+    OpeningBalanceBody:
+      type: object
+      required: [id, amount, direction, as_on]
+      additionalProperties: false
+      properties:
+        id: { type: string, format: uuid }
+        amount: { $ref: "#/components/schemas/Money" }
+        direction: { type: string, enum: [owes, advance] }
+        as_on: { type: string, format: date }
+        note: { type: [string, "null"], maxLength: 200 }
+    AdjustmentBody:
+      type: object
+      required: [id, amount, direction, reason]
+      additionalProperties: false
+      properties:
+        id: { type: string, format: uuid }
+        amount: { $ref: "#/components/schemas/Money" }
+        direction: { type: string, enum: [reduce, increase] }
+        reason: { type: string, minLength: 1, maxLength: 500 }
+        date: { type: [string, "null"], format: date, description: "Default: today (Pakistan)." }
+    ReverseBody:
+      type: object
+      required: [id, reason]
+      additionalProperties: false
+      properties:
+        id: { type: string, format: uuid, description: "The id of the new reversal entry." }
+        reason: { type: string, minLength: 1, maxLength: 500 }
+    IssueInvoiceBody:
+      type: object
+      required: [expected_version]
+      additionalProperties: false
+      properties:
+        expected_version: { type: integer, minimum: 1 }
+        payment_received: { type: [string, "null"], description: "Optional money string above 0 (Money pattern). Null or absent = no payment." }
+    Entry:
+      type: object
+      required: [id, entry_type, entry_date, side, amount, reversed, created_at]
+      properties:
+        id: { type: string, format: uuid }
+        entry_type: { type: string, enum: [opening_balance, invoice, payment, adjustment, reversal] }
+        entry_date: { type: string, format: date }
+        side: { type: string, enum: [debit, credit] }
+        amount: { $ref: "#/components/schemas/Money" }
+        note: { type: [string, "null"] }
+        reference: { type: [string, "null"] }
+        payment_method: { type: [string, "null"] }
+        invoice_id: { type: [string, "null"], format: uuid }
+        invoice_label: { type: [string, "null"], description: "INV-000001 form." }
+        reverses_entry_id: { type: [string, "null"], format: uuid }
+        reversed: { type: boolean }
+        reversed_by_entry_id: { type: [string, "null"], format: uuid }
+        running_balance: { $ref: "#/components/schemas/SignedMoney" }
+        created_at: { type: string, format: date-time }
+        mine: { type: boolean }
+    OpenItem:
+      type: object
+      properties:
+        kind: { type: string, enum: [opening_balance, invoice, adjustment] }
+        entry_id: { type: string, format: uuid }
+        invoice_id: { type: [string, "null"], format: uuid }
+        label: { type: string }
+        date: { type: string, format: date }
+        amount: { $ref: "#/components/schemas/Money" }
+        allocated: { $ref: "#/components/schemas/Money" }
+        outstanding: { $ref: "#/components/schemas/Money" }
+        status: { type: string, enum: [unpaid, partially_paid, paid] }
+    AccountRow:
+      type: object
+      properties:
+        store_id: { type: string, format: uuid }
+        name: { type: string }
+        is_active: { type: boolean }
+        balance: { $ref: "#/components/schemas/SignedMoney" }
+        owes: { type: boolean }
+        advance: { type: boolean }
+        entry_count: { type: integer }
+        last_entry_date: { type: [string, "null"], format: date }
+    AccountPage:
+      type: object
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/AccountRow" } }
+        total: { type: integer }
+    AccountsSummary:
+      type: object
+      properties:
+        total_owed: { $ref: "#/components/schemas/Money" }
+        stores_owing: { type: integer }
+        total_advance: { $ref: "#/components/schemas/Money" }
+        stores_with_advance: { type: integer }
+    Account:
+      type: object
+      properties:
+        store: { type: object, properties: { id: { type: string, format: uuid }, name: { type: string }, contact_person: { type: [string, "null"] }, phone: { type: [string, "null"] }, address: { type: [string, "null"] }, is_active: { type: boolean } } }
+        balance: { $ref: "#/components/schemas/SignedMoney" }
+        owes: { type: boolean }
+        advance: { type: boolean }
+        open_items: { type: array, items: { $ref: "#/components/schemas/OpenItem" } }
+        entries: { type: array, items: { $ref: "#/components/schemas/Entry" } }
+        total_entries: { type: integer }
+    PaymentPreview:
+      type: object
+      properties:
+        valid: { type: boolean }
+        balance_before: { $ref: "#/components/schemas/SignedMoney" }
+        balance_after: { $ref: "#/components/schemas/SignedMoney" }
+        advance_after: { $ref: "#/components/schemas/Money" }
+        settles:
+          type: array
+          items:
+            type: object
+            properties:
+              kind: { type: string }
+              label: { type: string }
+              date: { type: string, format: date }
+              outstanding_before: { $ref: "#/components/schemas/Money" }
+              applied: { $ref: "#/components/schemas/Money" }
+              outstanding_after: { $ref: "#/components/schemas/Money" }
+    EntryResult:
+      type: object
+      required: [done, entry]
+      properties:
+        done: { type: boolean, const: true }
+        replayed: { type: boolean }
+        entry: { $ref: "#/components/schemas/Entry" }
+    PaymentResult:
+      type: object
+      required: [done, entry, account]
+      properties:
+        done: { type: boolean, const: true }
+        replayed: { type: boolean }
+        entry: { $ref: "#/components/schemas/Entry" }
+        account: { type: object, properties: { balance: { $ref: "#/components/schemas/SignedMoney" }, advance: { type: boolean } } }
+    AccountSummarySnapshot:
+      type: object
+      description: "The five figures saved with an issued invoice at issue; null on the invoice when it is not in the account."
+      properties:
+        balance_date: { type: string, format: date }
+        previous_balance: { $ref: "#/components/schemas/SignedMoney" }
+        previous_is_advance: { type: boolean }
+        this_invoice: { $ref: "#/components/schemas/Money" }
+        payment_received: { oneOf: [{ $ref: "#/components/schemas/Money" }, { type: "null" }] }
+        balance_due: { $ref: "#/components/schemas/SignedMoney" }
+        due_is_advance: { type: boolean }
+    Statement:
+      type: object
+      properties:
+        business: { type: object, properties: { name: { type: string }, phone: { type: [string, "null"] }, address: { type: [string, "null"] } } }
+        store: { type: object, properties: { id: { type: string, format: uuid }, name: { type: string }, contact_person: { type: [string, "null"] }, phone: { type: [string, "null"] }, address: { type: [string, "null"] } } }
+        from: { type: string, format: date }
+        to: { type: string, format: date }
+        opening_balance: { $ref: "#/components/schemas/SignedMoney" }
+        entries: { type: array, items: { $ref: "#/components/schemas/Entry" } }
+        total_debit: { $ref: "#/components/schemas/Money" }
+        total_credit: { $ref: "#/components/schemas/Money" }
+        closing_balance: { $ref: "#/components/schemas/SignedMoney" }
+        truncated: { type: boolean }

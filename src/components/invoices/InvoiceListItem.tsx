@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { PaymentStatusBadge } from "@/components/invoices/PaymentStatusBadge";
 import { Badge } from "@/components/ui/Badge";
 import { formatInvoiceMoney, INVOICE_STATUS_LABEL, invoiceHeading } from "@/lib/invoices/status";
 import type { InvoiceSummaryRow } from "@/lib/invoices/types";
@@ -31,6 +32,7 @@ export function InvoiceListItem({ invoice }: { invoice: InvoiceSummaryRow }) {
             {formatInvoiceMoney(invoice.grand_total)}
           </span>
           <Badge tone={tone}>{INVOICE_STATUS_LABEL[invoice.status]}</Badge>
+          <PaymentStatusBadge status={invoice.payment_status} inAccount={invoice.in_account} invoiceStatus={invoice.status} testId="invoice-item-payment" />
         </span>
       </Link>
     </li>

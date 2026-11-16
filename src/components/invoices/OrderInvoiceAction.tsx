@@ -24,7 +24,7 @@ function invoiceLabel(row: InvoiceSummaryRow): string {
  */
 export function OrderInvoiceAction({ orderId, orderStatus }: { orderId: string; orderStatus: OrderStatus }) {
   const router = useRouter();
-  const { data, error, loading, retry } = useApiResource<InvoicePage>(orderStatus === "draft" ? null : invoicesApiUrl({ status: "all", store: "", from: "", to: "", q: "" }, { limit: 50, offset: 0 }, orderId));
+  const { data, error, loading, retry } = useApiResource<InvoicePage>(orderStatus === "draft" ? null : invoicesApiUrl({ status: "all", payment: "all", store: "", from: "", to: "", q: "" }, { limit: 50, offset: 0 }, orderId));
   const [busy, setBusy] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
 

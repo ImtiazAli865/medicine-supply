@@ -17,6 +17,7 @@ import { ClientApiError } from "@/lib/api/client";
 import { getInvoice, invoicePrintUrl, patchQuantities, postDiscard, postIssue, postRefresh } from "@/lib/invoices/client";
 import { formatInvoiceMoney } from "@/lib/invoices/status";
 import type { Invoice } from "@/lib/invoices/types";
+import { compareMoney, isValidMoney } from "@/lib/money";
 import { formatOrderNumber } from "@/lib/orders/number";
 
 function messageOf(error: unknown): string {
@@ -36,6 +37,8 @@ export function InvoiceEditor({ invoice, onInvoiceChange }: { invoice: Invoice; 
   const [conflict, setConflict] = useState<Invoice | null>(null);
   const [dialog, setDialog] = useState<null | "issue" | "discard">(null);
   const [dialogError, setDialogError] = useState<string | null>(null);
+  const [payment, setPayment] = useState("");
+  const [paymentError, setPaymentError] = useState<string | null>(null);
 
   const parsed = invoice.lines.map((line) => ({ line, next: parseDelivered(values[line.id] ?? "") }));
   const invalid = parsed.some((p) => p.next === null);
@@ -86,13 +89,23 @@ export function InvoiceEditor({ invoice, onInvoiceChange }: { invoice: Invoice; 
   }
 
   async function issue() {
+    const typed = payment.trim();
+    if (typed !== "" && (!isValidMoney(typed) || (compareMoney(typed, "0") ?? 0) <= 0)) {
+      setPaymentError("Enter an amount above 0 with at most two decimals.");
+      return;
+    }
+    setPaymentError(null);
     setBusy("issue");
     setDialogError(null);
     try {
-      const { invoice: next } = await postIssue(invoice.id, invoice.version);
+      const { invoice: next } = await postIssue(invoice.id, invoice.version, typed === "" ? null : typed);
       setDialog(null);
       onInvoiceChange(next);
     } catch (e) {
+      if (e instanceof ClientApiError && e.fields?.payment_received) {
+        setPaymentError(e.fields.payment_received);
+        return;
+      }
       if (e instanceof ClientApiError && (e.code === "order_changed" || e.code === "not_ready" || e.code === "nothing_to_bill" || e.code === "order_not_confirmed")) {
         setDialog(null);
         setError(e.message);
@@ -261,6 +274,12 @@ export function InvoiceEditor({ invoice, onInvoiceChange }: { invoice: Invoice; 
         billedLines={billedLines}
         grandTotal={invoice.grand_total}
         storeName={invoice.store.name}
+        payment={payment}
+        onPaymentChange={(text) => {
+          setPayment(text);
+          setPaymentError(null);
+        }}
+        paymentError={paymentError}
       />
       <DiscardDraftDialog open={dialog === "discard"} onClose={() => setDialog(null)} onConfirm={() => void discard()} busy={busy === "discard"} error={dialogError} />
     </div>

@@ -79,3 +79,20 @@ test.describe("Module 005: market list in the navigation", () => {
     await expect(page.getByRole("navigation", { name: "Main" }).getByRole("link")).toHaveCount(5);
   });
 });
+
+// Module 007: the store accounts are reached through visible controls, and the bottom navigation keeps its five items.
+test.describe("Module 007: Store accounts in the navigation", () => {
+  test.beforeEach(async ({ page, tenant }) => {
+    await signIn(page, tenant);
+  });
+
+  test("the Stores screen and the Home card lead to the accounts, and the navigation keeps five items", async ({ page }) => {
+    await expect(page.getByRole("navigation", { name: "Main" }).getByRole("link")).toHaveCount(5);
+    await expect(page.getByTestId("accounts-summary")).toBeVisible();
+    await page.getByRole("navigation", { name: "Main" }).getByRole("link", { name: "Stores" }).click();
+    await page.getByTestId("store-accounts-link").click();
+    await expect(page).toHaveURL(/\/accounts$/);
+    await expect(page.getByRole("heading", { name: "Store accounts", level: 1 })).toBeVisible();
+    await expect(page.getByRole("navigation", { name: "Main" }).getByRole("link")).toHaveCount(5);
+  });
+});

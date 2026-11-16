@@ -10,7 +10,12 @@ import { pg_trgm } from "@electric-sql/pglite/contrib/pg_trgm";
  * without Docker or credentials. It is NOT the Supabase stack: PostgREST, GoTrue and the real
  * role setup are only exercised by the integration tests that run against a Supabase test project.
  */
-export async function createTestDb(): Promise<PGlite> {
+export interface TestDbOptions {
+  /** Apply the migration files up to and including this file name (for example "0007_invoices.sql"). Default: all. */
+  upTo?: string;
+}
+
+export async function createTestDb(options: TestDbOptions = {}): Promise<PGlite> {
   const db = new PGlite({ extensions: { pg_trgm } });
 
   await db.exec(`
@@ -36,8 +41,14 @@ export async function createTestDb(): Promise<PGlite> {
   const dir = path.resolve("supabase/migrations");
   for (const file of readdirSync(dir).filter((f) => f.endsWith(".sql")).sort()) {
     await db.exec(readFileSync(path.join(dir, file), "utf8"));
+    if (options.upTo && file === options.upTo) break;
   }
   return db;
+}
+
+/** Applies one migration file to a database that was built with createTestDb({ upTo }). */
+export async function applyMigrationFile(db: PGlite, fileName: string): Promise<void> {
+  await db.exec(readFileSync(path.resolve("supabase/migrations", fileName), "utf8"));
 }
 
 export type Role = "anon" | "authenticated" | "service_role";

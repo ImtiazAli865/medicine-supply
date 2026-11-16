@@ -1,5 +1,6 @@
 import { Pill, Plus, Store } from "lucide-react";
 import Link from "next/link";
+import { AccountsSummaryCard } from "@/components/accounts/AccountsSummaryCard";
 import { InvoiceSummaryCard } from "@/components/invoices/InvoiceSummaryCard";
 import { MarketSummaryCard } from "@/components/market/MarketSummaryCard";
 import { ContinueOrders } from "@/components/orders/ContinueOrders";
@@ -36,6 +37,7 @@ export default async function HomePage() {
       {drafts ? <ContinueOrders orders={drafts.items} /> : null}
       <MarketSummaryCard />
       <InvoiceSummaryCard />
+      <AccountsSummaryCard />
       <PendingSummaryCard />
       {setup && !setup.dismissed ? <SetupChecklist state={setup} /> : null}
       <ul className="grid gap-3 sm:grid-cols-2">

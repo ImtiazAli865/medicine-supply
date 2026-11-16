@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { ChevronLeft, ClipboardList, Pencil } from "lucide-react";
+import { BookOpen, ChevronLeft, ClipboardList, Pencil } from "lucide-react";
 import Link from "next/link";
 import { Badge } from "@/components/ui/Badge";
 import { ButtonLink } from "@/components/ui/Button";
@@ -43,6 +43,9 @@ export default async function StoreDetailPage({ params }: PageProps<"/stores/[id
         </ButtonLink>
         <ButtonLink href={`/orders?store=${store.id}`} variant="secondary">
           <ClipboardList size={18} aria-hidden="true" /> Orders
+        </ButtonLink>
+        <ButtonLink href={`/accounts/${store.id}`} variant="secondary" testId="store-account-link">
+          <BookOpen size={18} aria-hidden="true" /> Store account
         </ButtonLink>
         <ActiveToggle endpoint="/api/stores" id={store.id} version={store.version} isActive={store.is_active} name={store.name} noun="store" />
       </div>

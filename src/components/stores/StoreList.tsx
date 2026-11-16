@@ -1,6 +1,6 @@
 "use client";
 
-import { Plus, Search, Store as StoreIcon } from "lucide-react";
+import { BookOpen, Plus, Search, Store as StoreIcon } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 import { Badge } from "@/components/ui/Badge";
@@ -22,10 +22,16 @@ export function StoreList() {
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-3">
         <h1 className="text-2xl font-semibold">Stores</h1>
-        <ButtonLink href="/stores/new">
-          <Plus size={20} aria-hidden="true" />
-          Add store
-        </ButtonLink>
+        <div className="flex flex-wrap justify-end gap-2">
+          <ButtonLink href="/accounts" variant="secondary" testId="store-accounts-link">
+            <BookOpen size={20} aria-hidden="true" />
+            Store accounts
+          </ButtonLink>
+          <ButtonLink href="/stores/new">
+            <Plus size={20} aria-hidden="true" />
+            Add store
+          </ButtonLink>
+        </div>
       </div>
 
       <div className="relative">

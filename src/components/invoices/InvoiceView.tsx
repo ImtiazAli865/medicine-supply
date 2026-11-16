@@ -1,6 +1,7 @@
 import { ChevronLeft } from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
+import { InvoiceAccountSection } from "@/components/invoices/InvoiceAccountSection";
 import { InvoiceHistory } from "@/components/invoices/InvoiceHistory";
 import { Badge } from "@/components/ui/Badge";
 import { formatInvoiceMoney, INVOICE_STATUS_LABEL } from "@/lib/invoices/status";
@@ -53,6 +54,8 @@ export function InvoiceView({ invoice, actions }: { invoice: Invoice; actions?: 
       ) : null}
 
       {actions}
+
+      <InvoiceAccountSection invoice={invoice} />
 
       <section aria-label="Invoice details" className="space-y-1 rounded-xl border border-border bg-surface p-4 text-sm">
         <p className="font-medium" dir="auto" data-testid="invoice-business">

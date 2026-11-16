@@ -46,6 +46,10 @@ export function refusal(result: FunctionResult): ApiError {
       });
     case "reason_required":
       return new ApiError("reason_required", "Write why this invoice is cancelled.");
+    case "invalid_amount":
+      return new ApiError("validation_error", "Enter an amount above 0 with at most two decimals.", {
+        fields: { payment_received: "Enter an amount above 0 with at most two decimals." },
+      });
     case "reason_too_long":
       return new ApiError("validation_error", "Use at most 500 characters.", { fields: { reason: "Use at most 500 characters." } });
     case "invalid_quantity": {
@@ -96,8 +100,11 @@ export async function discardInvoice(supabase: SupabaseClient, id: string, expec
   return result as unknown as { done: true; order_id: string };
 }
 
-export async function issueInvoice(supabase: SupabaseClient, id: string, expectedVersion: number): Promise<InvoiceResult> {
-  return succeeded((await call(supabase, "invoice_issue", { p_id: id, p_expected_version: expectedVersion })) as FunctionResult);
+/** Issues a draft. An optional payment received now is recorded in the same operation (all or nothing). */
+export async function issueInvoice(supabase: SupabaseClient, id: string, expectedVersion: number, paymentReceived: string | null = null): Promise<InvoiceResult> {
+  return succeeded(
+    (await call(supabase, "invoice_issue", { p_id: id, p_expected_version: expectedVersion, p_payment: paymentReceived })) as FunctionResult,
+  );
 }
 
 export async function cancelInvoice(supabase: SupabaseClient, id: string, reason: string): Promise<InvoiceResult> {
@@ -114,6 +121,7 @@ export async function listInvoices(supabase: SupabaseClient, query: InvoiceListQ
     p_q: query.q === "" ? null : query.q,
     p_limit: query.limit,
     p_offset: query.offset,
+    p_payment_status: query.payment_status === "all" ? null : query.payment_status,
   })) as InvoicePage;
 }
 

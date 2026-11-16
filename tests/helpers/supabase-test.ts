@@ -71,6 +71,7 @@ export async function deleteTenant(tenant: TestTenant): Promise<void> {
     // Orders reference stores and medicines, so they go first. The service role is the only role
     // allowed to delete order history rows (the app itself never uses it). Before migration 0003 is
     // applied these tables do not exist and the errors are ignored on purpose.
+    await admin.from("ledger_entries").delete().eq("business_id", tenant.businessId); // Module 007 (before the invoices and stores)
     await admin.from("invoice_events").delete().eq("business_id", tenant.businessId); // Module 006 (before the orders)
     await admin.from("invoice_lines").delete().eq("business_id", tenant.businessId);
     await admin.from("invoices").delete().eq("business_id", tenant.businessId);

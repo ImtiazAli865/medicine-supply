@@ -12,12 +12,12 @@ import {
 
 describe("InvoiceListQuerySchema", () => {
   it("fills the defaults when nothing is given", () => {
-    expect(InvoiceListQuerySchema.parse({})).toEqual({ status: "all", q: "", limit: 20, offset: 0 });
+    expect(InvoiceListQuerySchema.parse({})).toEqual({ status: "all", payment_status: "all", q: "", limit: 20, offset: 0 });
   });
 
   it("treats empty query values as not given", () => {
-    const parsed = InvoiceListQuerySchema.parse({ status: "", store: "", from: "", to: "", order: "", q: "", limit: "", offset: "" });
-    expect(parsed).toEqual({ status: "all", q: "", limit: 20, offset: 0 });
+    const parsed = InvoiceListQuerySchema.parse({ status: "", payment_status: "", store: "", from: "", to: "", order: "", q: "", limit: "", offset: "" });
+    expect(parsed).toEqual({ status: "all", payment_status: "all", q: "", limit: 20, offset: 0 });
   });
 
   it("reads the filters from string query values", () => {
@@ -27,8 +27,15 @@ describe("InvoiceListQuerySchema", () => {
     expect(parsed).toMatchObject({ status: "issued", store, order, from: "2026-11-01", to: "2026-11-14", q: "INV-12", limit: 10, offset: 20 });
   });
 
+  it("reads the paid status filter (Module 007)", () => {
+    for (const value of ["all", "unpaid", "partially_paid", "paid"]) {
+      expect(InvoiceListQuerySchema.parse({ payment_status: value }).payment_status).toBe(value);
+    }
+  });
+
   it.each([
     ["an unknown status", { status: "paid" }],
+    ["an unknown paid status", { payment_status: "overdue" }],
     ["a store id that is not a UUID", { store: "abc" }],
     ["a date that does not exist", { from: "2026-02-30" }],
     ["a start after the end", { from: "2026-11-14", to: "2026-11-01" }],

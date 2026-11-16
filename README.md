@@ -63,6 +63,16 @@ Not included yet: invoices, ledger, voice, offline sync, reports.
 
 Not included yet: the Account Summary and payments (Module 007), paid statuses, discounts, server-side PDF files, voice, offline sync, reports. Known limitation: a typed medicine with delivered 0 on an invoiced order cannot be registered until the invoice is cancelled.
 
+## What works in Module 007 (code written, not yet applied to a live project; see its quickstart for what has been verified)
+
+- **Store accounts (khata)**: every store has an account worked out from its entries. The balance is never typed or stored: it is the sum of what the store owes minus what it paid. A positive balance means the store owes you; a negative one is an advance. The account starts empty. Invoices issued before this module are not copied in; enter the old balance yourself as an **opening balance** (any day, either direction, with the warning not to count old invoices twice).
+- **Invoices enter the account when issued** (one entry per invoice) and leave it when cancelled (a reversal entry; nothing is edited or deleted). An invoice with no total adds nothing.
+- **Payments**: record a cash payment with a date and an optional reference. A preview shows the balance after it and which items it settles (opening balances first, then invoices oldest first). Paying more than is owed is kept as an advance. Invoices show Unpaid, Partly paid or Paid, worked out from the entries. A payment can also be taken while issuing an invoice.
+- **Account Summary on the invoice**: previous balance, this invoice, payment received and balance due are saved when the invoice is issued and never change. Showing it on the printout is a checkbox (the default is a setting); a cancelled invoice prints without it.
+- **Adjustments and reversals**: write off or add a small amount with a required reason. A payment, an opening balance or an adjustment is corrected by a reversal with a reason (a new entry; the old one stays, marked reversed). An invoice entry is reversed by cancelling the invoice.
+- **Store Statement**: choose a store and dates; it lists the entries with the balance after each, the totals and the closing balance, and prints on A4. **Home** shows the total owed and how many stores owe it.
+- No purchase price, MRP, cost, margin or profit exists in any account, summary or statement data, so none can be shown. It runs through database functions (migration `0008_store_accounts.sql`): the ledger table is written only by functions and refuses edits and deletes. Payments work online only; offline payments and "pending sync" come with Module 009.
+
 ## Status and limits
 
 See `specs/001-auth-products-stores/quickstart.md`, section 8 "Verification results". In short: lint,
