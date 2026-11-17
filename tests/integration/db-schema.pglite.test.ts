@@ -66,7 +66,7 @@ describe("migration applies and guards every table", () => {
     expect(names).toEqual([
       "business_settings", "businesses", "imports", "invoice_counters", "invoice_events", "invoice_lines", "invoices", "ledger_entries",
       "order_counters", "order_events", "order_lines", "orders",
-      "pending_requests", "products", "profiles", "purchase_entries", "purchase_voids", "stores",
+      "pending_requests", "products", "profiles", "purchase_entries", "purchase_voids", "stores", "voice_diagnostics", "voice_parse_attempts",
     ]);
     for (const row of rows) {
       expect(row.rls_enabled, `${row.table_name} must have RLS enabled`).toBe(true);

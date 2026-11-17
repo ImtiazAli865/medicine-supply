@@ -8,6 +8,7 @@ import { CancelOrderDialog } from "@/components/orders/CancelOrderDialog";
 import { OrderEditor } from "@/components/orders/OrderEditor";
 import { OrderHistoryLog } from "@/components/orders/OrderHistoryLog";
 import { OrderView } from "@/components/orders/OrderView";
+import { SpokenTextNote } from "@/components/voice/SpokenTextNote";
 import { PendingLineActions } from "@/components/pending/PendingLineActions";
 import { usePendingProposals } from "@/components/pending/ProposalsFlow";
 import { Button, ButtonLink } from "@/components/ui/Button";
@@ -138,6 +139,7 @@ export function OrderScreen({ id, storeParam }: { id: string; storeParam: string
     return (
       <div className="space-y-2">
         {back}
+      <SpokenTextNote order={order} orderId={id} />
         <OrderEditor
           key={`${id}|edit|${order.version}`}
           mode="edit"
@@ -159,6 +161,7 @@ export function OrderScreen({ id, storeParam }: { id: string; storeParam: string
     return (
       <div className="space-y-2">
         {back}
+      <SpokenTextNote order={order} orderId={id} />
         <OrderView
           order={order}
           actions={
@@ -195,6 +198,7 @@ export function OrderScreen({ id, storeParam }: { id: string; storeParam: string
   return (
     <div className="space-y-2">
       {back}
+      <SpokenTextNote order={order} orderId={id} />
       <OrderEditor
         key={`${id}|${storeParam ?? ""}`}
         orderId={id}

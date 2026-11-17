@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
-import { Button } from "@/components/ui/Button";
+import { Button, ButtonLink } from "@/components/ui/Button";
 import { TextArea, TextInput } from "@/components/ui/Field";
 import { Banner } from "@/components/ui/States";
 import { useToast } from "@/components/ui/Toast";
@@ -176,6 +176,14 @@ export function SettingsForm({ initial }: { initial: Settings }) {
         ) : (
           <p className="text-muted">The setup checklist is showing on Home. You can dismiss it there.</p>
         )}
+      </section>
+
+      <section className="space-y-2 border-t border-border pt-4" aria-labelledby="voice-title">
+        <h2 id="voice-title" className="text-lg font-semibold">Voice orders</h2>
+        <p className="text-muted">See when the voice service failed or an answer needed a closer look. It never shows what was said.</p>
+        <ButtonLink href="/settings/voice-diagnostics" variant="secondary" testId="voice-diagnostics-link">
+          Voice diagnostics
+        </ButtonLink>
       </section>
     </div>
   );

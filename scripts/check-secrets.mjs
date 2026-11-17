@@ -1,5 +1,5 @@
 // Fails the lint step when secrets could leak into source or git.
-// - Under src/: no service-role or AI key names, no JWT-like key values.
+// - Under src/: no service-role name, no AI key name (except the one allowed Gemini file), no JWT-like key values.
 // - Git: no tracked .env file other than .env.example, and no JWT-like value in tracked files
 //   other than this script. tests/helpers may reference the *name* of the service-role
 //   variable but never a value.
@@ -9,7 +9,10 @@ import path from "node:path";
 
 const problems = [];
 const jwtLike = /eyJ[A-Za-z0-9_-]{15,}\.[A-Za-z0-9_-]{15,}\.[A-Za-z0-9_-]{15,}/;
-const forbiddenNamesInSrc = /SERVICE_ROLE|GEMINI_API_KEY/;
+// The Gemini key is read in exactly one server file (Module 008). Every other file under src/ must not mention it.
+const GEMINI_KEY_ALLOWED_IN = "src/lib/voice/gemini.ts";
+const geminiKeyName = /GEMINI_API_KEY/;
+const serviceRoleName = /SERVICE_ROLE/;
 
 function walk(dir) {
   const out = [];
@@ -24,7 +27,9 @@ function walk(dir) {
 for (const file of walk("src")) {
   if (!/\.(ts|tsx|js|jsx|mjs|css|json)$/.test(file)) continue;
   const text = readFileSync(file, "utf8");
-  if (forbiddenNamesInSrc.test(text)) problems.push(`${file}: references a server-only secret name`);
+  const normalised = file.replace(/\\/g, "/");
+  if (serviceRoleName.test(text)) problems.push(`${file}: references a server-only secret name`);
+  else if (geminiKeyName.test(text) && normalised !== GEMINI_KEY_ALLOWED_IN) problems.push(`${file}: references a server-only secret name`);
   if (jwtLike.test(text)) problems.push(`${file}: contains a JWT-like key value`);
 }
 

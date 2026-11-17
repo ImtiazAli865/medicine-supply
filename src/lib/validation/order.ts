@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-const LIMITS = { name: 200, unit: 50, notes: 1000, reason: 500, lines: 200, quantity: 100000 } as const;
+const LIMITS = { name: 200, unit: 50, notes: 1000, reason: 500, lines: 200, quantity: 100000, spokenText: 2000 } as const;
 
 /** Text with leading, trailing and repeated spaces cleaned and nothing else changed. */
 const cleanSpaces = (value: string) => value.replace(/\s+/g, " ").trim();
@@ -50,17 +50,30 @@ const LineSchema = z
     return { ...line, name };
   });
 
-export const OrderSaveSchema = z.object({
-  request_id: z.uuid("A valid request id is required."),
-  // null on the first save (creation); otherwise the version the screen was based on.
-  expected_version: z.number("expected_version is required (use null for the first save).").int().min(1).nullable(),
-  store_id: z.uuid("Choose a store."),
-  notes: optionalText(LIMITS.notes, "Notes"),
-  lines: z
-    .array(LineSchema)
-    .max(LIMITS.lines, `An order can have at most ${LIMITS.lines} lines.`)
-    .refine((lines) => new Set(lines.map((l) => l.id)).size === lines.length, "Each line needs its own id."),
-});
+export const OrderSaveSchema = z
+  .object({
+    request_id: z.uuid("A valid request id is required."),
+    // null on the first save (creation); otherwise the version the screen was based on.
+    expected_version: z.number("expected_version is required (use null for the first save).").int().min(1).nullable(),
+    store_id: z.uuid("Choose a store."),
+    notes: optionalText(LIMITS.notes, "Notes"),
+    lines: z
+      .array(LineSchema)
+      .max(LIMITS.lines, `An order can have at most ${LIMITS.lines} lines.`)
+      .refine((lines) => new Set(lines.map((l) => l.id)).size === lines.length, "Each line needs its own id."),
+    // Module 008: how the order was taken, and what was said (voice only). Both are used only when the order is
+    // created; the database ignores them on every later save of the same order.
+    source: z.enum(["manual", "voice"], "The order source must be manual or voice.").optional().default("manual"),
+    spoken_text: optionalText(LIMITS.spokenText, "Spoken text"),
+  })
+  .superRefine((body, ctx) => {
+    if (body.source === "voice" && body.spoken_text === null) {
+      ctx.addIssue({ code: "custom", path: ["spoken_text"], message: "A voice order needs the spoken text." });
+    }
+    if (body.source === "manual" && body.spoken_text !== null) {
+      ctx.addIssue({ code: "custom", path: ["spoken_text"], message: "Spoken text belongs only to a voice order." });
+    }
+  });
 
 export const OrderActionSchema = z.object({
   request_id: z.uuid("A valid request id is required."),

@@ -96,3 +96,24 @@ test.describe("Module 007: Store accounts in the navigation", () => {
     await expect(page.getByRole("navigation", { name: "Main" }).getByRole("link")).toHaveCount(5);
   });
 });
+
+// Module 008: voice is reached through visible controls (Orders, New order, Settings); no sixth navigation item.
+test.describe("Module 008: voice in the navigation", () => {
+  test.beforeEach(async ({ page, tenant }) => {
+    await signIn(page, tenant);
+  });
+
+  test("the microphone is on New order, Voice diagnostics is reached from Settings, and the navigation keeps five items", async ({ page }) => {
+    const nav = page.getByRole("navigation", { name: "Main" });
+    await nav.getByRole("link", { name: "Orders" }).click();
+    await page.getByRole("link", { name: /new order/i }).first().click();
+    await expect(page.getByTestId("voice-panel")).toBeVisible({ timeout: 15_000 });
+    await expect(nav.getByRole("link")).toHaveCount(5);
+
+    await nav.getByRole("link", { name: "Settings" }).click();
+    await page.getByTestId("voice-diagnostics-link").click();
+    await expect(page).toHaveURL(/\/settings\/voice-diagnostics$/);
+    await expect(page.getByRole("heading", { name: "Voice diagnostics", level: 1 })).toBeVisible();
+    await expect(nav.getByRole("link")).toHaveCount(5);
+  });
+});

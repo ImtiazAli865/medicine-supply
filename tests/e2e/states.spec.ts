@@ -207,3 +207,42 @@ test.describe("Store accounts list states", () => {
     await expect(page.getByTestId("empty-state").getByRole("link", { name: "Add a store" })).toBeVisible();
   });
 });
+
+// Module 008: the Voice diagnostics list has loading, error (with Retry) and empty states, and never a blank screen.
+test.describe("Voice diagnostics list states", () => {
+  test.beforeEach(async ({ page, tenant }) => {
+    await signIn(page, tenant);
+  });
+
+  test("shows a loading indicator while the request is pending", async ({ page }) => {
+    let release: () => void = () => {};
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    await page.route("**/api/voice/diagnostics*", async (route) => {
+      await gate;
+      await route.continue();
+    });
+    await page.goto("/settings/voice-diagnostics");
+    await expect(page.getByTestId("loading")).toBeVisible();
+    await expect(page.getByTestId("empty-state")).toHaveCount(0);
+    release();
+    await expect(page.getByTestId("loading")).toHaveCount(0);
+  });
+
+  test("shows an error with Retry (not the empty state) when the request fails, then recovers", async ({ page }) => {
+    let fail = true;
+    await page.route("**/api/voice/diagnostics*", (route) => (fail ? route.fulfill({ status: 500, json: { code: "server_error", message: "Something went wrong. Please try again." } }) : route.continue()));
+    await page.goto("/settings/voice-diagnostics");
+    await expect(page.getByTestId("error-state")).toBeVisible();
+    await expect(page.getByTestId("empty-state")).toHaveCount(0);
+    fail = false;
+    await page.getByRole("button", { name: "Retry" }).click();
+    await expect(page.getByTestId("error-state")).toHaveCount(0);
+  });
+
+  test("shows the empty state with the next action when there are no records", async ({ page }) => {
+    await page.route("**/api/voice/diagnostics*", (route) => route.fulfill({ status: 200, json: { items: [], total: 0 } }));
+    await page.goto("/settings/voice-diagnostics");
+    await expect(page.getByTestId("empty-state")).toContainText(/No voice problems recorded/);
+    await expect(page.getByRole("link", { name: "Take an order" })).toBeVisible();
+  });
+});

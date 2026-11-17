@@ -94,6 +94,8 @@ export async function saveOrder(
     p_store_id: input.store_id,
     p_notes: input.notes,
     p_lines: input.lines,
+    p_source: input.source,
+    p_spoken_text: input.spoken_text,
   })) as FunctionResult;
 
   if (data.saved !== true) throw refusal(data);

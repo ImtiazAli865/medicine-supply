@@ -58,6 +58,8 @@ export interface Order {
   order_number: number;
   status: OrderStatus;
   source: OrderSource;
+  /** What the supplier said (voice orders only); read-only. Null for a manual order. */
+  spoken_text?: string | null;
   notes: string | null;
   version: number;
   created_at: string;

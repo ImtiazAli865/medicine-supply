@@ -73,6 +73,18 @@ Not included yet: the Account Summary and payments (Module 007), paid statuses, 
 - **Store Statement**: choose a store and dates; it lists the entries with the balance after each, the totals and the closing balance, and prints on A4. **Home** shows the total owed and how many stores owe it.
 - No purchase price, MRP, cost, margin or profit exists in any account, summary or statement data, so none can be shown. It runs through database functions (migration `0008_store_accounts.sql`): the ledger table is written only by functions and refuses edits and deletes. Payments work online only; offline payments and "pending sync" come with Module 009.
 
+## What works in Module 008 (code written and tested against fakes; applied to the test project only; the real Gemini service and a real microphone have not been tried yet)
+
+- **Speak the order**: on New order, a microphone button and a language choice (English or Urdu) sit above the manual store list. The words are turned into text by the browser's own speech recognition, which may use the browser maker's speech service and needs a connection. The app never records, uploads or stores audio. Which browsers and languages work is not promised: support is detected when the microphone is tapped, a browser without it shows a plain message, and the typed text box (which also takes the phone keyboard's own voice typing) always works. The choice of language is remembered on the device.
+- **Gemini on the server only**: the editable text is sent to the server, which asks Gemini for a list (store as spoken, and for each item the name as spoken, quantity and unit). Only the text is sent: no prices, MRP, balances, invoices or catalog data. The answer must fit a strict shape or the whole answer is refused. The key and the model name come from the server environment (`GEMINI_API_KEY`, `GEMINI_MODEL`) and are never in browser code.
+- **The app decides, not the AI**: the store and medicines are matched by the app's own code against your own active records. A line is Matched only when exactly one medicine matches exactly; otherwise it is Choose one (nothing is preselected) or Not in catalog (kept as typed, like a pending line). Different strengths, forms, makers and pack sizes are never merged, and a doubtful quantity or missing unit is flagged, never rounded or guessed. It works with an empty catalog.
+- **Preview and corrections**: you see what you said beside the store and lines, change the store, medicine, quantity and unit, remove a line, add a medicine by search or as typed, or change the text and read it again (keeping or discarding your corrections). Nothing exists until you tap Create draft order, which makes a normal draft order through the same safe, repeat-proof save as manual orders. The words you said stay on the order as read-only spoken text.
+- **Failures never block an order**: a busy service, a slow one, an unusable answer, a missing or refused key, no connection, and an app limit of 20 AI readings a minute each show their own message and keep your text, with Retry, "Use the simple reader" (a simple rule-based reader for clear sentences that flags anything it is unsure about) and "Take this order by hand". The simple reader is never counted against the limit.
+- **Voice diagnostics** (Settings): a read-only list of voice problems, newest first, with counts and the length of the text only, never what was said and never a key. Records older than 90 days are removed.
+- It runs through database functions (migration `0009_voice_orders.sql`): matching, the limit, the diagnostic log and the extended order save. Migration `0010_voice_perf.sql` makes matching fast for a large catalog (a 200-item spoken order against 5,000 medicines); a spoken name that matches a medicine exactly no longer also lists similar-but-different medicines to choose from.
+
+Not included: offline voice and offline sync (Module 009), a cloud speech provider (only the interface exists), audio storage, voice commands, reports, and any change to prices, invoices or the ledger. Automated tests never call the real Gemini service: they use a fake. The first real check of Gemini and the microphone is yours, on the dev project (see the module's quickstart).
+
 ## Status and limits
 
 See `specs/001-auth-products-stores/quickstart.md`, section 8 "Verification results". In short: lint,
@@ -91,13 +103,15 @@ cp .env.example .env.local   # then fill in your Supabase URL and anon key
 npm run dev
 ```
 
-1. Create a Supabase project. Apply `supabase/migrations/0001_init.sql`, then `0002_settings_and_import.sql`, then `0003_orders.sql`, then `0004_pending_products.sql`, then `0005_pending_perf.sql`, then `0006_market_list_purchases.sql` (CLI `supabase db push` or the SQL editor; the editor may warn about `drop ... if exists`, which only touches the new objects).
+1. Create a Supabase project. Apply `supabase/migrations/0001_init.sql`, then `0002_settings_and_import.sql`, then `0003_orders.sql`, then `0004_pending_products.sql`, then `0005_pending_perf.sql`, then `0006_market_list_purchases.sql`, then `0007_invoices.sql`, `0008_store_accounts.sql`, `0009_voice_orders.sql` and `0010_voice_perf.sql` (CLI `supabase db push` or the SQL editor; the editor may warn about `drop ... if exists`, which only touches the new objects).
 2. In the dashboard add a user (Authentication → Users), then run `supabase/seed/provision-owner.sql`
    after replacing the email and business name placeholders. Without this the account sees "not set up".
 3. Open the app and sign in.
 
 Secrets: only the public URL and anon key are used by the app. Never put a service-role key in `.env.local`
 or in `src/`. `npm run lint` fails if one appears.
+
+Voice (Module 008): to use the voice service, put `GEMINI_API_KEY` and `GEMINI_MODEL` in `.env.local` yourself (the names are in `.env.example` with empty values; never paste the key in a chat, a commit or a pull request). Use a paid key for real business data. Without them the voice reading says the service is not set up, and the simple reader and manual entry still work. `GEMINI_API_BASE_URL` is for tests only; leave it empty. Only `src/lib/voice/gemini.ts` may read these names, and `npm run lint` fails otherwise.
 
 ## Scripts
 

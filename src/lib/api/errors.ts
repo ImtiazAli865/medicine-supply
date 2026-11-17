@@ -32,6 +32,12 @@ export type ErrorCode =
   | "already_reversed"
   | "entry_is_reversal"
   | "entry_is_invoice"
+  | "rate_limited"
+  | "ai_busy"
+  | "ai_timeout"
+  | "ai_invalid"
+  | "ai_unavailable"
+  | "ai_not_configured"
   | "server_error";
 
 const STATUS: Record<ErrorCode, number> = {
@@ -66,6 +72,12 @@ const STATUS: Record<ErrorCode, number> = {
   already_reversed: 409,
   entry_is_reversal: 409,
   entry_is_invoice: 409,
+  rate_limited: 429,
+  ai_busy: 503,
+  ai_timeout: 504,
+  ai_invalid: 502,
+  ai_unavailable: 502,
+  ai_not_configured: 503,
   server_error: 500,
 };
 

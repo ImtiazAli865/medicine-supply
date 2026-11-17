@@ -300,3 +300,74 @@ test.describe("store account screens at 360 px", () => {
     await check("print page with Account Summary");
   });
 });
+
+// Module 008 (SC-011 of its spec): the voice screens and their dialogs at 360 px.
+test.describe("voice screens at 360 px", () => {
+  test.skip(({ viewport }) => !viewport || viewport.width > 400, "mobile project only");
+
+  test("New order with the microphone, the failure message, the preview, every dialog and Voice diagnostics have no small targets and no sideways scroll", async ({ page, freshTenant }) => {
+    const { seedMedicineWithClient } = await import("../helpers/pending");
+    const { installFakeSpeech, openNewOrder, seedVoiceWorld, typeTranscript } = await import("./voice-helpers");
+    await seedVoiceWorld(freshTenant);
+    // one name in two strengths, so a spoken "Calpol" is a Choose one line
+    await seedMedicineWithClient(freshTenant.client, { name: "Calpol", strength: "120 mg", unit: "bottle" });
+    await seedMedicineWithClient(freshTenant.client, { name: "Calpol", strength: "250 mg", unit: "bottle" });
+    const log = await freshTenant.client.rpc("voice_diag_add", { p_kind: "ai_busy", p_parser: "ai", p_items: 1, p_doubtful: 0, p_unreadable: 0, p_transcript_length: 30, p_message: "The voice service answered that it is busy (rate limit)." });
+    expect(log.error).toBeNull();
+    await installFakeSpeech(page);
+
+    const check = async (what: string) => {
+      expect(await smallTargets(page), `small targets: ${what}`).toEqual([]);
+      const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+      expect(overflow, `horizontal overflow: ${what}`).toBeLessThanOrEqual(1);
+    };
+
+    await signIn(page, freshTenant);
+    await openNewOrder(page);
+    await page.waitForLoadState("networkidle");
+    await check("New order with the microphone and the transcript box");
+
+    // the failure message with its three ways forward
+    await typeTranscript(page, "Al Madina Medical: Brufen 4 box [[429]]");
+    await page.getByTestId("voice-parse").click();
+    await expect(page.getByTestId("voice-failure")).toBeVisible();
+    await check("failure message");
+
+    // the preview with a matched line, a Choose one line and a not-in-catalog line
+    await typeTranscript(page, "Al Madina Medical: Brufen 4 box, Calpol 2 bottle, Zzyzx Tonic 1 bottle");
+    await page.getByTestId("voice-parse").click();
+    await expect(page.getByTestId("voice-preview")).toBeVisible({ timeout: 15_000 });
+    await expect(page.locator('[data-line-state="choose_one"]')).toHaveCount(1);
+    await expect(page.locator('[data-line-state="unknown"]')).toHaveCount(1);
+    await check("preview with matched, Choose one and not-in-catalog lines");
+
+    await page.getByTestId("voice-add-line").click();
+    await expect(page.getByRole("dialog")).toBeVisible();
+    await check("Add medicine dialog");
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+
+    // a hand correction, then the editor and the keep-or-discard question
+    await page.locator('[data-line-state="matched"]').getByTestId("voice-quantity").fill("9");
+    await page.getByTestId("voice-edit-text").click();
+    await check("text editor in the preview");
+    await page.getByTestId("voice-read-again").click();
+    await expect(page.getByTestId("keep-corrections-dialog")).toBeVisible();
+    await check("keep corrections dialog");
+    await page.getByTestId("voice-keep-cancel").click();
+    await page.getByTestId("voice-edit-cancel").click();
+
+    await page.getByTestId("voice-start-over").click();
+    await expect(page.getByRole("dialog", { name: "Start over?" })).toBeVisible();
+    await check("start over dialog");
+    await page.getByRole("button", { name: "Keep working" }).click();
+
+    await page.goto("/settings");
+    await expect(page.getByTestId("voice-diagnostics-link")).toBeVisible();
+    await page.waitForLoadState("networkidle");
+    await check("Settings with the Voice diagnostics link");
+    await page.goto("/settings/voice-diagnostics");
+    await expect(page.getByTestId("voice-diagnostic")).not.toHaveCount(0);
+    await check("Voice diagnostics");
+  });
+});
