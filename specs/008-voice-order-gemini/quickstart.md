@@ -122,4 +122,21 @@ No existing row changed.
 
 ## 8. Migrations 0009 and 0010 on the DEV project
 
-(Empty until the owner says to apply it.)
+Applied on 2026-11-17 to the DEV project (`medicine-supply-dev`) through the Supabase SQL Editor in Chrome (a signed-in session of the owner's browser), after the owner said "Yes, apply it to DEV" (translated from Roman Urdu). First `0009_voice_orders.sql` (the editor showed the expected "destructive operations" warning because the migration replaces the six-argument `order_save`; confirmed; "Success. No rows returned"), then `0010_voice_perf.sql` ("Success. No rows returned"). Counts were read before and after (read only):
+
+| Check | Before | After |
+|---|---|---|
+| medicines (products) | 160 | 160 |
+| stores | 5 | 5 |
+| orders | 25 | 25 |
+| order lines | 47 | 47 |
+| order events | 64 | 64 |
+| checksum of every order line (id, delivered quantity, ordered quantity) | 6898cf586b7d127e820b7c733495ed75 | 6898cf586b7d127e820b7c733495ed75 |
+| `orders.spoken_text` column | absent | present |
+| tables named `voice_%` | 0 | 2 |
+| functions named `voice_%` in `public` | 0 | 6 |
+| versions of `order_save` | 1 | 1 (the eight-argument one) |
+| `0010` indexes present | not read | 4 of 4 |
+| `voice_match_products`: security definer, executable by `anon`, by `authenticated` | not read | true, false, true |
+
+No existing row changed. Not yet done: the owner puts the paid Gemini key and the model name into `.env.local` himself, then the phone walkthrough (T067, section 3) with the real Gemini service and microphone; nothing about those is verified.
