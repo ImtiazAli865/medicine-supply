@@ -139,4 +139,18 @@ Applied on 2026-11-17 to the DEV project (`medicine-supply-dev`) through the Sup
 | `0010` indexes present | not read | 4 of 4 |
 | `voice_match_products`: security definer, executable by `anon`, by `authenticated` | not read | true, false, true |
 
-No existing row changed. Not yet done: the owner puts the paid Gemini key and the model name into `.env.local` himself, then the phone walkthrough (T067, section 3) with the real Gemini service and microphone; nothing about those is verified.
+No existing row changed.
+
+## 9. Real service and phone check (2026-11-17)
+
+**Gemini key and one real call (seen by the assistant).** At the owner's request the assistant copied the owner's existing free-tier key into `.env.local` (git-ignored; the value was never printed) and set `GEMINI_MODEL` to a model name taken from Google's pricing page. One real server-side call through `GeminiParser` was made with a dummy sentence that contained no catalog or business data. It returned in about 1.7 seconds and the answer passed the same shape validation the route uses. This proves the key header, the model name and the answer shape for that one call; it does not prove quality on real orders, and the model name is otherwise unverified.
+
+**Free tier in the trial (owner's decision).** The owner chose to run the 10-day trial on the free tier and to switch to a paid key afterwards (a change of `.env.local` only). The assistant told the owner that Google's documentation says free-tier content may be used to improve its products and that the project rule is that the free tier is for test data. The owner knowingly chose the free tier for the trial.
+
+**Phone microphone (reported, not seen).** The owner reported that the microphone button worked on their phone, and that the browser's speech recognition often misheard words (for example "strips" was heard as "stickers") and made many similar mistakes. This is the browser's speech-to-text, not Gemini and not the matching code; the editable transcript box exists to correct such words before parsing. No screenshot of the working microphone was sent.
+
+**Two setup findings for a phone on the local network (development only).** (1) Chrome only allows the microphone on a secure origin, so a phone that opens the dev server over plain HTTP on the local network needs the Chrome flag `unsafely-treat-insecure-origin-as-secure` set to Enabled for that address, followed by a Chrome relaunch (or USB port forwarding, which counts as localhost). (2) Next.js 16 blocks cross-origin development resources from a local network address unless it is listed in `allowedDevOrigins`; without it the page's JavaScript was blocked and the microphone button stayed disabled. A development-only `allowedDevOrigins` line was added to `next.config.ts` for this check; it only affects the development server, a real server does not need it, and the owner can remove it at any time.
+
+**Not reported / not tried.** The owner did not report the other steps of section 3: the preview and corrections, the created draft with its spoken text, Urdu, airplane mode, a wrong key, the simple reader and Voice diagnostics. Which phone model and browser version was used was not stated. These stay untested on a real phone, so T067 stays open.
+
+**Owner decision pending.** The owner will use voice during the trial and decide afterwards whether voice ordering stays; manual typing remains the main way until then. Pull request 7 is not merged until the owner says.
