@@ -124,10 +124,15 @@ test.describe("US2: usual medicines in one tap", () => {
     await seed(freshTenant);
     await signIn(page, freshTenant);
     await open(page);
+    // A quick double tap: the first tap adds the line and the Undo bar pushes the page down, so the second tap may land on
+    // the "On order" card or somewhere else. Either way there must never be two silent lines.
     await cards(page).nth(0).getByTestId("usual-add").dblclick();
     await expect(page.getByTestId("order-line")).toHaveCount(1);
-    await expect(page.getByTestId("add-separate-line")).toBeVisible();
     await page.waitForTimeout(400);
+    await expect(page.getByTestId("order-line")).toHaveCount(1);
+    // A deliberate second tap on the same card shows the existing choice and still adds nothing by itself.
+    await cards(page).nth(0).getByTestId("usual-add").click();
+    await expect(page.getByTestId("add-separate-line")).toBeVisible();
     await expect(page.getByTestId("order-line")).toHaveCount(1);
     await page.getByTestId("add-separate-line").click();
     await expect(page.getByTestId("order-line")).toHaveCount(2);
