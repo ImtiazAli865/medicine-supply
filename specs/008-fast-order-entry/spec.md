@@ -11,6 +11,7 @@
 
 - Q: Does "usual medicines" and "last order" look at every earlier order? → A: Only the same store's orders that are confirmed or later (not draft, not cancelled). "Usual" looks at the last 180 days; "last order" is the most recent such order of any age. (Owner's brief, with the 180-day window as the default.)
 - Q: What does a one-tap on a usual medicine add? → A: One real line with the quantity and unit this store ordered last time, shown on the card before the tap; the quantity can be changed on the card first or on the line afterwards.
+- Q: May "usual" and "repeat" appear when editing a confirmed order? → A: No. They belong to draft orders (and the repeat only while the draft has no lines); the search box that stays on the screen also works when editing a confirmed order.
 - Q: Is the number in "panadol 500" a quantity? → A: Never. Digits typed in the name are part of the search. A quantity is typed only in the quantity field after a result is chosen, or after an explicit "x" (for example "pan x20") once a result is chosen.
 
 ## User Scenarios & Testing *(mandatory)*
@@ -137,7 +138,7 @@ The module must work on day one (no history, no catalog), when the list cannot l
 
 **Usual medicines**
 
-- **FR-008**: The new order screen MUST show, for the chosen store, up to 12 active catalog medicines that appear in that store's confirmed-or-later orders of the last 180 days, most frequent first and ties by most recent; each card MUST show name, strength, dosage form, pack size, manufacturer, and the quantity and unit of that store's most recent line for it.
+- **FR-008**: The screen of a draft order MUST show, for the chosen store, up to 12 active catalog medicines that appear in that store's confirmed-or-later orders of the last 180 days (looking at its 100 most recent such orders at most), most frequent first and ties by most recent; each card MUST show name, strength, dosage form, pack size, manufacturer, and the quantity and unit of that store's most recent line for it.
 - **FR-009**: One tap on a card MUST add one line with the shown quantity and unit (or the quantity the supplier set on the card first with its stepper or quick buttons). Nothing MUST be added, selected or highlighted without a tap.
 - **FR-010**: A medicine already on the order MUST be shown as added on its card, and tapping it MUST open the existing "already on this order" choice (change that line's quantity, or add a separate line); lines MUST NEVER be merged silently.
 - **FR-011**: A store with no qualifying orders MUST see no usual list and no repeat button; the screen MUST show a short note saying that frequent medicines appear after the first confirmed orders, and the search remains.
@@ -151,7 +152,7 @@ The module must work on day one (no history, no catalog), when the list cannot l
 - **FR-016**: A result MUST be highlighted for Enter only when exactly one result remains. When several fit, no result MUST be highlighted or chosen until the supplier taps one or moves to one with the arrow keys; Enter with nothing highlighted MUST add nothing.
 - **FR-017**: Choosing a result MUST clear the search box, keep the keyboard open, show the chosen medicine's details, and put the cursor in the quantity field with 1 shown and selected. Enter (or an add button) MUST add the line and return the cursor to the search box.
 - **FR-018**: Digits typed in the search MUST be part of the search (for example "panadol 500" narrows to the 500 strength) and MUST NEVER be read as a quantity.
-- **FR-019**: A quantity MAY be typed after an explicit "x" (for example "pan x20") only after a result has been chosen; it MUST follow the same rules as FR-020.
+- **FR-019**: A quantity MAY be typed in the search box after an explicit "x" with no space (for example "pan x20"). It MUST be used only when the supplier chooses a result (by tap, or by Enter on a highlighted result), and never to choose one; the chosen line is then added at once with that quantity and an Undo, with no quantity step. If the text including the "x" part finds medicines, it MUST be searched as text and not read as a quantity. It MUST follow the same rules as FR-020.
 - **FR-020**: A quantity MUST be a whole number from 1 to 100,000 and the unit starts from the medicine's own unit (changeable on the line), as in Module 003 (FR-005). An invalid quantity MUST add nothing, state the allowed range, and keep what was typed. Quick-quantity buttons and a stepper MUST only fill the field.
 - **FR-021**: A just-added line MUST show an Undo for a few seconds that removes only that line.
 - **FR-022**: When nothing matches, "Add as typed" MUST be offered inline (Module 003's typed path with the exact name kept, a quantity and a unit), and "None of these, it is a new medicine" MUST stay available whenever there is text, so a medicine can never block an order.
