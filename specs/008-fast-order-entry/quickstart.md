@@ -45,16 +45,16 @@ Record what the owner reports as "reported, not seen" unless a screenshot is sen
 
 | Criterion | Where it is proven |
 |-----------|--------------------|
-| SC-001 repeat in three interactions | e2e `fast-repeat` (counts the clicks from store choice to confirmed) |
-| SC-002 one tap per usual medicine | e2e `fast-usual` (counts clicks for five cards) |
-| SC-003 results within 300 ms for 5,000 medicines | unit benchmark of the filter; e2e `fast-search-scale` (5,000 seeded medicines, timed keystrokes) |
-| SC-004 letters, Enter, quantity, Enter, no dialog, cursor back | e2e `fast-search` (keyboard only; asserts no dialog role appears) |
-| SC-005 no preselection, no silent wrong strength | unit `fast-search` highlight rule; e2e `fast-search-similar` (several strengths of one name) |
-| SC-006 double tap and retry create one draft | e2e `fast-repeat-twice`; integration replay of the repeat save |
-| SC-007 no price, MRP, cost, balance or invoice value | static type test, integration test on the raw JSON of the three routes, e2e network assertion on the new requests |
-| SC-008 two businesses isolated | integration `fast-order-api` (two real tenants, same names, crafted order id) |
-| SC-009 360 px touch targets, five navigation items | e2e `touch-targets` and `shell` extended for the new controls and messages |
-| SC-010 each failure has a message and keeps the order | e2e `fast-states` (list fails, usual fails, repeat fails, save fails, offline) |
+| SC-001 repeat in three interactions (four taps with the existing confirmation question) | e2e `fast-repeat` (counts the taps from store choice to a confirmed order) |
+| SC-002 one tap per usual medicine | e2e `fast-usual` (five cards, five taps, five lines with the shown quantities and units) |
+| SC-003 results within 300 ms for 5,000 medicines | unit `fast-search-bench` (the pure filter); e2e `fast-search-scale` (5,000 seeded medicines, 56 timed keystrokes measured in the page) |
+| SC-004 letters, Enter, quantity, Enter, no dialog, cursor back | e2e `fast-search` (keyboard only; asserts no dialog role appears and the focus returns to the search box) |
+| SC-005 no preselection, no silent wrong strength | unit `fast-search` (highlight rule); e2e `fast-search-similar` (four Panadol variants, the saved product ids are the chosen ones) |
+| SC-006 double tap and retry create one draft and no duplicate line | e2e `fast-repeat-twice` (double tap, blocked save then retry); e2e `fast-usual` (double click on a card); integration `fast-order-api` (replay of the repeat save with the same request id) |
+| SC-007 no price, MRP, cost, balance or invoice value | unit `fast-types` and `fast-no-price` (source scan); integration `fast-order-api` (raw results scanned, with purchase price and MRP present in the database); e2e `fast-repeat` and `fast-search` (response bodies of the new routes) |
+| SC-008 two businesses isolated | integration `fast-order-api` (two real tenants with the same names, crafted store and order ids) |
+| SC-009 360 px touch targets, five navigation items | e2e `fast-touch-targets` and the updated `touch-targets` |
+| SC-010 each failure has a message and keeps the order | e2e `fast-states` (list fails, usual fails, repeat fails, save fails, offline, stale inactive medicine, changed elsewhere) and `fast-usual` |
 | SC-011 owner trial | section 3 above, reported by the owner |
 
 ## 5. Not covered by any automated test
@@ -64,14 +64,39 @@ Record what the owner reports as "reported, not seen" unless a screenshot is sen
 - A catalog or order history larger than the sizes measured in section 6.
 - Offline use (Module 009) and any use of an outside service (none is used).
 
-## 6. Results (filled in when implemented)
+## 6. Results (run on 2026-11-19 against the Supabase TEST project from the developer PC)
 
-Not yet implemented. Nothing in this module has been run or verified.
+The round trip from this PC to the TEST project is about 250 ms per request (median of 12 trivial requests: 248 ms), so the speed figures below include that network time. The owner's own phone check (section 3) has NOT been done: nothing here proves the phone keyboard behaviour or the owner's real speed.
+
+**Baseline before any change (T001)**: `npm run lint` passed. `npm run typecheck` failed only because of a stale, git-ignored generated folder `.next/dev/types` left by an earlier dev server run on the dropped voice branch (it named voice routes that do not exist on this branch); that folder was deleted and typecheck and build pass since. `npm test`: 118 files, 1,223 tests, 1 failed (`import-5000`, "statement timeout" on the test project while other tests were using it) and it passed when run alone.
+
+**Final verification (T056)**:
+
+| Check | Result |
+|-------|--------|
+| `npm run lint` | passed (including the secrets check) |
+| `npm run typecheck` | passed |
+| `npm test` | 127 files, 1,314 tests: 1,312 passed, 2 failed. Both failures are timing tests that depend on network speed: `fast-order-scale` "full load of 5,000 medicines" (more than 5 s in the full run, 2.45 s median when run alone, twice) and `invoices-scale` (Module 006, 60-line invoice issue, 3.99 s against a 2 s goal in the full run, passed when run alone). Passed on rerun alone; flaky under load, not fixed |
+| `npm run build` | passed (run again after the e2e run with the dev settings, so `.next` matches the owner's dev project) |
+| `npm run test:e2e` (mobile and desktop) | 444 passed, 233 skipped (the mobile-only specs on the desktop project), 1 failed: `pending-home` "after registering and pricing everything, Home says nothing needs attention" (Module 004; took 1.5 min in the full run and passed in 51 s when run alone). Flaky under load, not fixed |
+
+New in this module: 9 unit test files (about 83 tests), 2 integration files (18 tests) and 10 e2e specs (37 tests), plus the six older order specs and `touch-targets` updated for the new flow. One older unit test was added for a fix in `autosave.ts` (a stale "Not saved" stayed on screen after the refused change was taken away again).
+
+**Measurements (budgets from research D12)**:
 
 | Measurement | Result | Budget |
 |-------------|--------|--------|
-| Filter time, 5,000 medicines, 8 words | not measured | 20 ms |
-| Keystroke to results, 5,000 medicines (e2e) | not measured | 300 ms (95%) |
-| Full load of 5,000 medicines (TEST) | not measured | 5 s |
-| Usual route, 100 orders of 20 lines (TEST) | not measured | 1.5 s |
-| Repeat route, 200 lines (TEST) | not measured | 1.5 s |
+| Filter time, 5,000 medicines, one-letter query (pure code) | median 1.1 ms, max 6.0 ms | 20 ms |
+| Filter time, 5,000 medicines, 8 words | median 1.3 ms, max 3.4 ms | 20 ms |
+| Keystroke to results in the browser, 5,000 medicines (e2e, 56 keystrokes, measured in the page to the next painted frame) | median 15.6 to 20.6 ms, p95 26.8 to 29.8 ms, max 42.4 ms (two runs) | 300 ms (95%) |
+| Full load of 5,000 medicines (repository level, TEST) | median 2.45 to 2.58 s, max 2.68 s in four runs; one run in the full test suite exceeded 5 s (network) | 5 s |
+| Complete list on the device, from the open order screen in the browser (e2e) | 6.2 s (first results through the server search after 1.5 s) | not a budget; typing works meanwhile |
+| Usual route, 100 orders of 20 lines (TEST) | median 858 to 879 ms, max 967 ms | 1.5 s |
+| Repeat route, 200 lines (TEST) | median 215 to 249 ms, max 296 ms | 1.5 s |
+
+The first version of the usual and repeat reads made seven and six requests one after the other and measured 2.75 s median (3.47 s max) and 1.78 s median (2.20 s max), both over budget. The cause was the number of sequential requests (about 250 ms each), not the database work. They were rewritten to embed the lines in the order request and to run independent requests in parallel, with no migration and no SQL function (the fallback was not needed). A test with 1,200 line rows in the history checks that the embedded lines are not cut at 1,000 rows.
+
+**Checks of the rules (T054 and T055)**: the new code has no mention of purchase price, MRP, cost, margin, profit, balance, invoice or snapshot (checked by `fast-no-price`, which strips comments); no browser storage, no service-role key, no "synced", "pending sync" or "saved on this device" text, no `any` and no `@ts-ignore`, no microphone, speech or AI code, no import of the deleted `MedicineSearch.tsx`; `package.json`, `package-lock.json` and `supabase/migrations` are unchanged; the only write path is the existing autosave and `PUT /api/orders/{id}`; nothing sets an order status; a repeat is one editor change (one save); the highlight, digits and "x" rules exist only in `src/lib/orders/fast-search.ts`.
+
+**Known limits and not verified**: the phone keyboard staying open and the owner's speed against handwriting (section 3, step 4 and 9); a catalog above 6,000 medicines (the cap is tested on the pure reducer only, not in the browser); offline use (Module 009); a catalog or history larger than the sizes measured above. The "too large" mode is covered by unit tests of the reducer only; "Refresh medicines" is covered by an e2e test.
+

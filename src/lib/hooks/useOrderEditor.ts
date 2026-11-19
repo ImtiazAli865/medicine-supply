@@ -6,18 +6,26 @@ import { ClientApiError, fetchJson } from "@/lib/api/client";
 import { newId } from "@/lib/ids";
 import { createAutosave, type Autosave, type SaveOutcome, type SaveRequest } from "@/lib/orders/autosave";
 import {
+  appendLines,
   cleanTypedName,
   emptyState,
   infoForTyped,
   infoFromOrder,
   infoFromProduct,
+  removeLinesById,
   stateFromOrder,
   toSaveInput,
   type EditorState,
   type LineInfo,
 } from "@/lib/orders/editor-state";
+import type { SlimMedicine } from "@/lib/orders/fast-types";
 import type { Order, OrderLineInput, OrderResult } from "@/lib/orders/types";
 import type { Product } from "@/lib/products/types";
+
+/** One line for addLines: a catalog medicine (slim or full) or a typed (not registered) line. */
+export type NewLineEntry =
+  | { kind: "catalog"; medicine: SlimMedicine | Product; quantity: number; unit?: string }
+  | { kind: "typed"; name: string; quantity: number; unit: string };
 
 // Binds the autosave machine (src/lib/orders/autosave.ts) to React for one order.
 
@@ -80,13 +88,39 @@ export function useOrderEditor({ orderId, initialOrder, storeId, mode = "draft" 
   );
 
   const addCatalogLine = useCallback(
-    (product: Product, quantity = 1): string => {
+    (product: SlimMedicine | Product, quantity = 1, unit?: string): string => {
       const id = newId();
       setAdded((prev) => ({ ...prev, [id]: infoFromProduct(product) }));
-      update((s) => ({ ...s, lines: [...s.lines, { id, product_id: product.id, name: null, quantity, unit: product.unit }] }));
+      update((s) => ({ ...s, lines: [...s.lines, { id, product_id: product.id, name: null, quantity, unit: unit ?? product.unit }] }));
       return id;
     },
     [update],
+  );
+
+  /**
+   * Adds many lines in ONE change, so one autosave sends one save: the draft is created with all of them or none.
+   * Returns the ids of the lines that were added and how many entries were refused (200-line limit, invalid quantity).
+   */
+  const addLines = useCallback(
+    (entries: NewLineEntry[]): { ids: string[]; refused: number } => {
+      const infos: Record<string, LineInfo> = {};
+      const inputs: OrderLineInput[] = entries.map((entry) => {
+        const id = newId();
+        if (entry.kind === "catalog") {
+          infos[id] = infoFromProduct(entry.medicine);
+          return { id, product_id: entry.medicine.id, name: null, quantity: entry.quantity, unit: entry.unit ?? entry.medicine.unit };
+        }
+        const clean = cleanTypedName(entry.name);
+        infos[id] = infoForTyped(clean);
+        return { id, product_id: null, name: clean, quantity: entry.quantity, unit: entry.unit.trim() };
+      });
+      const result = appendLines(machine.getLocalState(), inputs);
+      if (result.added.length === 0) return { ids: [], refused: result.refused };
+      setAdded((prev) => ({ ...prev, ...Object.fromEntries(result.added.map((l) => [l.id, infos[l.id]!])) }));
+      machine.edit(result.state);
+      return { ids: result.added.map((l) => l.id), refused: result.refused };
+    },
+    [machine],
   );
 
   const addTypedLine = useCallback(
@@ -115,6 +149,10 @@ export function useOrderEditor({ orderId, initialOrder, storeId, mode = "draft" 
   );
 
   const removeLine = useCallback((id: string) => update((s) => ({ ...s, lines: s.lines.filter((l) => l.id !== id) })), [update]);
+  /** The lines as the editor has them right now (not as of the last render). */
+  const getLines = useCallback(() => machine.getLocalState().lines, [machine]);
+  /** Removes exactly these lines in one change (used by Undo). */
+  const removeLines = useCallback((ids: readonly string[]) => update((s) => removeLinesById(s, ids)), [update]);
   const setNotes = useCallback((notes: string) => update((s) => ({ ...s, notes })), [update]);
   const setStore = useCallback((newStoreId: string) => update((s) => ({ ...s, storeId: newStoreId })), [update]);
 
@@ -258,9 +296,12 @@ export function useOrderEditor({ orderId, initialOrder, storeId, mode = "draft" 
     epoch,
     serverOrder: snapshot.serverOrder,
     addCatalogLine,
+    addLines,
+    getLines,
     addTypedLine,
     updateLine,
     removeLine,
+    removeLines,
     setNotes,
     setStore,
     confirm,

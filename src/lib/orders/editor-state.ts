@@ -1,4 +1,4 @@
-import type { Product } from "@/lib/products/types";
+import type { SlimMedicine } from "./fast-types";
 import type { Order, OrderLine, OrderLineInput, OrderSaveInput, PriceBasis } from "./types";
 
 // The state the order screen edits and autosaves, plus what the screen needs to display each line.
@@ -64,8 +64,11 @@ export function infoFromOrder(order: Order): Record<string, LineInfo> {
   return Object.fromEntries(order.lines.map((l) => [l.id, infoFromLine(l)]));
 }
 
+/** The fields of a medicine the order screen shows; both a full product and the slim shape of Module 008 have them. */
+export type ProductInfoSource = Pick<SlimMedicine, "name" | "strength" | "dosage_form" | "pack_size" | "manufacturer" | "selling_price">;
+
 /** Display info for a line the person just added from the catalog (the live price is shown as current). */
-export function infoFromProduct(product: Product): LineInfo {
+export function infoFromProduct(product: ProductInfoSource): LineInfo {
   return {
     name: product.name,
     typed_name: null,
@@ -123,4 +126,28 @@ export function repeatedTypedLineIds(state: EditorState, info: Record<string, Li
   const repeated = new Set<string>();
   for (const ids of byName.values()) if (ids.length > 1) for (const id of ids) repeated.add(id);
   return repeated;
+}
+
+/**
+ * Adds several lines in one change (so one autosave sends one save). Lines beyond the 200-line limit and lines with an
+ * invalid quantity are refused and counted, never added silently wrong. The line ids are made by the caller on the device.
+ */
+export function appendLines(state: EditorState, entries: OrderLineInput[]): { state: EditorState; added: OrderLineInput[]; refused: number } {
+  const room = Math.max(0, LIMITS.lines - state.lines.length);
+  const added: OrderLineInput[] = [];
+  let refused = 0;
+  for (const entry of entries) {
+    if (added.length >= room || !isValidQuantity(entry.quantity)) {
+      refused += 1;
+      continue;
+    }
+    added.push(entry);
+  }
+  return { state: { ...state, lines: [...state.lines, ...added] }, added, refused };
+}
+
+/** Removes exactly the lines with these ids (an id that is not on the order is ignored). */
+export function removeLinesById(state: EditorState, ids: readonly string[]): EditorState {
+  const drop = new Set(ids);
+  return { ...state, lines: state.lines.filter((l) => !drop.has(l.id)) };
 }

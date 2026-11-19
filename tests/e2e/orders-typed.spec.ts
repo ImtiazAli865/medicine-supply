@@ -6,16 +6,15 @@ test.describe("US3: typed (not registered) lines", () => {
   test.skip(({ viewport }) => !viewport || viewport.width > 400, "mobile project only");
 
   async function addTyped(page: import("@playwright/test").Page, text: string, quantity: string, unit: string, viaNoneOfThese = false) {
-    await page.getByTestId("add-medicine").click();
-    const dialog = page.getByRole("dialog");
-    await dialog.getByLabel("Search medicines").fill(text);
-    await dialog.getByTestId("add-as-typed").click();
-    if (viaNoneOfThese) await expect(dialog.getByLabel("Medicine name")).toHaveValue(text);
-    await dialog.getByLabel("Medicine name").fill(text);
-    await dialog.getByLabel("Quantity").fill(quantity);
-    await dialog.getByLabel("Unit").fill(unit);
-    await dialog.getByTestId("add-typed-line").click();
-    await expect(dialog).toBeHidden();
+    await page.getByTestId("fast-search").fill(text);
+    await page.getByTestId("add-as-typed").click();
+    const form = page.getByTestId("typed-form");
+    if (viaNoneOfThese) await expect(form.getByLabel("Medicine name")).toHaveValue(text);
+    await form.getByLabel("Medicine name").fill(text);
+    await form.getByLabel("Quantity").fill(quantity);
+    await form.getByLabel("Unit").fill(unit);
+    await form.getByTestId("add-typed-line").click();
+    await expect(form).toBeHidden();
   }
 
   test("a brand-new business with no medicines and no stores can take and confirm a full order of typed lines", async ({ page, freshTenant }) => {
@@ -54,17 +53,16 @@ test.describe("US3: typed (not registered) lines", () => {
     await seedStore(freshTenant);
     await signIn(page, freshTenant);
     await startOrder(page, "Al Shifa Pharmacy");
-    await page.getByTestId("add-medicine").click();
-    const dialog = page.getByRole("dialog");
-    await dialog.getByLabel("Search medicines").fill("panadol");
-    await expect(dialog.getByTestId("medicine-result")).toHaveCount(1);
-    await expect(dialog.getByTestId("add-as-typed")).toHaveText("None of these, it is a new medicine");
-    await dialog.getByTestId("add-as-typed").click();
-    await expect(dialog.getByLabel("Medicine name")).toHaveValue("panadol");
-    await dialog.getByLabel("Medicine name").fill("Panadol Special");
-    await dialog.getByLabel("Quantity").fill("4");
-    await dialog.getByLabel("Unit").fill("box");
-    await dialog.getByTestId("add-typed-line").click();
+    await page.getByTestId("fast-search").fill("panadol");
+    await expect(page.getByTestId("medicine-result")).toHaveCount(1);
+    await expect(page.getByTestId("add-as-typed")).toHaveText("None of these, it is a new medicine");
+    await page.getByTestId("add-as-typed").click();
+    const form = page.getByTestId("typed-form");
+    await expect(form.getByLabel("Medicine name")).toHaveValue("panadol");
+    await form.getByLabel("Medicine name").fill("Panadol Special");
+    await form.getByLabel("Quantity").fill("4");
+    await form.getByLabel("Unit").fill("box");
+    await form.getByTestId("add-typed-line").click();
     await expect(page.getByText("Not registered")).toHaveCount(1);
     await waitSaved(page);
     const stored = await freshTenant.client.from("order_lines").select("product_id, name");
@@ -75,14 +73,13 @@ test.describe("US3: typed (not registered) lines", () => {
     await seedStore(freshTenant);
     await signIn(page, freshTenant);
     await startOrder(page, "Al Shifa Pharmacy");
-    await page.getByTestId("add-medicine").click();
-    const dialog = page.getByRole("dialog");
-    await dialog.getByLabel("Search medicines").fill("پینا ڈول 500mg");
-    await expect(dialog.getByTestId("add-as-typed")).toContainText("Add as typed");
-    await dialog.getByTestId("add-as-typed").click();
-    await dialog.getByLabel("Quantity").fill("2");
-    await dialog.getByLabel("Unit").fill("strip");
-    await dialog.getByTestId("add-typed-line").click();
+    await page.getByTestId("fast-search").fill("پینا ڈول 500mg");
+    await expect(page.getByTestId("add-as-typed")).toContainText("Add as typed");
+    await page.getByTestId("add-as-typed").click();
+    const form = page.getByTestId("typed-form");
+    await form.getByLabel("Quantity").fill("2");
+    await form.getByLabel("Unit").fill("strip");
+    await form.getByTestId("add-typed-line").click();
     await waitSaved(page);
     await page.reload();
     await expect(page.getByLabel("Medicine name")).toHaveValue("پینا ڈول 500mg");

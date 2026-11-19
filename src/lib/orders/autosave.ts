@@ -245,7 +245,12 @@ export function createAutosave<S, O>(
       }
       if (pending === null && equals(local, confirmed)) {
         clearTimer();
-        if (status === "pending") status = lastSavedAt ? "saved" : "idle";
+        // The screen is back to exactly what the server has (for example after Undo or removing the line that could not be
+        // saved): there is nothing unsaved any more, so a stale "Not saved" must not stay on screen.
+        if (status === "pending" || status === "not_saved") {
+          status = lastSavedAt ? "saved" : "idle";
+          error = null;
+        }
         notify();
         settle();
         return;

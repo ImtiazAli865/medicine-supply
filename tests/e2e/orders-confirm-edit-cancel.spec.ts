@@ -1,4 +1,4 @@
-import { createOrder, line, seedMedicines, seedStore } from "./orders-helpers";
+import { addMedicine, createOrder, line, seedMedicines, seedStore } from "./orders-helpers";
 import { expect, signIn, test } from "./fixtures";
 
 // US6: editing a confirmed order in place, its change history, and cancelling.
@@ -29,10 +29,7 @@ test.describe("US6: edit or cancel a confirmed order", () => {
 
     await line(page, 0).getByLabel("Quantity").fill("4");
     await expect(page.getByTestId("save-status")).toContainText("You have unsaved changes");
-    await page.getByTestId("add-medicine").click();
-    const dialog = page.getByRole("dialog");
-    await dialog.getByLabel("Search medicines").fill("brufen");
-    await dialog.getByTestId("medicine-result").first().click();
+    await addMedicine(page, "brufen");
     await expect(page.getByText("Price recorded when you save")).toBeVisible();
     await page.getByRole("button", { name: "Remove Typed Item" }).click();
     await page.getByTestId("remove-line-yes").click();

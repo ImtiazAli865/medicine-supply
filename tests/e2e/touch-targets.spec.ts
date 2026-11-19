@@ -76,14 +76,13 @@ test.describe("order screens at 360 px", () => {
     // the open dialogs: medicine search, typed form, and the edit screen of a confirmed order
     await page.goto(`/orders/${draft.id}`);
     await page.waitForLoadState("networkidle");
-    await page.getByTestId("add-medicine").click();
-    await expect(page.getByRole("dialog").getByTestId("medicine-result").first()).toBeVisible();
+    await page.getByTestId("fast-search").fill("a");
+    await expect(page.getByTestId("medicine-result").first()).toBeVisible();
     expect(await smallTargets(page), "small targets in the medicine search").toEqual([]);
-    await page.getByRole("dialog").getByLabel("Search medicines").fill("nothing matches this");
+    await page.getByTestId("fast-search").fill("nothing matches this");
     await page.getByTestId("add-as-typed").click();
-    await expect(page.getByRole("dialog").getByLabel("Medicine name")).toBeVisible();
+    await expect(page.getByTestId("typed-form").getByLabel("Medicine name")).toBeVisible();
     expect(await smallTargets(page), "small targets in the typed form").toEqual([]);
-    await page.keyboard.press("Escape");
 
     await page.goto(`/orders/${confirmed.id}`);
     await page.getByTestId("edit-order").click();

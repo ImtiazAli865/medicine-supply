@@ -38,13 +38,20 @@ export async function startOrder(page: Page, storeName: string): Promise<void> {
   await expect(page.getByTestId("order-store")).toContainText(storeName);
 }
 
-/** Searches the catalog in the "Add medicine" dialog and picks the first result that contains `name`. */
-export async function addMedicine(page: Page, search: string, name = search): Promise<void> {
-  await page.getByTestId("add-medicine").click();
-  const dialog = page.getByRole("dialog");
-  await dialog.getByLabel("Search medicines").fill(search);
-  await dialog.getByTestId("medicine-result").filter({ hasText: name }).first().click();
-  await expect(dialog).toBeHidden();
+/**
+ * Types in the search box that stays on the order screen, taps the first result that contains `name`, and adds the line
+ * with Enter in the quantity box (quantity 1 unless one is given). The cursor is back in the search box afterwards, except
+ * when the medicine was already on the order (the existing line is focused then).
+ */
+export async function addMedicine(page: Page, search: string, name = search, quantity?: string): Promise<void> {
+  const box = page.getByTestId("fast-search");
+  await box.fill(search);
+  await page.getByTestId("medicine-result").filter({ hasText: name }).first().click();
+  const quantityBox = page.getByTestId("fast-quantity");
+  await expect(page.getByTestId("fast-chosen")).toBeVisible();
+  if (quantity !== undefined) await quantityBox.fill(quantity);
+  await quantityBox.press("Enter");
+  await expect(box).toHaveValue("");
 }
 
 export function line(page: Page, index: number): Locator {
