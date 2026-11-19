@@ -12,7 +12,7 @@
 - Q: Does "usual medicines" and "last order" look at every earlier order? → A: Only the same store's orders that are confirmed or later (not draft, not cancelled). "Usual" looks at the last 180 days; "last order" is the most recent such order of any age. (Owner's brief, with the 180-day window as the default.)
 - Q: What does a one-tap on a usual medicine add? → A: One real line with the quantity and unit this store ordered last time, shown on the card before the tap; the quantity can be changed on the card first or on the line afterwards.
 - Q: May "usual" and "repeat" appear when editing a confirmed order? → A: No. They belong to draft orders (and the repeat only while the draft has no lines); the search box that stays on the screen also works when editing a confirmed order.
-- Q: Is the number in "panadol 500" a quantity? → A: Never. Digits typed in the name are part of the search. A quantity is typed only in the quantity field after a result is chosen, or after an explicit "x" (for example "pan x20") once a result is chosen.
+- Q: Is the number in "panadol 500" a quantity? → A: Never. Digits typed in the name are part of the search. A quantity is typed only in the quantity field after a result is chosen, or after an explicit "x" in the search box (for example "pan x20"), which is used only when the supplier then chooses a result.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -77,15 +77,15 @@ The supplier types a few letters, picks a medicine, types the quantity, presses 
 
 ### User Story 4 - Quantity shortcuts without mistakes (Priority: P2)
 
-For speed, a quantity can follow the name with an explicit "x" after a medicine has been chosen, and the quantity field offers quick buttons; the supplier is never surprised.
+For speed, a quantity can follow the name in the search box with an explicit "x" (it is used only when the supplier then chooses a result), and the quantity field offers quick buttons; the supplier is never surprised.
 
 **Why this priority**: Saves a few more seconds per line but the three stories above already work without it.
 
-**Independent Test**: Choose a medicine and type "x20", then Enter; check a line with quantity 20. Type "x0" and "x100001": both refused with a message and nothing added.
+**Independent Test**: Type "pan x20" in the search box and choose the result (or press Enter on a single highlighted result); check a line with quantity 20 added at once. Type "pan x0" and "pan x100001" and choose a result: both refused with a message and nothing added.
 
 **Acceptance Scenarios**:
 
-1. **Given** a chosen medicine, **When** the supplier types "x20" in the quantity field and presses Enter, **Then** the line has quantity 20.
+1. **Given** text such as "pan x20" in the search box that finds no medicine as text, **When** the supplier taps a result (or presses Enter on a single highlighted result), **Then** the line is added at once with quantity 20 and an Undo, with no quantity step; the quantity box itself accepts only a plain whole number (FR-019, FR-020).
 2. **Given** an invalid quantity (empty, zero, negative, a fraction, above 100,000), **When** the supplier presses Enter, **Then** nothing is added, the message states the allowed range, and what was typed is kept.
 3. **Given** the quantity field, **When** the supplier taps a quick button (for example 5, 10, 20, 50) or the stepper, **Then** the field shows that value and nothing is added until Enter or the add button.
 4. **Given** the order has 200 lines, **When** the screen shows the search and the usual cards, **Then** adding is disabled and the limit is stated (as in Module 003).
@@ -180,7 +180,7 @@ The module must work on day one (no history, no catalog), when the list cannot l
 
 ### Measurable Outcomes
 
-- **SC-001**: A five-line repeat order for a store with history needs three interactions (choose the store, tap the repeat button, confirm), with no typing, and the supplier's own time for it is under 15 seconds when no quantity is changed.
+- **SC-001**: A five-line repeat order for a store with history needs three interactions (choose the store, tap the repeat button, confirm; the existing confirmation question of Module 003 counts as part of confirm, so it is four taps), with no typing, and the supplier's own time for it is under 15 seconds when no quantity is changed.
 - **SC-002**: Adding a usual medicine takes one tap; adding five usual medicines takes five taps.
 - **SC-003**: For a catalog of 5,000 medicines, search results show within 300 ms of a keystroke for at least 95% of keystrokes, measured in an automated test on the test project's data volume.
 - **SC-004**: A searched medicine is added using only letters, one tap or Enter, a quantity and Enter, with no pop-up opening or closing, and the cursor is back in the search box afterwards (verified by automated tests that count taps and keys).
