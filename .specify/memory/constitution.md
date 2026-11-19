@@ -1,5 +1,11 @@
 <!--
 Sync Impact Report
+Version change: 1.0.0 -> 1.0.1 (PATCH, amended 2026-11-19 with the owner's explicit approval)
+Reason: voice ordering was dropped from Module 008 (PR #7 closed, branch 008-voice-order-gemini
+  kept); Module 008 is now "fast order entry". Only the module list in "Development Workflow
+  & Quality Gates" changed. No principle was added, removed or redefined (Principle VI stays as
+  it is for any future AI use). No migration or code is affected.
+Earlier report (1.0.0):
 Version change: (template, unversioned) -> 1.0.0
 Modified principles: none renamed (initial ratification; all principles newly defined)
 Added sections: Core Principles I-VIII, Technical Constraints & Fixed Decisions,
@@ -153,7 +159,10 @@ be completed MUST be reported as a limitation, never replaced silently by a stub
 - Work proceeds module by module; each module is finished, tested and shown before the
   next starts: 001 login, products, stores; 002 setup/import; 003 manual orders;
   004 pending products; 005 market list/purchases; 006 invoices; 007 khata/payments;
-  008 voice; 009 offline/sync; 010 reports; 011 hardening. Earlier modules MUST use
+  008 fast order entry; 009 offline/sync; 010 reports; 011 hardening. Voice ordering was
+  dropped from Module 008 by the owner on 2026-11-19 (its work is kept on the branch
+  `008-voice-order-gemini` and may return as a later module, which then needs its own
+  spec and the owner's approval). Earlier modules MUST use
   client-generated UUIDs and `business_id` so later modules need no rework.
 - Spec Kit flow per module: spec, plan, tasks, implement. Each plan's Constitution Check
   MUST verify Principles I-VIII. A PHR is recorded for every user prompt; ADRs are
@@ -177,4 +186,4 @@ clarifications. Every plan and review MUST check compliance with Principles I-VI
 any justified deviation is recorded in the plan's Complexity Tracking. Runtime guidance
 for the agent lives in `CLAUDE.md`.
 
-**Version**: 1.0.0 | **Ratified**: 2026-11-05 | **Last Amended**: 2026-11-05
+**Version**: 1.0.1 | **Ratified**: 2026-11-05 | **Last Amended**: 2026-11-19

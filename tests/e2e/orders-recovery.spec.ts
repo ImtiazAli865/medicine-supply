@@ -167,7 +167,7 @@ test.describe("US2: automatic draft saving", () => {
     // nothing was saved yet, so the screen starts over with the other store
     await expect(page).toHaveURL(/\/orders\/[0-9a-f-]{36}\?store=/);
     await expect(page.getByTestId("order-store")).toContainText("Store Two");
-    await expect(page.getByTestId("add-medicine")).toBeEnabled();
+    await expect(page.getByTestId("fast-search")).toBeEnabled();
 
     await addMedicine(page, "panadol");
     await waitSaved(page);

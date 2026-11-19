@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { expect, signIn, test } from "./fixtures";
-import { seedStore } from "./orders-helpers";
+import { addMedicine, seedStore } from "./orders-helpers";
 
 // SC-001 (automated proxy): a typical 10-line order, from "New order" to the confirmed screen, with a catalog
 // of 500 medicines. This measures the app at its own speed (the browser fills fields instantly); a person on a
@@ -28,12 +28,8 @@ test.describe("SC-001: a 10-line order with a 500-medicine catalog", () => {
     await page.getByTestId("store-option").filter({ hasText: "Al Shifa Pharmacy" }).click();
     for (let n = 1; n <= 10; n++) {
       const name = `Medicine ${String(n * 7).padStart(3, "0")}`;
-      await page.getByTestId("add-medicine").click();
-      const dialog = page.getByRole("dialog");
-      await dialog.getByLabel("Search medicines").fill(name);
-      await dialog.getByTestId("medicine-result").filter({ hasText: name }).first().click();
-      await expect(dialog).toBeHidden();
-      await page.getByTestId("order-line").nth(n - 1).getByLabel("Quantity").fill(String(n + 1));
+      await addMedicine(page, name, name, String(n + 1));
+      await expect(page.getByTestId("order-line")).toHaveCount(n);
     }
     await page.getByTestId("confirm-order").click();
     await page.getByTestId("confirm-order-yes").click();

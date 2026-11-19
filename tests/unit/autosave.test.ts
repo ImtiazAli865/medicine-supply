@@ -106,6 +106,19 @@ describe("debounce and coalescing", () => {
     expect(machine.getSnapshot().isDirty).toBe(false);
   });
 
+  it("clears a stale Not saved when the screen goes back to exactly what the server has (Undo, or removing the refused line)", async () => {
+    server.script = ["fail-400"];
+    const machine = setup({ state: { notes: "x" }, version: 2 });
+    machine.edit({ notes: "x plus a line the server refuses" });
+    await vi.advanceTimersByTimeAsync(800);
+    expect(machine.getSnapshot()).toMatchObject({ status: "not_saved", isDirty: true });
+    machine.edit({ notes: "x" }); // the refused change is taken away again
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(machine.getSnapshot()).toMatchObject({ isDirty: false, error: null });
+    expect(machine.getSnapshot().status).not.toBe("not_saved");
+    expect(server.calls).toHaveLength(1); // nothing more needed to be sent
+  });
+
   it("starts idle and clean when an existing order is opened", () => {
     const machine = setup({ state: { notes: "x" }, version: 2 }, {});
     expect(machine.getSnapshot()).toMatchObject({ status: "idle", isDirty: false, version: 2 });

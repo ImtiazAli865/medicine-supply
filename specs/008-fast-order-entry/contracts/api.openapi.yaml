@@ -1,0 +1,134 @@
+openapi: 3.0.3
+info:
+  title: Fast order entry (Module 008) - read routes
+  version: 1.0.0
+  description: >
+    Three read-only routes used by the order screen. All run as the signed-in user (Row Level Security applies), return
+    JSON, and send "Cache-Control: private, no-store". None returns a purchase price, MRP, cost, margin, profit,
+    balance or invoice value. Orders are still created and changed only by PUT /api/orders/{id} (Module 003).
+paths:
+  /api/orders/medicines:
+    get:
+      summary: Active medicines, slim shape. Without q it pages the whole active catalog; with q it is a server search.
+      parameters:
+        - { name: q, in: query, required: false, schema: { type: string, maxLength: 200 } }
+        - { name: limit, in: query, required: false, schema: { type: integer, minimum: 1, maximum: 900, default: 900 }, description: 'With q the limit is at most 30.' }
+        - { name: cursor, in: query, required: false, schema: { type: string } }
+      responses:
+        '200':
+          description: One page, ordered by name then id.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, next_cursor]
+                properties:
+                  items: { type: array, items: { $ref: '#/components/schemas/SlimMedicine' } }
+                  next_cursor: { type: string, nullable: true }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+  /api/orders/usual:
+    get:
+      summary: The store's usual medicines (up to 12) and its repeat source.
+      parameters:
+        - { name: store_id, in: query, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: Both parts are empty or null for a store with no confirmed or fulfilled orders.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [usual, source]
+                properties:
+                  usual: { type: array, maxItems: 12, items: { $ref: '#/components/schemas/UsualMedicine' } }
+                  source: { nullable: true, allOf: [ { $ref: '#/components/schemas/RepeatSource' } ] }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+  /api/orders/repeat:
+    get:
+      summary: The lines to copy from the store's last order, and what had to be left out.
+      parameters:
+        - { name: store_id, in: query, required: true, schema: { type: string, format: uuid } }
+        - { name: order_id, in: query, required: true, schema: { type: string, format: uuid }, description: 'The source order shown on the button.' }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [lines, skipped]
+                properties:
+                  lines: { type: array, maxItems: 200, items: { $ref: '#/components/schemas/RepeatLine' } }
+                  skipped: { type: array, items: { $ref: '#/components/schemas/SkippedLine' } }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404':
+          description: The order does not exist for this business, is not of this store, or is not confirmed or fulfilled (one answer for all three).
+components:
+  schemas:
+    SlimMedicine:
+      type: object
+      required: [id, name, unit, brand, generic_name, strength, dosage_form, manufacturer, pack_size, sku, selling_price]
+      additionalProperties: false
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        unit: { type: string }
+        brand: { type: string, nullable: true }
+        generic_name: { type: string, nullable: true }
+        strength: { type: string, nullable: true }
+        dosage_form: { type: string, nullable: true }
+        manufacturer: { type: string, nullable: true }
+        pack_size: { type: string, nullable: true }
+        sku: { type: string, nullable: true }
+        selling_price: { type: string, nullable: true, description: 'Decimal string with two places, or null.' }
+    UsualMedicine:
+      type: object
+      required: [medicine, order_count, last_ordered_at, last_quantity, last_unit]
+      additionalProperties: false
+      properties:
+        medicine: { $ref: '#/components/schemas/SlimMedicine' }
+        order_count: { type: integer, minimum: 1 }
+        last_ordered_at: { type: string, format: date-time }
+        last_quantity: { type: integer, minimum: 1, maximum: 100000 }
+        last_unit: { type: string }
+    RepeatSource:
+      type: object
+      required: [order_id, order_number, confirmed_at, line_count]
+      additionalProperties: false
+      properties:
+        order_id: { type: string, format: uuid }
+        order_number: { type: integer }
+        confirmed_at: { type: string, format: date-time }
+        line_count: { type: integer, minimum: 0 }
+    RepeatLine:
+      oneOf:
+        - type: object
+          required: [kind, medicine, quantity, unit]
+          additionalProperties: false
+          properties:
+            kind: { type: string, enum: [catalog] }
+            medicine: { $ref: '#/components/schemas/SlimMedicine' }
+            quantity: { type: integer, minimum: 1, maximum: 100000 }
+            unit: { type: string }
+        - type: object
+          required: [kind, name, quantity, unit]
+          additionalProperties: false
+          properties:
+            kind: { type: string, enum: [typed] }
+            name: { type: string }
+            quantity: { type: integer, minimum: 1, maximum: 100000 }
+            unit: { type: string }
+    SkippedLine:
+      type: object
+      required: [name, reason]
+      additionalProperties: false
+      properties:
+        name: { type: string }
+        reason: { type: string, enum: [inactive, missing, over_limit] }
+  responses:
+    ValidationError:
+      description: Same error body as every other route (code validation_error, fields).
+    Unauthenticated:
+      description: No valid session (same handling as the other routes).

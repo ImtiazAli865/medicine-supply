@@ -54,7 +54,7 @@ test.describe("US1: take a manual order", () => {
     await signIn(page, freshTenant);
     await page.goto("/orders/new");
     await expect(page.getByTestId("store-option")).toHaveCount(1);
-    await expect(page.getByTestId("add-medicine")).toHaveCount(0);
+    await expect(page.getByTestId("fast-search")).toHaveCount(0);
     await expect(page.getByTestId("confirm-order")).toHaveCount(0);
   });
 
@@ -106,11 +106,10 @@ test.describe("US1: take a manual order", () => {
     await seedStore(freshTenant);
     await signIn(page, freshTenant);
     await startOrder(page, "Al Shifa Pharmacy");
-    await page.getByTestId("add-medicine").click();
-    const dialog = page.getByRole("dialog");
-    await expect(dialog.getByTestId("catalog-empty")).toContainText("Your catalog is empty");
-    await expect(dialog.getByRole("link", { name: "Add a medicine" })).toBeVisible();
-    await expect(dialog.getByTestId("add-as-typed")).toBeVisible();
+    await expect(page.getByTestId("catalog-empty")).toContainText("Your catalog is empty");
+    await expect(page.getByRole("link", { name: "Add a medicine" })).toBeVisible();
+    await expect(page.getByRole("link", { name: "Import a list" })).toBeVisible();
+    await expect(page.getByTestId("add-as-typed")).toBeVisible();
   });
 
   test("an invalid quantity is flagged on the line and blocks Confirm until it is fixed", async ({ page, freshTenant }) => {

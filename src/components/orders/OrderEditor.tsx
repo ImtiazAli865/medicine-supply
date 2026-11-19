@@ -1,14 +1,17 @@
 "use client";
 
-import { Plus } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { CancelOrderDialog } from "@/components/orders/CancelOrderDialog";
 import { ConfirmOrderDialog } from "@/components/orders/ConfirmOrderDialog";
-import { MedicineSearch } from "@/components/orders/MedicineSearch";
+import { FastAdd } from "@/components/orders/FastAdd";
+import { LastOrderChecklist } from "@/components/orders/LastOrderChecklist";
 import { OrderLineRow } from "@/components/orders/OrderLineRow";
 import { OrderStatusBadge } from "@/components/orders/OrderStatusBadge";
+import { RepeatLastOrder } from "@/components/orders/RepeatLastOrder";
+import { UndoBar, type UndoAction } from "@/components/orders/UndoBar";
+import { UsualMedicines } from "@/components/orders/UsualMedicines";
 import { PendingLineActions } from "@/components/pending/PendingLineActions";
 import { usePendingProposals } from "@/components/pending/ProposalsFlow";
 import { OrderTotals } from "@/components/orders/OrderTotals";
@@ -18,8 +21,11 @@ import { Button } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
 import { Banner } from "@/components/ui/States";
 import { ClientApiError } from "@/lib/api/client";
-import { useOrderEditor } from "@/lib/hooks/useOrderEditor";
+import { useOrderEditor, type NewLineEntry } from "@/lib/hooks/useOrderEditor";
+import { useInactiveLines } from "@/lib/hooks/useInactiveLines";
+import { useUsualMedicines } from "@/lib/hooks/useUsualMedicines";
 import { LIMITS, repeatedTypedLineIds } from "@/lib/orders/editor-state";
+import type { RepeatLine, RepeatPlan, RepeatSource, SlimMedicine, UsualMedicine } from "@/lib/orders/fast-types";
 import { formatOrderNumber } from "@/lib/orders/number";
 import type { Order } from "@/lib/orders/types";
 import type { Product } from "@/lib/products/types";
@@ -61,12 +67,15 @@ export function OrderEditor({
   const editor = useOrderEditor({ orderId, initialOrder, storeId, mode });
   const { state, snapshot, info } = editor;
   const proposals = usePendingProposals(orderId, (order) => editor.adoptServerOrder(order));
+  // Usual medicines and the repeat source belong to the chosen store of a draft (never to a confirmed order being edited).
+  const usual = useUsualMedicines(mode === "edit" ? null : state.storeId);
+  const [undo, setUndo] = useState<UndoAction | null>(null);
+  const undoKey = useRef(0);
 
   const [storeName, setStoreName] = useState(initialStoreName);
-  const [searchOpen, setSearchOpen] = useState(false);
   const [storeOpen, setStoreOpen] = useState(false);
   const [focusLine, setFocusLine] = useState<string | null>(null);
-  const [duplicate, setDuplicate] = useState<{ lineId: string; product: Product } | null>(null);
+  const [duplicate, setDuplicate] = useState<{ lineId: string; product: SlimMedicine | Product; quantity: number; unit?: string } | null>(null);
   const [invalid, setInvalid] = useState<Set<string>>(() => new Set());
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [discardOpen, setDiscardOpen] = useState(false);
@@ -91,29 +100,64 @@ export function OrderEditor({
   const atLineLimit = state.lines.length >= LIMITS.lines;
   const hasLines = state.lines.length > 0;
   const repeated = repeatedTypedLineIds(state, info);
+  const onOrderIds = useMemo(() => new Set(state.lines.flatMap((l) => (l.product_id ? [l.product_id] : []))), [state.lines]);
   const unpriced = state.lines.filter((l) => (info[l.id]?.selling_price ?? null) === null).length;
   const notRegistered = state.lines.filter((l) => l.product_id === null).length;
   const conflict = snapshot.status === "changed_elsewhere";
+  // A save refused because a medicine added on this screen became inactive: name the lines and offer to remove them.
+  const inactiveRefused = !editing && snapshot.status === "not_saved" && /inactive/i.test(snapshot.error ?? "");
+  const savedLineIds = new Set((snapshot.serverOrder?.lines ?? []).map((l) => l.id));
+  const addedCatalogLines = state.lines
+    .filter((l) => l.product_id !== null && !savedLineIds.has(l.id))
+    .map((l) => ({ id: l.id, product_id: l.product_id as string, name: info[l.id]?.name ?? "Medicine" }));
+  const inactiveLines = useInactiveLines(inactiveRefused, addedCatalogLines);
   const canConfirm = hasLines && invalid.size === 0 && !conflict;
   const canSaveChanges = snapshot.isDirty && invalid.size === 0 && !conflict;
 
-  function pickProduct(product: Product) {
-    setSearchOpen(false);
-    const existing = state.lines.find((l) => l.product_id === product.id);
+  const showUndo = useCallback((label: string, lineIds: string[]) => {
+    undoKey.current += 1;
+    setUndo({ key: undoKey.current, label, lineIds });
+  }, []);
+  const dismissUndo = useCallback(() => setUndo(null), []);
+
+  /** Lines of the last order (Repeat, or the chosen rows of the checklist): all in one change (one save), then one Undo for exactly those lines. */
+  function addFromLastOrder(lines: RepeatLine[], source: RepeatSource): { added: number; refused: number } {
+    const entries: NewLineEntry[] = lines.map((l) =>
+      l.kind === "catalog" ? { kind: "catalog", medicine: l.medicine, quantity: l.quantity, unit: l.unit } : { kind: "typed", name: l.name, quantity: l.quantity, unit: l.unit },
+    );
+    const { ids, refused } = editor.addLines(entries);
+    if (ids.length > 0) showUndo(`Added ${ids.length} ${ids.length === 1 ? "line" : "lines"} from ${formatOrderNumber(source.order_number)}.`, ids);
+    return { added: ids.length, refused };
+  }
+  const applyRepeat = (plan: RepeatPlan, source: RepeatSource) => addFromLastOrder(plan.lines, source);
+
+  /**
+   * Adds one catalog medicine. A medicine already on the order is never merged silently: the existing line is shown and
+   * the person chooses. The check reads the editor's current lines (not the last render), so a quick double tap cannot
+   * add two silent lines.
+   */
+  function pickProduct(product: SlimMedicine | Product, options: { quantity?: number; unit?: string; focus?: boolean; announce?: boolean } = {}) {
+    const quantity = options.quantity ?? 1;
+    const existing = editor.getLines().find((l) => l.product_id === product.id);
     if (existing) {
-      // Never merge silently: show the existing line and let the person choose.
-      setDuplicate({ lineId: existing.id, product });
+      setDuplicate({ lineId: existing.id, product, quantity, unit: options.unit });
       setFocusLine(existing.id);
       return;
     }
     setDuplicate(null);
-    setFocusLine(editor.addCatalogLine(product));
+    const id = editor.addCatalogLine(product, quantity, options.unit);
+    if (options.focus !== false && !options.announce) setFocusLine(id);
+    if (options.announce) showUndo(`Added ${product.name}.`, [id]);
+  }
+
+  function addUsual(item: UsualMedicine, quantity: number, unit: string) {
+    pickProduct(item.medicine, { quantity, unit, announce: true });
   }
 
   function pickTyped(name: string, quantity: number, unit: string) {
-    setSearchOpen(false);
     setDuplicate(null);
-    setFocusLine(editor.addTypedLine(name, quantity, unit));
+    const id = editor.addTypedLine(name, quantity, unit);
+    showUndo(`Added ${name} (not registered).`, [id]);
   }
 
   async function confirm() {
@@ -204,6 +248,27 @@ export function OrderEditor({
         <SaveStatus status={snapshot.status} lastSavedAt={snapshot.lastSavedAt} error={snapshot.error} onRetry={editor.retry} onReview={reviewCurrent} />
       )}
 
+      {inactiveLines.length > 0 ? (
+        <div data-testid="inactive-lines">
+          <Banner kind="warning">
+            <p className="font-medium">
+              {inactiveLines.length === 1 ? "This medicine is no longer active, so the order cannot be saved:" : "These medicines are no longer active, so the order cannot be saved:"}
+            </p>
+            <ul className="mt-1 space-y-1">
+              {inactiveLines.map((l) => (
+                <li key={l.id} className="flex flex-wrap items-center justify-between gap-2">
+                  <span dir="auto">{l.name}</span>
+                  <Button variant="secondary" data-testid="inactive-remove" onClick={() => editor.removeLine(l.id)}>
+                    Remove {l.name}
+                  </Button>
+                </li>
+              ))}
+            </ul>
+            <p className="mt-1">Everything else on the order is kept. After you remove it, the order is saved again.</p>
+          </Banner>
+        </div>
+      ) : null}
+
       {editing ? null : hasLines ? (
         <p className="text-sm text-muted" data-testid="store-locked-note">
           The store cannot be changed once the order has lines.{" "}
@@ -226,7 +291,8 @@ export function OrderEditor({
               variant="secondary"
               data-testid="add-separate-line"
               onClick={() => {
-                setFocusLine(editor.addCatalogLine(duplicate.product));
+                const id = editor.addCatalogLine(duplicate.product, duplicate.quantity, duplicate.unit);
+                setFocusLine(id);
                 setDuplicate(null);
               }}
             >
@@ -244,6 +310,25 @@ export function OrderEditor({
           Medicines waiting to be registered
         </Link>
       ) : null}
+
+      <FastAdd disabled={atLineLimit} onPickProduct={(medicine, quantity) => pickProduct(medicine, { quantity, announce: true })} onPickTyped={pickTyped} />
+      <UndoBar action={undo} onUndo={(ids) => editor.removeLines(ids)} onDismiss={dismissUndo} />
+      {editing ? null : (
+        <>
+          <RepeatLastOrder source={usual.source} hasLines={hasLines} disabled={atLineLimit} fetchRepeat={usual.fetchRepeat} onApply={applyRepeat} />
+          <LastOrderChecklist source={usual.source} disabled={atLineLimit} onOrderIds={onOrderIds} fetchRepeat={usual.fetchRepeat} onAdd={addFromLastOrder} />
+          <UsualMedicines
+            usual={usual.usual}
+            hasHistory={usual.source !== null}
+            loading={usual.loading}
+            error={usual.error ?? null}
+            onRetry={usual.retry}
+            onOrderIds={onOrderIds}
+            disabled={atLineLimit}
+            onAdd={addUsual}
+          />
+        </>
+      )}
 
       <section aria-label="Order lines" className="space-y-3">
         {hasLines ? (
@@ -281,13 +366,9 @@ export function OrderEditor({
           </ul>
         ) : (
           <p data-testid="no-lines" className="rounded-xl border border-dashed border-border bg-surface px-4 py-6 text-center text-muted">
-            No medicines yet. Add the first one.
+            No medicines yet. Search above, tap a usual medicine, or repeat the last order.
           </p>
         )}
-        <Button className="w-full" onClick={() => setSearchOpen(true)} disabled={atLineLimit} data-testid="add-medicine">
-          <Plus size={20} aria-hidden="true" />
-          Add medicine
-        </Button>
         {atLineLimit ? <p className="text-sm text-warning">An order can have at most {LIMITS.lines} lines. Start a new order for more.</p> : null}
       </section>
 
@@ -348,8 +429,6 @@ export function OrderEditor({
         </>
       )}
       {editing && !hasLines ? <p className="text-sm text-muted">A confirmed order must keep at least one line. To remove the whole order, cancel it instead.</p> : null}
-
-      <MedicineSearch open={searchOpen} onClose={() => setSearchOpen(false)} onPickProduct={pickProduct} onPickTyped={pickTyped} />
 
       <Dialog open={storeOpen} title="Change store" onClose={() => setStoreOpen(false)}>
         <StoreSelector
