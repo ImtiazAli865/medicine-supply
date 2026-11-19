@@ -1,0 +1,214 @@
+---
+
+description: "Task list for Module 008: Fast Order Entry"
+---
+
+# Tasks: Fast Order Entry
+
+**Input**: Design documents from `/specs/008-fast-order-entry/`
+**Prerequisites**: plan.md, spec.md, research.md (decisions D1-D13), data-model.md, contracts/api.openapi.yaml, quickstart.md
+**Tests**: INCLUDED. Constitution Principles IV, V and VIII and spec success criteria SC-001 to SC-011 require them. Within each story, write its tests first and confirm they fail for the right reason before the implementation (pure-code and route tests first, then the screen).
+**Organization**: Grouped by user story. Priority order: US1 repeat the last order (P1), US2 usual medicines (P1), US3 a search box that stays (P1), then US4 quantity shortcuts (P2), US5 first use, failures and honest limits (P2), then cross-cutting polish and owner steps.
+
+## Format: `[ID] [P?] [Story] Description`
+
+- **[P]**: Can run in parallel (different files, no dependency on an unfinished task)
+- **[Story]**: US1 repeat last order · US2 usual medicines · US3 continuous search · US4 quantity shortcuts · US5 first use and failures
+- Paths are relative to the repository root `D:\my project\medicine-supply`. Do not touch `docs/`, `.specify/`, `.claude/`, `CLAUDE.md`, the constitution, or the specs of Modules 001 to 007 while implementing (checking boxes in this file is allowed).
+- **No database migration and no new npm package** (plan D1, FR-030). Do not create or edit any file in `supabase/migrations/`. The dropped voice work (branch `008-voice-order-gemini`, migrations `0009` and `0010`, which are applied on the TEST and DEV projects but are not on this branch) must not be used or recreated. If a measured budget is missed (T051), STOP and ask the owner before adding a SQL function; its number would be `0011` or higher and it would need an ADR.
+- All three new read routes run as the signed-in user (Row Level Security applies), use explicit column lists, and send `Cache-Control: private, no-store`. No new response, type, screen text or request may contain a purchase price, MRP, cost, margin, profit, balance or invoice value (FR-026). Writes happen only through the existing autosave and `PUT /api/orders/{id}` (`order_save`); nothing in this module confirms, cancels or changes the status of an order (FR-025, FR-031).
+- Never store the medicine list or any order data in `localStorage`, `sessionStorage` or IndexedDB (it must never look like offline data; offline is Module 009). Never say "saved on this device" or "pending sync".
+- Test ids used by the new screen (keep the existing ones `medicine-result`, `no-matching-medicine`, `add-as-typed`, `add-typed-line`, `catalog-empty` so older specs change as little as possible): `fast-search` (search input), `fast-quantity` (quantity input), `fast-chosen` (the chosen medicine's details), `fast-add` (add button), `usual-card`, `usual-add`, `repeat-last-order`, `repeat-skipped`, `undo-bar`, `undo-action`, `refresh-medicines`.
+- Never create real credentials in files. Tests use the separate TEST Supabase project (`.env.test.local`), never the owner's dev project. The owner signs in themselves (never ask for or type passwords or the secret key). The browser tests start their own production build, so stop `npm run dev` first.
+- All repository text (code, comments, tests, docs, commit messages) is English only (CLAUDE.md "Language"). Chat replies to the owner stay in Roman Urdu.
+- This branch starts from `master` (Module 007 merged, merge commit `2a98dfa`). Do not commit, push, or open a pull request unless the owner says so.
+
+## Path Conventions
+
+Same single Next.js project: `src/app`, `src/components`, `src/lib`, `tests/{unit,integration,e2e,helpers}`. Reuse existing code: `src/lib/ids.ts` (`newId`, `isUuid`), `src/lib/api/{auth,errors,client}.ts` (the `handle()` wrapper and `ApiError`), `src/lib/hooks/useApiResource.ts`, `src/lib/orders/{types,editor-state,repository}.ts` (`LIMITS`, `parseQuantity`), `src/lib/hooks/useOrderEditor.ts` and `createAutosave`, `src/components/ui/*` (`Dialog`, `Field`, `States`, `Button`, `Badge`, `Toast`), `src/components/orders/OrderEditor.tsx`, and the test helpers `tests/helpers/{orders,orders-db,supabase-test,invoices}.ts` (`scanForbiddenKeys`, `FORBIDDEN_KEYS`) and `tests/e2e/{orders-helpers,fixtures}.ts`.
+
+---
+
+## Phase 1: Setup (Shared Infrastructure)
+
+**Purpose**: A green baseline and test helpers
+
+- [ ] T001 Baseline: on this branch run `npm run lint`, `npm run typecheck` and `npm test` before any change and record the real counts in `specs/008-fast-order-entry/quickstart.md` section 6 (a new "Baseline" line above the table). Confirm the Supabase TEST project is reachable (the integration tests need it). Rerun a failing test alone before judging it and say so. Stop and report if anything is red.
+- [ ] T002 [P] Create `tests/helpers/fast.ts`: builders used by every later test. `seedCatalog(tenant, count, options)` (inserts `count` active medicines in batches of 500 through the tenant's own client with deterministic names, strengths and forms; optional similar-name groups such as "Panadol" at 250, 500 and 1000 mg, optional inactive ones), `seedConfirmedOrder(tenant, storeId, lines, { confirmedAt })` (reuses `createOrder` of `tests/helpers/orders.ts` and confirms it; `confirmedAt` can be set for the 180-day tests through the service role only inside the test), `seedHistory(tenant, storeId, { orders, linesPerOrder })` for the scale tests, `bothTenants()` for the two-business tests, and `scanForbiddenKeys` re-exported with the extra keys `purchase_price`, `mrp`, `cost`, `margin`, `profit`, `balance`, `snapshot`, `unit_price_at_confirm`. Check the real column names in `supabase/migrations/0003_orders.sql` before using them.
+
+---
+
+## Phase 2: Foundational (Blocking Prerequisites)
+
+**Purpose**: The shared types, validation, pure rules, server reads for the usual list and the repeat source, the editor extension and the Undo bar. No story can start before these. Order: T003, T004 and T005 are independent; T006 needs them; T007 needs T006; T010 needs T007; T008 and T009 are independent of the rest.
+
+- [ ] T003 [P] `src/lib/orders/fast-types.ts` (pure, no price fields): `SlimMedicine`, `UsualMedicine`, `RepeatSource`, `RepeatLine`, `SkippedLine`, `RepeatPlan` exactly as in data-model.md and the contract, plus one exported constant `SLIM_MEDICINE_KEYS` (the single list of columns the repository selects, so the type and the query cannot drift). Test first: `tests/unit/fast-types.test.ts` asserts no key of `SLIM_MEDICINE_KEYS` contains `purchase`, `mrp`, `cost`, `margin`, `profit`, `balance` or `snapshot`, and a compile-time check that `SlimMedicine` has no such property.
+- [ ] T004 [P] `src/lib/validation/fast-order.ts` (Zod): the medicines query (`q` at most 200 and trimmed, `limit` 1 to 900 and at most 30 when `q` is present, `cursor` an opaque offset token that is validated), the usual query (`store_id` UUID), the repeat query (`store_id` and `order_id` UUIDs). Test first: `tests/unit/fast-validation.test.ts` (valid and invalid values, bad cursor, limit bounds, missing ids).
+- [ ] T005 [P] `src/lib/orders/fast-usual.ts` (pure): `countUsual(orders, lines, activeLookup)` (a medicine counts once per order; sort by count, then latest `confirmed_at`, then id; the quantity and unit of the latest line; inactive or missing medicines skipped before the cut of 12) and `planRepeat(lines, products)` (catalog lines map to `catalog`, typed lines keep the exact name, inactive or missing medicines go to `skipped` with a reason, at most 200 lines with the rest as `over_limit`, the source order kept, the same medicine twice kept twice, no price field read or copied). Test first: `tests/unit/fast-usual.test.ts` (ties, the same medicine twice in one order counts once, typed lines never in usual, inactive skipped before the cut, 13 active candidates give 12, empty history gives empty, the 200 limit, order and duplicates kept, no extra keys on the output).
+- [ ] T006 `src/lib/orders/fast-repository.ts` (server only, uses the signed-in user's client): `SLIM_COLUMNS` built from `SLIM_MEDICINE_KEYS`; `readAllPages(query)` that pages in blocks of 1,000 rows under the PostgREST cap (at most 5 pages); `getRepeatSource(client, storeId)` (the latest `confirmed` or `fulfilled` order of that store by `confirmed_at`, its number, date and non-removed line count; none gives `null`); `listUsual(client, storeId)` (D8: the up to 100 latest qualifying orders within 180 days, their lines `product_id`, `quantity`, `unit`, `order_id` in pages, `countUsual` from T005, then the slim, active-only lookup of the best candidates). Never select a price, MRP, cost or snapshot column. Depends on T003, T004 and T005.
+- [ ] T007 Route `src/app/api/orders/usual/route.ts` (`handle()` wrapper, Zod first, `Cache-Control: private, no-store`, 401 when not signed in) returning `{ usual, source }` as in the contract, and the first part of `tests/integration/fast-order-api.test.ts` (Supabase TEST project, two real tenants through the helpers of T002): a store with orders returns the usual list and the source; a store with none returns `usual: []` and `source: null`; the response keys match the contract and `scanForbiddenKeys` finds none; a bad `store_id` gives 400; a store of the other business returns the same empty answer as a missing store; no request needs the service role. Depends on T006.
+- [ ] T008 Extend the editor: `src/lib/orders/editor-state.ts` (`infoFromProduct` and the line info accept `SlimMedicine`, plus a pure `appendLines(state, entries)` and `removeLinesById(state, ids)` that respect `LIMITS.lines` and create the line ids on the device) and `src/lib/hooks/useOrderEditor.ts` (`addLines(entries)` makes many lines in ONE edit so one autosave sends one `PUT`; `removeLines(ids)`; `addCatalogLine` takes `SlimMedicine` and an optional quantity). Test first: `tests/unit/editor-lines.test.ts` for the pure functions (several lines in one change, the 200 limit with the rest refused and counted, ids made before the save, removing exactly the given ids, quantity bounds through `parseQuantity`). The old behaviour of `addCatalogLine` for the existing screen must not change until the screen is rewired.
+- [ ] T009 [P] `src/components/orders/UndoBar.tsx`: one bar at a time showing "Added [medicine]. Undo" or "Added N lines from the last order. Undo" for 8 seconds, holding the ids of the lines just added (D7); a new action replaces it; Undo calls `removeLines(ids)` and then the bar disappears; the button is at least 44 by 44 px; `data-testid` `undo-bar` and `undo-action`; announced politely to screen readers; the timer is cleared on unmount.
+- [ ] T010 `src/lib/hooks/useUsualMedicines.ts`: fetches `/api/orders/usual?store_id=` for the chosen store (loading, ready, error with `retry`; re-fetches when the store changes; never fetches without a store) and exposes `usual` and `source`. Use `useApiResource` if it fits. Depends on T007.
+
+**Checkpoint**: the shared layer is proven by unit tests and the first integration test; stories can start.
+
+---
+
+## Phase 3: User Story 1 - Repeat the store's last order (Priority: P1) 🎯 MVP
+
+**Goal**: After choosing a store with an earlier confirmed order, one tap creates the new draft with the same lines, quantities and units, never copying a price, never losing or half-copying anything, and with an Undo.
+
+**Independent Test**: A store with one confirmed order of five lines (one typed): start a new order, see the button with the line count and date and no lines yet, tap it, see five lines with the same quantities and units, confirm; the old order is unchanged and one new draft exists.
+
+### Tests for User Story 1
+
+- [ ] T011 [P] [US1] Extend `tests/integration/fast-order-api.test.ts` for `GET /api/orders/repeat`: lines come back in the source order's position order with the same quantity and unit; typed lines carry the exact name; a medicine made inactive or deleted after the order goes to `skipped` with its name and reason and the rest is returned; removed lines are not returned; the answer for an order of another store, a draft or cancelled order, and another business's order id is the same 404; bad ids give 400; the raw JSON of the response has no forbidden key (checked with `scanForbiddenKeys`); the source order is unchanged afterwards (version and lines); applying the returned lines through the real `PUT /api/orders/{id}` creates one draft with all lines and a replay with the same request id creates no second line.
+- [ ] T012 [P] [US1] `tests/e2e/fast-repeat.spec.ts` (mobile project, 360 px): the button appears only while the draft has no lines and names the number of lines and the date, and nothing is added before the tap; tapping adds every line in order with the same quantity and unit, typed lines show "Not registered", the order is a draft; the Undo removes exactly the lines the repeat added; no price is shown or requested (assert the two routes' responses have no price key); counts the clicks from choosing the store to a confirmed order and asserts the sequence (store, repeat, confirm button, then the existing confirmation dialog's yes), recording in the test comment that Module 003's confirmation dialog makes it four taps while the spec's three interactions count the confirm as one; the old order is unchanged.
+- [ ] T013 [P] [US1] `tests/e2e/fast-repeat-twice.spec.ts` (mobile project): a double tap and a retry after a blocked save create exactly one draft with one copy of each line (checked in the database through the tenant client); an inactive medicine is left out and a message naming it stays until dismissed, while the rest is added and the supplier can still add that medicine by hand; the button is hidden once any line exists and for a store with no qualifying order; a store with only a draft or cancelled order shows no button.
+
+### Implementation for User Story 1
+
+- [ ] T014 [US1] Add `getRepeatPlan(client, storeId, orderId)` to `src/lib/orders/fast-repository.ts` (checks the order belongs to the store and is `confirmed` or `fulfilled`, reads its non-removed lines in position order, at most 200, looks up the current slim rows, calls `planRepeat` from T005; no other answer than 404 for a missing, foreign or non-qualifying order) and the route `src/app/api/orders/repeat/route.ts` (same wrapper, validation and headers as T007). Extend `useUsualMedicines.ts` with `fetchRepeat(orderId)`.
+- [ ] T015 [P] [US1] `src/components/orders/RepeatLastOrder.tsx`: the button "Repeat last order" with the number of lines and the date, a loading state while the plan is fetched, an error with Retry that adds nothing, and the "left out" message listing each skipped line with its reason that stays until dismissed (`repeat-skipped`); hidden when there is no source. The button is at least 44 px high and does not trigger a second fetch while one is running.
+- [ ] T016 [US1] Wire it into `src/components/orders/OrderEditor.tsx` (drafts only, only while the draft has no lines, never when editing a confirmed order): on success call `addLines` once with all lines (one change, one save), then show the `UndoBar` with the count; the skipped message is shown above the lines. If the save fails the existing save-status error appears and the screen keeps the lines (as in Module 003). Depends on T008, T009, T014 and T015.
+- [ ] T017 [US1] Run the US1 tests (T011 to T013) and fix until green; run `npm run lint` and `npm run typecheck`; record the counts in `specs/008-fast-order-entry/quickstart.md` section 6. Never write "passed" for something not run.
+
+**Checkpoint**: US1 works alone; the MVP is a one-tap, retry-safe repeat of the last order.
+
+---
+
+## Phase 4: User Story 2 - Usual medicines in one tap (Priority: P1)
+
+**Goal**: Below the store name, up to 12 usual medicines appear on cards with full identifying details and the last quantity and unit; one tap adds a line; nothing is added or preselected without a tap.
+
+**Independent Test**: A store with several confirmed orders: add three usual medicines with three taps and get three lines with the shown quantities and units; a repeat tap on a card opens the existing "already on this order" choice.
+
+### Tests for User Story 2
+
+- [ ] T018 [P] [US2] Extend `tests/integration/fast-order-api.test.ts` for the usual list: a medicine in three orders ranks above one in two; ties go to the more recent order; a medicine twice in one order counts once; orders older than 180 days and draft or cancelled orders do not count; only the 100 most recent qualifying orders are read; inactive medicines are skipped before the cut so 12 active ones come back when 13 or more exist; a store with more than 1,000 line rows in its history is read across two pages and the counts stay right; typed lines never appear; the quantity and unit are those of the latest line.
+- [ ] T019 [P] [US2] `tests/e2e/fast-usual.spec.ts` (mobile project, 360 px): up to 12 cards each showing name, strength, dosage form, pack size, manufacturer and the last quantity and unit; one tap adds one line with those values and the card shows "On order"; five cards take five taps and make five lines (counts the clicks); the stepper and the quick buttons change the card's quantity before the add and the line carries it; a second tap on the same card opens the existing "already on this order" choice and nothing merges silently; nothing is preselected or added on opening; an inactive medicine is not shown.
+- [ ] T020 [P] [US2] In the same file, a test for a store with no qualifying orders: no cards, no repeat button, a note saying frequent medicines appear after the first confirmed orders, and the search and typed path still available; a loading state is shown while the list loads; an error shows Retry and keeps the order.
+
+### Implementation for User Story 2
+
+- [ ] T021 [P] [US2] `src/components/orders/UsualMedicines.tsx`: one card per usual medicine (`usual-card`) with the identifying details, the last quantity and unit, a stepper and quick-quantity buttons (5, 10, 20, 50) that only change the card's quantity, and an add control (`usual-add`) of at least 44 by 44 px; a card whose medicine is already on the order shows "On order" and its tap opens the existing choice; loading, error with Retry and the first-use note states; horizontal scrolling inside the list is not allowed (a wrapped grid or a vertical list).
+- [ ] T022 [US2] Wire it into `OrderEditor.tsx` (drafts only): a card tap calls `pickProduct` with the card's quantity, which keeps the existing duplicate dialog and the 200-line limit, then shows the `UndoBar` "Added [medicine]". `pickProduct` takes an optional quantity argument. Depends on T008, T009, T010 and T021.
+- [ ] T023 [US2] Run the US2 tests (T018 to T020) and fix until green; run lint and typecheck; record the counts in quickstart section 6.
+
+**Checkpoint**: US1 and US2 work together without the new search box.
+
+---
+
+## Phase 5: User Story 3 - A search box that stays and a pop-up-free flow (Priority: P1)
+
+**Goal**: A search box on the order screen shows matching medicines from the first letters, searched on the device; choosing a result clears the box, keeps the keyboard open and moves the cursor to the quantity; Enter adds the line and returns to the search box; no pop-up opens or closes; nothing is ever preselected when more than one medicine fits.
+
+**Independent Test**: With a 5,000-medicine catalog add three searched medicines using only letters, one tap or Enter, a quantity and Enter; check three lines and that no dialog opened.
+
+### Tests for User Story 3
+
+- [ ] T024 [P] [US3] `tests/unit/fast-search.test.ts` for the pure rules (write first): words are lower-cased and split on extra spaces, at most 8; every word must be in the search text (name, brand, generic name, strength, manufacturer, code) or the dosage form; names starting with the first word come first, then name, then id; at most 30 results and the count of the rest; the highlight exists only when exactly one medicine matches and never otherwise; digits are plain text ("panadol 500" matches the 500 strength); "panadol" with three strengths highlights nothing; empty or one-letter text behaves as designed (results from one or two characters, none for empty); Urdu text is matched as given; different strengths, forms, manufacturers and pack sizes are never merged.
+- [ ] T025 [P] [US3] `tests/unit/fast-search-bench.test.ts`: the pure filter on 5,000 synthetic rows with an 8-word worst-case query, many runs, asserting the median stays under the 20 ms budget of D12 (a generous margin for slow machines is allowed only if the real figure is printed and recorded in quickstart section 6).
+- [ ] T026 [P] [US3] `tests/unit/fast-list.test.ts` for the pure list reducer `src/lib/orders/fast-list.ts`: pages are appended in order, the state goes `loading` then `ready` when the last page arrives, stops with `too_large` above 6,000 rows (keeping what was loaded and the notice flag), `error` keeps the rows already loaded, a refresh starts over, a stale response of an older load is ignored.
+- [ ] T027 [P] [US3] Extend `tests/integration/fast-order-api.test.ts` for `GET /api/orders/medicines`: a catalog of 2,300 medicines is read page by page with no gap and no duplicate and in name then id order; only active medicines; the response has exactly the `SlimMedicine` keys and `scanForbiddenKeys` finds nothing even though the products have purchase prices and MRP in the database; with `q` the same word rules as the pure filter and at most 30 rows; a limit above the maximum or a bad cursor gives 400; the other business's medicines are never returned; the header `Cache-Control: private, no-store` is present; 401 without a session.
+- [ ] T028 [P] [US3] `tests/e2e/fast-search.spec.ts` (mobile project, 360 px, keyboard only where stated): the search box is on the screen (no dialog role appears at any step); typing two letters shows results with strength, dosage form, pack size and manufacturer; with several matches none is highlighted and Enter adds nothing; with exactly one match it is highlighted and Enter chooses it; choosing by tap or Enter clears the box, shows the chosen medicine (`fast-chosen`), puts the cursor in the quantity with 1 selected, typing a number and Enter adds the line and the focus returns to the search box (assert `document.activeElement`); a just-added line shows the Undo and Undo removes only that line; "panadol 500" narrows to that strength and adds no quantity; a name that matches nothing shows "Add as typed" inline and the typed line is added with the exact text; "None of these, it is a new medicine" stays available while there is text; the previous results stay visible while a delayed search loads, and a failed search shows an error with Retry and keeps the text; Urdu-script text is searched as typed; counts the clicks and key presses of one searched medicine for SC-004.
+- [ ] T029 [P] [US3] `tests/e2e/fast-search-similar.spec.ts`: a catalog with the same name in several strengths, forms and pack sizes: all appear with their details, none is preselected, Enter adds nothing until the supplier taps or arrows to one, the line carries the chosen medicine's id and details, and a different strength is never substituted (SC-005).
+- [ ] T030 [P] [US3] `tests/e2e/fast-search-scale.spec.ts` (needs the TEST project): seed 5,000 medicines, open the order screen, and measure keystroke to results on 40 or more keystrokes after the list is loaded (the 95th percentile at most 300 ms, SC-003); typing during the first seconds is answered by the server search; print the measured values for quickstart section 6.
+
+### Implementation for User Story 3
+
+- [ ] T031 [US3] `src/lib/orders/fast-search.ts` (pure): `normalizeRow(medicine)` (lower-case search text and dosage once), `parseQuery(text)` (words, at most 8), `filterMedicines(rows, query, { max: 30 })` returning `{ results, more }`, and `highlightIndex(results)` (exactly one result or none). No quantity parsing yet (T041). Make T024 and T025 pass.
+- [ ] T032 [P] [US3] `src/lib/orders/fast-list.ts` (pure reducer used by the hook): the states and limits of T026 (page size 900, cap 6,000). Make T026 pass.
+- [ ] T033 [US3] Add `listMedicinesPage` and `searchMedicines` to `src/lib/orders/fast-repository.ts` (active only, slim columns from `SLIM_COLUMNS`, ordered by name then id, `limit`, a cursor, the same word rules as the existing product search, at most 30 rows for `q`) and the route `src/app/api/orders/medicines/route.ts` (same wrapper, validation and headers). Make T027 pass. Do not change `/api/products`.
+- [ ] T034 [US3] `src/lib/hooks/useMedicineList.ts`: loads the pages one after another when the screen mounts using the reducer of T032 (it never stores the list outside the component), answers typing with the server search (`q`) until the load ends or when the state is `too_large`, filters on the device when `ready`, exposes `status`, `rows`, `search(text)`, `retry` and `refresh`, keeps the previous results while a search loads, and ignores a stale response. Depends on T031, T032 and T033.
+- [ ] T035 [US3] `src/components/orders/FastAdd.tsx` (D6): two inputs that are always mounted, the search box and the quantity box (disabled until a medicine is chosen); the results list with `medicine-result` buttons that ignore the press event that would blur the search box; choosing does `flushSync`, enables the quantity input, focuses it and selects its text (1); Enter in the quantity box validates with `parseQuantity` (`LIMITS`), calls `onAdd(medicine, quantity)` and focuses the search box again; arrow keys move a highlight only when the supplier uses them; the inline typed form (`add-as-typed`, `add-typed-line`, "None of these, it is a new medicine") replaces the old dialog's typed path with the same checks and duplicate warning; empty-catalog and no-match messages (`catalog-empty`, `no-matching-medicine`); loading and error with Retry; every control at least 44 by 44 px at 360 px. Depends on T034.
+- [ ] T036 [US3] Rewire `OrderEditor.tsx`: remove the dialog state, the `add-medicine` button and the `MedicineSearch` import, render `FastAdd` (also when editing a confirmed order) with `pickProduct(medicine, quantity)` and `pickTyped`, keep the existing duplicate dialog, the repeated-typed warning and the 200-line limit, and show the `UndoBar` after each add. Depends on T035.
+- [ ] T037 [US3] Delete `src/components/orders/MedicineSearch.tsx` (nothing else imports it; confirm with a search first) and update the e2e steps that used the dialog in one pass: `tests/e2e/orders-helpers.ts` (`addMedicine` types into `fast-search`, taps the result, types the quantity and presses Enter; add `addMedicineWithQuantity`), `orders-confirm-edit-cancel.spec.ts`, `orders-take.spec.ts` (the empty-catalog check and the "no medicine before a store is chosen" check now look for `fast-search`), `orders-timing.spec.ts`, `orders-typed.spec.ts`, `orders-recovery.spec.ts` and the add-medicine part of `touch-targets.spec.ts`. Keep each test's meaning; change only how a medicine is added.
+- [ ] T038 [US3] Run the US3 tests (T024 to T030) and every updated older order spec; fix until green; run lint and typecheck; record the counts and the measured figures (filter time, keystroke time, full load) in quickstart section 6.
+
+**Checkpoint**: the three P1 stories work; the dialog is gone; taking an order needs no pop-up.
+
+---
+
+## Phase 6: User Story 4 - Quantity shortcuts without mistakes (Priority: P2)
+
+**Goal**: A quantity can follow the name after an explicit "x" once a result is chosen, the quantity box has quick buttons and a stepper, and an invalid quantity never adds anything.
+
+**Independent Test**: Choose a medicine and type "x20", then Enter: a line with quantity 20. "x0" and "x100001" are refused with the allowed range and nothing is added.
+
+### Tests for User Story 4
+
+- [ ] T039 [P] [US4] Extend `tests/unit/fast-search.test.ts` for the "x" quantity (D5): a trailing word `x` plus 1 to 6 digits (also `×`) with no space is a quantity only when the whole text including it matches nothing; "pan x20" gives words `pan` and quantity 20 when "pan x20" itself finds no medicine; a medicine whose name contains "x10" is found as text first and no quantity is read; "x 20" with a space, "x0", "x100001", "x1234567" and "20x" are not quantities (invalid ones are reported as invalid, not silently ignored); only the last word is considered; a quantity never chooses a result.
+- [ ] T040 [P] [US4] `tests/e2e/fast-quantity.spec.ts` (mobile project, 360 px): typing "pan x20" shows a "Quantity 20" tag and the results; tapping a result (or Enter on a single highlighted result) adds the line at once with quantity 20 and an Undo, with no quantity step; "x0" and "x100001" add nothing, state the allowed range 1 to 100,000 and keep the typed text; in the quantity box an empty value, 0, -1, 1.5 and 100001 add nothing, state the range and keep what was typed; the quick buttons and the stepper only fill the field and nothing is added until Enter or the add button; with 200 lines the search, the usual cards and the repeat button are disabled and the limit is stated.
+
+### Implementation for User Story 4
+
+- [ ] T041 [US4] Add `parseQuantityHint(text, matchesAny)` to `src/lib/orders/fast-search.ts` and use it inside `parseQuery`, following D5 exactly. Make T039 pass.
+- [ ] T042 [US4] Extend `FastAdd.tsx`: the "Quantity N" tag, applying the hint only when a result is chosen (tap or Enter on a highlighted result), an add with an Undo and no quantity step, the invalid-number message with the allowed range, the quick buttons (5, 10, 20, 50) and a stepper in the quantity box that only fill the field. Depends on T041.
+- [ ] T043 [US4] The 200-line limit states: `FastAdd`, `UsualMedicines` and `RepeatLastOrder` are disabled with the limit sentence at `LIMITS.lines`, and a repeat that does not fit reports the lines it left out as `over_limit` in the message. Uses `OrderEditor.tsx` (one change at a time with T036).
+- [ ] T044 [US4] Run the US4 tests (T039 and T040) and fix until green; run lint and typecheck; record the counts in quickstart section 6.
+
+---
+
+## Phase 7: User Story 5 - First use, failures and honest limits (Priority: P2)
+
+**Goal**: The module works on day one, when a list cannot load, without a connection and with a stale list, and always says so honestly.
+
+**Independent Test**: An empty catalog and a store with no orders: the typed path works and the empty states name the next action. Make the medicine list fail: Retry appears, the order and its lines are kept, and the typed path still works.
+
+### Tests for User Story 5
+
+- [ ] T045 [P] [US5] `tests/e2e/fast-states.spec.ts` (mobile project): the medicine list fails to load (route blocked): error with Retry, the order and the lines already added are kept, typing a name still offers "Add as typed", and Retry loads the list; the usual list fails: error with Retry, lines kept; the repeat fails: error with Retry and nothing is added; a save fails: the existing Module 003 "not saved" message appears and the screen keeps every line; with the browser offline, adding a usual medicine shows that same message and the page text never contains "saved on this device" or "pending sync", and when the connection returns the change saves; a medicine made inactive in another session after the list was loaded is refused by the save with a clear message and the rest of the order is kept (use the existing `invalid_lines` handling; T047 improves the text only if it is unclear); a catalog changed on another device appears after "Refresh medicines".
+- [ ] T046 [P] [US5] `tests/e2e/fast-first-use.spec.ts`: an empty catalog shows the empty state with "Add a medicine" and "Import a list" and the typed path works and creates a typed line; a store with no history shows the first-use note, no usual cards and no repeat button; a business with no stores keeps the existing store empty state; every new list screen state has a next action.
+
+### Implementation for User Story 5
+
+- [ ] T047 [US5] Fill the gaps these tests show, each only if missing: the "Refresh medicines" button (`refresh-medicines`, reloads the list and keeps the text), the "too large" notice ("Results come from the server because your catalog is very large"), the empty-catalog block with links to the existing add-medicine and import screens (check the real route names first), the first-use note of the usual list, and a clear message for a stale inactive medicine. Never invent a route; never add a banner that claims offline use.
+- [ ] T048 [US5] Run the US5 tests (T045 and T046) and fix until green; run lint and typecheck; record the counts in quickstart section 6.
+
+---
+
+## Phase 8: Polish and Cross-Cutting Concerns
+
+**Purpose**: Isolation, scale, layout, honesty sweep and verification. T049, T050, T051, T052 and T053 can run in parallel.
+
+- [ ] T049 [P] Isolation (SC-008): finish `tests/integration/fast-order-api.test.ts` with two real tenants that have the same store names, medicine names and order history: each sees only its own usual list, source, medicines and repeat plan; a crafted `store_id` or `order_id` of the other business gives exactly the answer of a missing id; nothing changed in the other business; none of the three routes uses the service role; raw JSON of all three routes has no forbidden key.
+- [ ] T050 [P] Static no-price guard (SC-007): `tests/unit/fast-no-price.test.ts` reads the new source files (`src/lib/orders/fast-*.ts`, `src/lib/validation/fast-order.ts`, the three route files, `FastAdd`, `UsualMedicines`, `RepeatLastOrder`, `UndoBar`, the two hooks) and fails when they mention `purchase_price`, `mrp`, `cost`, `margin`, `profit`, `balance`, `invoice` or a snapshot column; an e2e assertion on the new requests (in `fast-search` and `fast-repeat`) checks the response bodies of the three routes for the same words.
+- [ ] T051 [P] `tests/integration/fast-order-scale.test.ts` (TEST project): seed a store with 100 qualifying orders of 20 lines each and 5,000 medicines; five runs each, print the maximum: usual route at most 1.5 s, repeat route for a 200-line order at most 1.5 s, full load of 5,000 medicines at most 5 s. If a budget is missed, find the cause first; do not add a migration or a SQL function on your own: report the figures and ask the owner (plan D1 and D8: the fallback is a function numbered `0011` or higher with an ADR). Record the measured times in quickstart section 6.
+- [ ] T052 [P] Update `tests/e2e/touch-targets.spec.ts` and `tests/e2e/shell.spec.ts` so every new control is checked at 360 px: the search box, result buttons, quantity box, quick buttons, stepper, add button, the inline typed form, usual cards and their stepper, the repeat button, the Undo, the skipped message and its dismiss control, "Refresh medicines" and the retry buttons; each is at least 44 by 44 px, the page has no sideways scroll, and the bottom navigation still has five items.
+- [ ] T053 [P] Update `README.md` with the fast order entry (repeat last order, usual medicines, the search box that stays and its rules: nothing is preselected unless one medicine matches, digits are never a quantity, "x20" only after a result is chosen; online only; no new package and no migration; what is not covered: offline, voice, WhatsApp paste, nicknames). English only; do not claim anything not run.
+- [ ] T054 Security and honesty sweep: search `src/` for `purchase_price`, `mrp`, `cost`, `margin` and `profit` in the new code (none), for `localStorage`, `sessionStorage` or `indexedDB` use for the medicine list or orders (none), for the service-role key or `SUPABASE_SERVICE_ROLE_KEY` in browser code and in the three routes (none), for the words "synced", "pending sync", "saved on this device" and "offline" in new screen text (none), for `any`, `@ts-ignore` or ignored errors in new files, for a `fetch` without error handling, for dead buttons, for any import of `MedicineSearch`, and for `microphone`, `speech` or `gemini` (none). Fix what is found and list what was checked in quickstart section 6.
+- [ ] T055 Review against the rules: confirm in code that the only write path is the existing autosave and `PUT /api/orders/{id}`; that nothing sets an order status; that a repeat is one editor change; that no price is copied; that `package.json` and `package-lock.json` have no diff and `supabase/migrations/` has no new file (`git diff master --stat`); that the highlight rule, the digits rule and the "x" rule are only in `fast-search.ts`; and that no feature of the voice branch was reused. Record the findings in quickstart section 6.
+- [ ] T056 Full verification, actually run: `npm run lint`, `npm run typecheck`, `npm test` (including all older suites), `npm run build`, `npm run test:e2e` (stop `npm run dev` first). Record the real counts and any skip or flaky test (with the reason) in quickstart section 6, fill the measurement table, and map every success criterion SC-001 to SC-011 to the test that proves it (the table of quickstart section 4). Write "not measured" or "not run" for anything not done. Run `npm run build` once more after the e2e run so `.next` matches the DEV settings for the owner.
+- [ ] T057 Owner verification on a real phone against the DEV project (no migration is needed, so nothing to apply): the walkthrough in quickstart section 3 (repeat, usual medicines, the search flow with the keyboard staying open, a name with two strengths, "pan x20", a typed medicine, airplane mode, and the comparison with handwriting). Record the owner's answers in quickstart section 6 and write "reported, not seen" for answers without screenshots. Mark SC-011 confirmed only if the owner reports it faster than handwriting.
+- [ ] T058 Documentation records: create the PHRs for the tasks, analysis and implementation work under `history/prompts/008-fast-order-entry/` (English only; translate the owner's Roman Urdu messages and mark them "(translated from Roman Urdu)"). Flag, without editing it, that the constitution's module list still says "008 voice" (the owner decides whether to amend it). No ADR unless the SQL-function fallback of T051 is ever taken.
+- [ ] T059 Pull request: update this branch from `master`, rerun lint, typecheck, test and build, push only when the owner says, and open the pull request for `008-fast-order-entry` through `gh` (signed in by the owner); the description lists the real verification results and every gap, in English. Merging is the owner's decision, unless the owner tells you to merge in chat.
+
+---
+
+## Dependencies and Execution Order
+
+- **Phase 1** (T001, T002) first; T002 can run in parallel with T001.
+- **Phase 2** blocks everything: T003, T004 and T005 in parallel (each with its tests first); T006 after all three; T007 after T006; T010 after T007; T008 and T009 can run any time in parallel with T006 and T007.
+- **US1 (T011 to T017)** needs Phase 2. Its tests (T011 to T013) can be written in parallel; T014 then T015 (parallel with T014) then T016 then T017. **US2 (T018 to T023)** needs Phase 2 and is independent of US1 except that both edit `OrderEditor.tsx` (T016 then T022, one at a time). **US3 (T024 to T038)** needs Phase 2; its pure tests and the medicines route tests (T024 to T027) need only T003 and T004; the e2e tests (T028 to T030) need T036; T037 follows T036. **US4 (T039 to T044)** needs US3 (the search box and `fast-search.ts`); T043 also touches the US1 and US2 components. **US5 (T045 to T048)** needs US1, US2 and US3 because it tests all of their failure states.
+- **Phase 8** needs the stories it covers: T049 to T053 are parallel with each other; T054 and T055 after all code is complete; T056 after everything; T057 to T059 are owner and PR steps in that order.
+- Within a story: tests first, then pure code, then the route, then hooks, then components, then the wiring in `OrderEditor.tsx`, then the run task.
+- Files shared by several tasks (one at a time): `src/components/orders/OrderEditor.tsx` (T016, T022, T036, T043), `src/lib/orders/fast-repository.ts` (T006, T014, T033), `src/lib/orders/fast-search.ts` (T031, T041), `src/components/orders/FastAdd.tsx` (T035, T042, T047), `src/lib/hooks/useUsualMedicines.ts` (T010, T014), `tests/integration/fast-order-api.test.ts` (T007, T011, T018, T027, T049), `tests/unit/fast-search.test.ts` (T024, T039), `quickstart.md` section 6 (every run task), and `tests/e2e/touch-targets.spec.ts` (T037, T052).
+
+## Parallel Opportunities
+
+- Foundational: T003, T004 and T005 together; T008 and T009 beside them.
+- Each story's test tasks can be written in parallel (T011 to T013; T018 to T020; T024 to T030; T039 and T040; T045 and T046).
+- US3's pure code T031 and T032 are independent of its route T033.
+- With two people, US1 and US2 can proceed at the same time once Phase 2 is done, if the two edits to `OrderEditor.tsx` are merged one after the other.
+- Polish: T049 to T053 together.
+
+## Implementation Strategy
+
+1. **MVP first**: Phases 1 and 2, then US1 only. Stop, run its tests, and try "Repeat last order" on the TEST data. That is already the biggest time saving.
+2. **Then US2 and US3** (usual medicines, the search box that stays): after these three stories the order screen is faster than handwriting for repeat, usual and new medicines. Then US4 (quantity shortcuts) and US5 (first use and failures), then Polish.
+3. **Measure early**: run the scale checks of T051 (usual route, repeat route, 5,000-medicine load) as soon as US2 and US3 exist, not at the very end, so a missed budget is found while the design can still change. A missed budget is reported to the owner, not fixed with a migration on my own.
+4. **Do not claim anything unrun.** Record real counts and real measurements only; investigate any intermittent failure; the keyboard behaviour on a real phone and the owner's speed comparison are owner checks (T057) and are written "reported, not seen" unless evidence is sent.
+5. **Keep the rules in pure code and in the database.** The matching, highlight, digits and "x" rules live only in `src/lib/orders/fast-search.ts` and are unit tested; isolation and "no price" are enforced by Row Level Security, explicit column lists and tests, not by the screen alone; every write is the existing idempotent `order_save`.
+6. **Out of scope and not started**: voice, any AI, pasted WhatsApp text, medicine nicknames, offline catalog or orders, barcode, reports, changes to invoices, prices or the ledger.
