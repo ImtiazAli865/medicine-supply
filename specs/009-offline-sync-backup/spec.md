@@ -152,7 +152,7 @@ The supplier opens Settings and sees whether the phone is online, when the last 
 **Device copy and offline screens**
 
 - **FR-001**: After the phone has been online and signed in once, the app MUST open and the order screens MUST work when the phone is offline, including after a reload or a restart of the phone.
-- **FR-002**: The system MUST keep on the device a copy of the business's active medicine list (identifying details only: name, strength, dosage form, pack size, manufacturer and the unit) and of the store list, MUST refresh it when online, and MUST show the time of the last successful refresh.
+- **FR-002**: The system MUST keep on the device a copy of the business's active medicine list (identifying details: name, strength, dosage form, pack size, manufacturer and the unit, plus the current selling price that the order screen already shows, used only for a draft's running total and labelled "last known price" while offline) and of the store list, MUST refresh it when online, and MUST show the time of the last successful refresh.
 - **FR-003**: The device copy MUST NOT contain any purchase price, MRP, cost, margin, profit, balance, invoice or ledger data.
 - **FR-004**: Search, usual medicines, repeat last order and the last-order checklist of Module 008 MUST work offline from the device copy for the data that has been cached (the usual and last-order data of a store only after that store's data was loaded online); where something is not cached the screen MUST say so and offer the typed path.
 - **FR-005**: First use with no cached lists MUST NOT block taking an order: unknown medicines and stores remain typed or inline-entered as in the earlier modules, and every list screen keeps an empty state that names the next action.
@@ -209,7 +209,7 @@ The supplier opens Settings and sees whether the phone is online, when the last 
 
 ### Key Entities *(include if feature involves data)*
 
-- **Device copy (cache)**: the business's active medicines (identifying details only) and stores, with the time of the last successful refresh; belongs to one signed-in business on one device.
+- **Device copy (cache)**: the business's active medicines (identifying details and the current selling price, never a purchase price, MRP or cost) and stores, with the time of the last successful refresh; belongs to one signed-in business on one device.
 - **Offline draft order**: an order being taken or edited on the phone, with a stable id made on the device, its lines (catalog lines and typed lines), and the version of the server copy it was based on, if any.
 - **Pending item**: one change waiting to reach the server (create order, change order, create store), with its stable id, its order in the queue, its state (waiting, syncing, synced, failed, conflict), the reason if failed, and the number of tries.
 - **Conflict**: a pending item whose server copy changed meanwhile, holding both versions until the supplier chooses.
@@ -227,7 +227,7 @@ The supplier opens Settings and sees whether the phone is online, when the last 
 - **SC-004**: Zero cases where a server change is overwritten by phone data or phone data is replaced by server data without the supplier's choice, across the conflict cases (changed, confirmed, cancelled and deleted on the server, medicine made inactive, store removed).
 - **SC-005**: With two businesses on one phone, the second never sees or sends any data of the first, and the first still has all of its pending items after the second signs out; verified by a browser test and a database-permission test.
 - **SC-006**: After a number of orders created offline, all of them are sent by themselves within 60 seconds of the connection returning for up to 20 orders on a normal connection, with each item's state correct, and the screens stay usable meanwhile.
-- **SC-007**: A backup exported with a mix of synced and unsynced orders restores into an empty business with every unsynced order intact; importing the same file a second time creates nothing new; no secret appears in the file; a damaged file changes nothing.
+- **SC-007**: A backup exported with a mix of synced and unsynced orders restores onto a clean device (device data cleared, same business signed in) with every unsynced order intact; importing the same file a second time creates nothing new; no secret appears in the file; a damaged file changes nothing.
 - **SC-008**: Searching the device copy of a 5,000-medicine catalog shows results within 300 ms while offline.
 - **SC-009**: All new screens pass the 360 px touch-target check (controls at least 44 px, no sideways scroll) and show loading, error with Retry and empty states.
 - **SC-010**: The owner, on a real phone in airplane mode, takes a real order, sees it kept after closing the app, turns the connection back on and sees it arrive once; the result is recorded as reported, not seen. Each claim in the app is backed by an automated browser test that was run.
@@ -237,7 +237,7 @@ The supplier opens Settings and sees whether the phone is online, when the last 
 - The supplier is the only user of a business (no roles), uses one main phone, and has opened the app online and signed in on that phone at least once before working offline.
 - Taking orders is the only offline work: confirming, invoices, payments, purchases, price changes, the market list and reports need the internet and say so.
 - A draft order can be taken offline if it was created on the phone or was opened on the phone while online; other server orders are not promised to be available offline.
-- The device copy of the medicine list holds identifying details only; selling prices are not needed for drafts and are not copied, so the cache and the backup carry no price.
+- The device copy of the medicine list holds identifying details and the current selling price only (the price the order screen already shows for a draft); it never holds a purchase price, MRP or cost. While offline the running total is labelled with the last known price and the final prices are fixed only when the order is confirmed online. The backup carries no price at all.
 - "Saved on this device" means written to the phone's own storage; it does not mean the order is safe if the phone is lost or its browser data is cleared, and the app says so.
 - Real-time sync between several devices, background push and automatic merging of conflicting edits are out of scope; conflicts are always decided by the supplier.
 - The existing idempotent order save of Module 003 is the server side of the queue; the plan decides whether anything more is needed on the server, and whether a new package or a migration is needed at all.
