@@ -77,6 +77,7 @@ src/
 │   │   ├── fast-types.ts         # new: SlimMedicine, UsualMedicine, RepeatSource, RepeatPlan (no price fields)
 │   │   ├── fast-search.ts        # new, pure: parse query (words, x quantity), filter and order, highlight rule
 │   │   ├── fast-usual.ts         # new, pure: count per order, sort, pick quantity/unit; repeat mapping
+│   │   ├── fast-checklist.ts     # new, pure (user story 6): rows, selection, quantity check, lines to add
 │   │   ├── fast-repository.ts    # new, server: reads with explicit columns, paging under the row cap
 │   │   └── editor-state.ts       # changed: infoFromProduct accepts SlimMedicine
 │   ├── validation/fast-order.ts  # new: Zod for the three routes
@@ -88,6 +89,7 @@ src/
     ├── FastAdd.tsx               # new: search box, results, quantity box, inline typed form
     ├── UsualMedicines.tsx        # new: cards with stepper and quick buttons
     ├── RepeatLastOrder.tsx       # new: button, skipped-lines message
+    ├── LastOrderChecklist.tsx    # new (user story 6): the last order as a checklist, one tap per medicine, Add selected
     ├── UndoBar.tsx               # new: one Undo for 8 seconds
     ├── OrderEditor.tsx           # changed: uses the four components; pickProduct takes a quantity
     └── MedicineSearch.tsx        # deleted (only OrderEditor used it)
@@ -101,6 +103,8 @@ tests/
 ```
 
 **Structure Decision**: The same single Next.js project and the same layering as Modules 003 to 007: pure logic in `src/lib/orders`, server reads in a repository, thin route handlers, hooks for screen state, components for the screen. No new top-level folder.
+
+**Added 2026-11-19 after the owner's trial (user story 6, research D14)**: the last order as a checklist reuses the repeat read and the editor's `addLines`; one new pure module and one new component, no route, no migration, no package. Constitution gates unchanged (all PASS).
 
 ## Complexity Tracking
 

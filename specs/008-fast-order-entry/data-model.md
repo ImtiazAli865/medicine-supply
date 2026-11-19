@@ -56,6 +56,10 @@ At most 12, sorted by `order_count` desc, then `last_ordered_at` desc, then `id`
 | `lines[]` | `{ kind: "catalog", medicine: SlimMedicine, quantity, unit }` or `{ kind: "typed", name, quantity, unit }`, in the source order's position order, at most 200 |
 | `skipped[]` | `{ name, reason: "inactive" | "missing" | "over_limit" }`; shown in a message that stays until dismissed |
 
+### ChecklistRow (screen only, user story 6)
+
+`index` (the line's position in the source order), `line` (a `RepeatLine`, catalog or typed), `onOrder` (true when its medicine is already on the order). Selection: a map from `index` to the quantity text being edited. Nothing is stored; the lines are added through the normal save.
+
 ### Client-only
 
 - `AddedAction`: `{ label, lineIds[], expiresAt }`, the one pending Undo (8 seconds).

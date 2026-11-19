@@ -14,6 +14,8 @@
 - Q: May "usual" and "repeat" appear when editing a confirmed order? → A: No. They belong to draft orders (and the repeat only while the draft has no lines); the search box that stays on the screen also works when editing a confirmed order.
 - Q: Is the number in "panadol 500" a quantity? → A: Never. Digits typed in the name are part of the search. A quantity is typed only in the quantity field after a result is chosen, or after an explicit "x" in the search box (for example "pan x20"), which is used only when the supplier then chooses a result.
 
+- Q: What did the owner's real-phone trial (2026-11-19, reported, not seen) change? → A: The owner's orders have about 20 to 30 lines (sometimes more). After practice, taking an order with this screen took about the same time as writing it by hand, not less. With Repeat the owner has to look at every copied medicine, which takes time, and the usual list shows only 12. So a sixth story is added (agreed by the owner): choose from the whole last order on a checklist, one tap per medicine and one "Add selected" at the end. The module's success is still judged by SC-011 and is not yet met.
+
 ## User Scenarios & Testing *(mandatory)*
 
 The supplier is on a phone, a store owner is telling them an order, and every second spent finding a medicine is a second the store owner waits. Today each medicine takes several taps: open a pop-up, search, pick, the pop-up closes, change the quantity. This module removes those steps without ever choosing a medicine for the supplier.
@@ -109,6 +111,26 @@ The module must work on day one (no history, no catalog), when the list cannot l
 
 ---
 
+### User Story 6 - Choose from the last order on a checklist (Priority: P1, added after the owner's trial)
+
+Orders of 20 to 30 lines usually repeat many, but not all, of the medicines of the store's last order. Instead of copying all lines and then checking each one, the supplier sees every line of the last order as a compact row, taps the ones the store asks for (changing a quantity where needed) and adds them all with one tap.
+
+**Why this priority**: The owner's trial showed that copying everything (Repeat) or showing only 12 usual medicines does not save time for orders of 20 to 30 lines; choosing from the whole last order does.
+
+**Independent Test**: With a store whose last confirmed order has 25 lines, open the checklist, tap eight rows, change one quantity and tap "Add selected": eight lines are added in one save with the chosen quantities, nothing else is added, and the rows that were added show "On order".
+
+**Acceptance Scenarios**:
+
+1. **Given** a store with a qualifying earlier order, **When** the supplier looks at a draft order screen (with or without lines), **Then** a "Choose from last order" control is shown with the number of lines and the date, and nothing is added or selected.
+2. **Given** that control is tapped, **When** the list loads, **Then** every valid line of that order (up to 200) is shown in the source order as a compact row with name, strength, form, pack size, maker and the last quantity and unit, with nothing selected; lines whose medicine is inactive or missing are not rows and are listed in a message, as in Repeat.
+3. **Given** the rows, **When** the supplier taps a row, **Then** it is selected (and tapping again unselects it); a selected row shows an editable quantity (starting at the last quantity) that must be a whole number from 1 to 100,000, otherwise "Add selected" is disabled and the range is stated.
+4. **Given** selected rows, **When** the supplier taps "Add selected", **Then** all of them are added in one change (one save) with their quantities and units, a single Undo removes exactly those lines, and the added rows are shown as "On order" and unselected.
+5. **Given** a medicine that is already on the order, **When** the rows are shown, **Then** its row shows "On order" and cannot be selected (so nothing is merged silently); the existing "already on this order" choice still applies to the other ways of adding.
+6. **Given** "Select all" and "Clear", **When** they are tapped, **Then** every selectable row is selected, or every row is unselected; "Select all" never selects rows that are already on the order.
+7. **Given** the load fails, **When** the error is shown, **Then** it offers Retry and the order and its lines are kept.
+
+---
+
 ### Edge Cases
 
 - A usual or repeated medicine has become inactive or unavailable: left out with a visible message (never silent), the rest is added.
@@ -121,6 +143,8 @@ The module must work on day one (no history, no catalog), when the list cannot l
 - Typing Urdu-script or mixed text: searched as given; no transliteration is promised.
 - Many medicines (thousands): results stay fast; if the list is too large to load, the screen says results come from the server and still works.
 - A very slow or failing search: the previous results stay on screen, an error with Retry appears, the box keeps its text.
+- The checklist lists the same medicine twice (it was twice on the source order): both are rows; selecting both adds two lines (the supplier chose both), and the existing repeated-line warnings apply.
+- The order already has lines and the checklist is used: only rows that are not on the order can be selected; the 200-line limit applies and the lines that did not fit are named.
 
 ## Requirements *(mandatory)*
 
@@ -159,6 +183,16 @@ The module must work on day one (no history, no catalog), when the list cannot l
 - **FR-023**: Adding a medicine already on the order MUST keep the existing "already on this order" choice and the repeated-typed-text warning of Module 003; nothing is merged silently.
 - **FR-024**: The previous results MUST stay visible while a new search loads; a failed load MUST show an error with Retry and keep the typed text.
 
+**Choose from the last order (checklist)**
+
+- **FR-032**: On a draft order, with or without lines, a "Choose from last order" control MUST be shown for a store that has a qualifying earlier order (confirmed or fulfilled), with the number of lines and the date of that order, and MUST NOT be shown otherwise. It uses the same source order, the same read and the same exclusions as FR-001 to FR-004 and FR-026; it never copies a price.
+- **FR-033**: Opening it MUST show every valid line of that order (up to 200), in the source order, as a compact row with name, strength, dosage form, pack size, maker and the last quantity and unit, with nothing selected; lines that are inactive, missing or over the limit MUST be listed in a message that names each one and the reason.
+- **FR-034**: A tap on a row MUST select or unselect it; a selected row MUST show an editable quantity starting at the last quantity, which MUST be a whole number from 1 to 100,000 (FR-020); an invalid quantity MUST disable "Add selected" and state the range. "Select all" and "Clear" MUST exist; "Select all" MUST NOT select rows that are already on the order.
+- **FR-035**: "Add selected" MUST add all selected rows in one change (one save) through the same autosave as everything else (FR-025), respecting the 200-line limit and naming any line that did not fit; it MUST be disabled when nothing is selected; one Undo MUST remove exactly the lines it added.
+- **FR-036**: A medicine already on the order MUST be shown as "On order" and MUST NOT be selectable from the checklist, so nothing is merged silently (FR-010, FR-023).
+- **FR-037**: The checklist MUST have loading, error with Retry and empty states, every control at least 44 by 44 px at a 360 px width, and no sideways scroll (FR-029); a failed load keeps the order and its lines.
+- **FR-038**: The checklist MUST NOT add a new route, table, migration or package, MUST NOT confirm anything, and MUST NOT change the Repeat button, which keeps working as before.
+
 **Cross-cutting**
 
 - **FR-025**: Every change made by this module MUST be saved through the same automatic, idempotent save as Module 003 (including its protection against saving over a newer version); this module MUST NOT introduce another way to create or change an order or a line.
@@ -191,6 +225,7 @@ The module must work on day one (no history, no catalog), when the list cannot l
 - **SC-009**: The New order screen with the usual list, the search results, the Undo and every message passes the 360 px check: no control below 44 by 44 px and no sideways scroll; the bottom navigation has five items.
 - **SC-010**: Each failure (list fails to load, save fails, no connection, a medicine became inactive) shows its own plain message, keeps the order and every line, and offers Retry or the typed path; no order or typed line is lost.
 - **SC-011**: During the owner's trial the owner compares taking a real order with this screen against handwriting and reports the result; it is recorded as reported, not seen, with what was and was not tried. The module is considered successful in practice when the owner reports it faster than handwriting.
+- **SC-012**: With a store whose last order has 25 lines, choosing eight of them and adding them takes eight row taps plus one "Add selected" tap (nine taps, no typing), creates eight lines with the chosen quantities in one save, and a double tap on "Add selected" or a retry creates no duplicate line (automated test that counts the taps). Whether this is faster than handwriting for the owner is judged by SC-011.
 
 ## Assumptions
 

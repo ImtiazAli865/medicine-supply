@@ -88,6 +88,12 @@ Facts below were read from the code on `master` (Modules 001 to 007) on 2026-11-
 | Repeat route, 200 lines | integration timing | under 1.5 s |
 | Tap counts | Playwright counts clicks and key presses per scenario | SC-001, SC-002, SC-004 |
 
+### D14 - Checklist of the last order (added after the owner's trial, user story 6)
+
+**Decision**: A new inline component `LastOrderChecklist` (no dialog) reuses the existing `GET /api/orders/repeat` read (the same lines, the same skipped list, no new route, no migration). Rows are keyed by their position in the source order (the same medicine can appear twice). A pure module `fast-checklist.ts` holds the rules (selection, quantity validation, building the lines to add, which rows are on the order). Adding uses `useOrderEditor.addLines` (one change, one save) and the existing `UndoBar`. A row whose medicine is already on the order is shown "On order" and cannot be selected, so nothing is merged silently. The control is shown for drafts with or without lines (Repeat stays only for drafts with no lines).
+**Why**: The owner's orders have 20 to 30 lines and after practice the app took about the same time as handwriting; Repeat copies everything and needs a check of every line, and the usual list shows 12. One tap per wanted medicine and one add is the smallest change that matches how the owner takes an order.
+**Considered**: Raising the usual list from 12 to 30 (long cards, one add per tap, no batch); a pop-up checklist (the module removed pop-ups on purpose); a new route (not needed: the repeat read already returns the lines).
+
 ### D13 - Not needed
 
 - **ADR**: none. The decisions are local to the order screen, reversible, add no stored data and no new dependency. If the SQL function path is ever taken, that decision gets an ADR then.

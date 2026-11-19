@@ -86,6 +86,8 @@ test.describe("US5: pending items stay visible", () => {
   });
 
   test("after registering and pricing everything, Home says nothing needs attention", async ({ page, freshTenant }) => {
+    // A long flow (register two lines, price three medicines, then Home): about 50 s alone, so the default 60 s limit is too tight under load.
+    test.setTimeout(180_000);
     await setup(freshTenant);
     await signIn(page, freshTenant);
     await page.goto("/pending?tab=register");

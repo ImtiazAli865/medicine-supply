@@ -8,7 +8,7 @@ description: "Task list for Module 008: Fast Order Entry"
 **Input**: Design documents from `/specs/008-fast-order-entry/`
 **Prerequisites**: plan.md, spec.md, research.md (decisions D1-D13), data-model.md, contracts/api.openapi.yaml, quickstart.md
 **Tests**: INCLUDED. Constitution Principles IV, V and VIII and spec success criteria SC-001 to SC-011 require them. Within each story, write its tests first and confirm they fail for the right reason before the implementation (pure-code and route tests first, then the screen).
-**Organization**: Grouped by user story. Priority order: US1 repeat the last order (P1), US2 usual medicines (P1), US3 a search box that stays (P1), then US4 quantity shortcuts (P2), US5 first use, failures and honest limits (P2), then cross-cutting polish and owner steps.
+**Organization**: Grouped by user story. Priority order: US1 repeat the last order (P1), US2 usual medicines (P1), US3 a search box that stays (P1), then US4 quantity shortcuts (P2), US5 first use, failures and honest limits (P2), then cross-cutting polish and owner steps. US6 (the last order as a checklist, T060 to T066) was added on 2026-11-19 after the owner's real-phone trial.
 
 ## Format: `[ID] [P?] [Story] Description`
 
@@ -166,6 +166,22 @@ Same single Next.js project: `src/app`, `src/components`, `src/lib`, `tests/{uni
 
 - [x] T047 [US5] Fill the gaps these tests show, each only if missing: the "Refresh medicines" button (`refresh-medicines`, reloads the list and keeps the text), the "too large" notice ("Results come from the server because your catalog is very large"), the empty-catalog block with links to the existing add-medicine and import screens (check the real route names first), the first-use note of the usual list, and the stale inactive medicine handling: when a save is refused with the `invalid_lines` message about an inactive medicine, the editor reloads the active list, marks every catalog line added since the last successful save whose medicine is not in that list ("No longer active: [name]", or every such line if the editor cannot tell which were added), keeps the rest of the order on screen, and offers "Remove" for each marked line; after the removal the autosave sends the order again. Never invent a route; never add a banner that claims offline use.
 - [x] T048 [US5] Run the US5 tests (T045 and T046) and fix until green; run lint and typecheck; record the counts in quickstart section 6.
+
+---
+
+## Phase 9: User Story 6 - Choose from the last order on a checklist (Priority: P1, added 2026-11-19 after the owner's trial)
+
+**Goal**: The supplier sees every line of the store's last order as a compact row, taps the ones the store asks for (changing a quantity where needed) and adds them with one tap, for orders of 20 to 30 lines. The task numbers continue after T059 so earlier numbers did not change; this phase belongs before the final verification and pull request steps (T056 to T059), which are repeated for it in T066.
+
+**Independent Test**: A store whose last confirmed order has 25 lines: open the checklist, tap eight rows, change one quantity, tap "Add selected": eight lines with the chosen quantities are added in one save, the rows show "On order", one Undo removes exactly those lines.
+
+- [x] T060 [P] [US6] Pure rules in `src/lib/orders/fast-checklist.ts` with their tests first in `tests/unit/fast-checklist.test.ts`: rows keyed by the position in the source order (the same medicine twice gives two rows), which rows are on the order (catalog rows by medicine id; typed rows never), toggling a row (starts at the last quantity as text), select all (never rows on the order) and clear, quantity validation (whole number 1 to 100,000, the range message), building the lines to add in source order with the chosen quantities and the unit of the source line (no price field), nothing selected or any invalid quantity gives "cannot add".
+- [ ] T061 [P] [US6] `tests/e2e/fast-checklist.spec.ts` (mobile, 360 px): 25-line source order; the control shows the count and the date and nothing is selected or added; tap eight rows and change one quantity, "Add selected" adds eight lines in order with those quantities and units in one save (nine taps counted), one Undo removes exactly those eight lines; the added rows show "On order" and cannot be selected again; an invalid quantity disables Add and states the range; "Select all" skips rows on the order and "Clear" unselects; works when the draft already has lines; an inactive medicine is listed in the message and is not a row; a failing load shows Retry and keeps the order; a double tap on "Add selected" adds the lines once; the new controls are at least 44 by 44 px with no sideways scroll; the repeat route response has no price key.
+- [x] T062 [US6] `src/components/orders/LastOrderChecklist.tsx`: the "Choose from last order" control (`checklist-open`) with the line count and date, an inline list (`checklist-row` rows, each tap area at least 44 px, selected rows show an editable quantity), `checklist-all`, `checklist-clear`, `checklist-add` ("Add N selected"), the skipped message, loading, error with Retry and empty states; it reuses `fetchRepeat` of `useUsualMedicines`.
+- [x] T063 [US6] Wire it into `OrderEditor.tsx` (drafts only, with or without lines, after the Repeat button): rows on the order come from the editor's lines; adding uses `editor.addLines` once and one `UndoBar`; the 200-line limit disables it and names the lines that did not fit.
+- [ ] T064 [US6] Run the new tests and the affected older specs; fix until green; run lint, typecheck and build; record the counts in quickstart section 6.
+- [x] T065 [US6] Docs: quickstart section 3 (a step for the checklist), section 4 (SC-012 row), README, PHR 006.
+- [ ] T066 [US6] Owner check on the phone with a real 20 to 30 line order (Repeat against the checklist, timed, reported not seen), recorded in quickstart section 6.
 
 ---
 
