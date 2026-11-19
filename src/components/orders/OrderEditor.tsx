@@ -6,6 +6,7 @@ import { useCallback, useMemo, useRef, useState } from "react";
 import { CancelOrderDialog } from "@/components/orders/CancelOrderDialog";
 import { ConfirmOrderDialog } from "@/components/orders/ConfirmOrderDialog";
 import { FastAdd } from "@/components/orders/FastAdd";
+import { LastOrderChecklist } from "@/components/orders/LastOrderChecklist";
 import { OrderLineRow } from "@/components/orders/OrderLineRow";
 import { OrderStatusBadge } from "@/components/orders/OrderStatusBadge";
 import { RepeatLastOrder } from "@/components/orders/RepeatLastOrder";
@@ -24,7 +25,7 @@ import { useOrderEditor, type NewLineEntry } from "@/lib/hooks/useOrderEditor";
 import { useInactiveLines } from "@/lib/hooks/useInactiveLines";
 import { useUsualMedicines } from "@/lib/hooks/useUsualMedicines";
 import { LIMITS, repeatedTypedLineIds } from "@/lib/orders/editor-state";
-import type { RepeatPlan, RepeatSource, SlimMedicine, UsualMedicine } from "@/lib/orders/fast-types";
+import type { RepeatLine, RepeatPlan, RepeatSource, SlimMedicine, UsualMedicine } from "@/lib/orders/fast-types";
 import { formatOrderNumber } from "@/lib/orders/number";
 import type { Order } from "@/lib/orders/types";
 import type { Product } from "@/lib/products/types";
@@ -119,15 +120,16 @@ export function OrderEditor({
   }, []);
   const dismissUndo = useCallback(() => setUndo(null), []);
 
-  /** Repeat last order: all lines in one change (one save), then one Undo for exactly those lines. */
-  function applyRepeat(plan: RepeatPlan, source: RepeatSource): { added: number; refused: number } {
-    const entries: NewLineEntry[] = plan.lines.map((l) =>
+  /** Lines of the last order (Repeat, or the chosen rows of the checklist): all in one change (one save), then one Undo for exactly those lines. */
+  function addFromLastOrder(lines: RepeatLine[], source: RepeatSource): { added: number; refused: number } {
+    const entries: NewLineEntry[] = lines.map((l) =>
       l.kind === "catalog" ? { kind: "catalog", medicine: l.medicine, quantity: l.quantity, unit: l.unit } : { kind: "typed", name: l.name, quantity: l.quantity, unit: l.unit },
     );
     const { ids, refused } = editor.addLines(entries);
     if (ids.length > 0) showUndo(`Added ${ids.length} ${ids.length === 1 ? "line" : "lines"} from ${formatOrderNumber(source.order_number)}.`, ids);
     return { added: ids.length, refused };
   }
+  const applyRepeat = (plan: RepeatPlan, source: RepeatSource) => addFromLastOrder(plan.lines, source);
 
   /**
    * Adds one catalog medicine. A medicine already on the order is never merged silently: the existing line is shown and
@@ -314,6 +316,7 @@ export function OrderEditor({
       {editing ? null : (
         <>
           <RepeatLastOrder source={usual.source} hasLines={hasLines} disabled={atLineLimit} fetchRepeat={usual.fetchRepeat} onApply={applyRepeat} />
+          <LastOrderChecklist source={usual.source} disabled={atLineLimit} onOrderIds={onOrderIds} fetchRepeat={usual.fetchRepeat} onAdd={addFromLastOrder} />
           <UsualMedicines
             usual={usual.usual}
             hasHistory={usual.source !== null}

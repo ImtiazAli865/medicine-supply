@@ -18,6 +18,8 @@ const FILES = [
   "src/components/orders/FastAdd.tsx",
   "src/components/orders/UsualMedicines.tsx",
   "src/components/orders/RepeatLastOrder.tsx",
+  "src/components/orders/LastOrderChecklist.tsx",
+  "src/lib/orders/fast-checklist.ts",
   "src/components/orders/UndoBar.tsx",
   "src/components/orders/TypedLineForm.tsx",
   "src/lib/hooks/useMedicineList.ts",
