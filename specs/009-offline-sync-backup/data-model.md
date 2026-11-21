@@ -16,7 +16,7 @@ The registry holds no orders, medicines or prices.
 
 | Store | Key | Fields | Purpose |
 |-------|-----|--------|---------|
-| `meta` | `key` | `value` | `schemaVersion`, `medicinesUpdatedAt`, `storesUpdatedAt`, `lastSyncAt`, `lastSyncAttemptAt`, `journalSeq`, `deviceId` (random id made on first use) |
+| `meta` | `key` | `value` | `schemaVersion`, `medicinesUpdatedAt`, `storesUpdatedAt`, `lastSyncAt`, `lastSyncAttemptAt`, `journalSeq`, `deviceId` (random id made on first use), `recentStores` (ids of the stores whose order screens were opened here) |
 | `medicines` | `id` | the slim medicine shape of Module 008 (`name`, `unit`, `brand`, `generic_name`, `strength`, `dosage_form`, `manufacturer`, `pack_size`, `sku`, `selling_price`), `generation` | Active medicines. A refresh writes a new `generation` and swaps `meta.medicinesGeneration` only when complete. Never a purchase price, MRP or cost. |
 | `stores` | `id` | `name`, `contact_person`, `phone`, `is_active`, `pending` (true for a store made on this device and not yet created on the server) , `pendingSeq` | Active stores plus device-made stores. |
 | `storeExtras` | `storeId` | `usual` (the `/api/orders/usual` answer), `repeatPlan` (the `/api/orders/repeat` answer), `updatedAt` | Recently used stores only (the last 10). |
@@ -42,7 +42,7 @@ Every store except `meta` carries no field that identifies another business: the
 | `reason` | text or null | Plain reason for `failed`, `conflict` or `blocked`. |
 | `conflict` | object or null | `{ server: Order, kind: "changed" \| "not_editable" \| "missing" \| "line_problem" \| "store_problem", message }`. |
 | `tries`, `nextTryAt` | integer, counter-based time | Backoff bookkeeping; `nextTryAt` is "after attempt number N of the sender", never a clock time that decides correctness. |
-| `neverSent` | boolean | True while the order has never reached the server (lets a local discard be offered). |
+| `neverSent` | boolean | True while the order has never reached the server (lets a local discard be offered). A draft opened online from the server is written as a `synced` record with `serverOrder` and `baseVersion` set and `neverSent` false, so it can be edited offline later. |
 | `updatedOnDevice` | text | Display time only (never used for decisions). |
 
 State transitions (per draft):

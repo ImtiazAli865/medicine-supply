@@ -51,7 +51,7 @@ Question: does `context.setOffline(true)` stop requests made by the service work
 
 1. Open the app on the phone while online and wait a few seconds (the lists and files are kept).
 2. Switch on airplane mode. Reload the app. It should open and say "Offline".
-3. Take a real order (search a few medicines, use Repeat or the checklist for a store you ordered for before). The screen should say "Saved on this device, not sent yet".
+3. Take a real order (search a few medicines, use Repeat or the checklist for a store you ordered for before). The screen should say "Saved on this device, not yet sent".
 4. Close the app, open it again (still in airplane mode). The order is still there.
 5. Switch airplane mode off and open the app. After a few seconds the order should show as sent ("Saved at ..."), once. Check Orders: it appears exactly once.
 6. Report: did every step work, how long did it take compared with writing on paper, and anything that looked wrong. (Recorded as reported, not seen.)

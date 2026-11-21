@@ -65,6 +65,7 @@ scripts/
 src/
 ├── app/
 │   ├── offline/page.tsx           # client-only offline shell (outside the (app) group; public in the proxy)
+│   ├── (app)/layout.tsx           # + passes userId and businessId to the provider
 │   └── api/
 │       ├── ping/route.ts          # GET, no sign-in, no database
 │       └── backup/export/route.ts # GET, paged, explicit safe columns
@@ -98,7 +99,7 @@ tests/
 
 - New routes: see [contracts/api.openapi.yaml](contracts/api.openapi.yaml). Error taxonomy reuses `unauthenticated` (401), `no_business` (403), `validation_error` (400).
 - Unchanged routes used by the queue and their refusals (all mapped to a plain reason, none retried blindly): `PUT /api/orders/{id}` (`version_conflict`, `order_not_editable`, `store_locked`, `store_not_found`, `store_inactive`, `invalid_lines`), `POST /api/stores` (`similar_store`, `unusable_id`).
-- Idempotency and retries: the request id of an unresolved request is stored in the journal before the send and reused until the server answers; timeouts become network failures (GET 15 s, other 20 s); retries use growing delays (2 s, 5 s, 15 s, 45 s, then 2 minutes) with a Retry button always available; a 401 pauses all sending and asks the same user to sign in again.
+- Idempotency and retries: the request id of an unresolved request is stored in the journal before the send and reused until the server answers; timeouts become network failures (GET 15 s, other 20 s); retries use growing delays (2 s, 5 s, 15 s, 45 s, then 2 minutes) with a Retry button always available; a 401 pauses all sending and asks the same user to sign in again without leaving the screen (sync sends use `onUnauthorized: "event"`).
 - Versioning: the device schema is versioned (`schemaVersion` 1) with an upgrade function per version; the backup file has `version: 1` and an unknown version is refused.
 
 ### Key decisions and ADR
@@ -123,7 +124,7 @@ Decided in [research.md](research.md): D1 no migration or package, D2 per-busine
 ## Risks
 
 1. **Offline testing in Playwright** (worker network not cut by `setOffline`). Blast radius: tests only. Guardrail: the spike (T001) decides between `setOffline` and the stop-the-server helper before any offline spec is written.
-2. **Existing online behaviour changing by accident** (the journal touches the autosave machine, `fetchJson` and the editor). Guardrail: the journal is optional, the manual (confirmed-order) mode is untouched, the existing Module 003 to 008 specs run unchanged except for the listed wording changes ("Not saved" after a lost connection becomes "Saved on this device, not sent yet"), and the whole suite runs before the PR.
+2. **Existing online behaviour changing by accident** (the journal touches the autosave machine, `fetchJson` and the editor). Guardrail: the journal is optional, the manual (confirmed-order) mode is untouched, the existing Module 003 to 008 specs run unchanged except for the listed wording changes ("Not saved" after a lost connection becomes "Saved on this device, not yet sent"); the Module 008 specs that simulate a failed read by aborting a request call `blockDeviceStorage(page)` so they keep testing the online failure, with one new test per kind for the device-labelled answer; the whole suite runs before the PR.
 3. **A silent overwrite or duplicate through a sync bug.** Guardrail: the server's request id and version checks stay the final authority; "keep the phone version" re-bases on the server version and shows a preview first; every conflict kind has a test; the kill switch is that sending can be paused from Settings (items stay on the device).
 
 ## Complexity Tracking

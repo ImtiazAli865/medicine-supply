@@ -101,7 +101,7 @@ The supplier can save a backup file of their own order data and the items still 
 
 **Why this priority**: A cleared browser or a lost phone must not lose orders that never synced, and the owner wants a copy they control.
 
-**Independent Test**: With a mix of synced orders and unsynced drafts, export a backup, import it into a clean second business-empty device, and check the unsynced drafts come back and sync once; import the same file again and check nothing is duplicated.
+**Independent Test**: With a mix of synced orders and unsynced drafts, export a backup, clear the device data and import it again on the same phone and business, and check the unsynced drafts come back and sync once; import the same file again and check nothing is duplicated.
 
 **Acceptance Scenarios**:
 
