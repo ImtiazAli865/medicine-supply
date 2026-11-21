@@ -2,6 +2,7 @@
 
 import { Plus, Search, Store as StoreIcon } from "lucide-react";
 import { useState } from "react";
+import { useOffline } from "@/components/offline/OfflineProvider";
 import { Banner, ErrorState } from "@/components/ui/States";
 import { Button } from "@/components/ui/Button";
 import { LoadingBlock } from "@/components/ui/Spinner";
@@ -11,6 +12,11 @@ import { newId } from "@/lib/ids";
 import type { Store } from "@/lib/stores/types";
 
 const inputClass = "min-h-11 w-full rounded-lg border border-border bg-surface px-3 py-2 text-base";
+
+/** A name compared without case and extra spaces. */
+function norm(text: string): string {
+  return text.replace(/\s+/g, " ").trim().toLowerCase();
+}
 
 function StoreButton({ store, onSelect }: { store: Store; onSelect: (s: Store) => void }) {
   return (
@@ -48,6 +54,7 @@ export function StoreSelector({ onSelect }: { onSelect: (store: Store) => void }
   // One id per add attempt: pressing the button twice or retrying never creates two stores.
   const [attemptId, setAttemptId] = useState(() => newId());
   const list = useSearchList<Store>("/api/stores", query, "active");
+  const { center } = useOffline();
 
   async function addStore() {
     setBusy(true);
@@ -58,7 +65,23 @@ export function StoreSelector({ onSelect }: { onSelect: (store: Store) => void }
       setAttemptId(newId());
       onSelect(data);
     } catch (e) {
-      if (e instanceof ClientApiError && e.code === "similar_store") {
+      if (e instanceof ClientApiError && e.code === "network" && center) {
+        // No connection: the store is made on this phone and created on the server by the queue before the orders that use it.
+        // A store with the same name that this phone already knows is offered instead, never duplicated silently.
+        const same = list.items.filter((s) => norm(s.name) === norm(name));
+        if (same.length > 0) {
+          setMatches(same);
+          setError("A store with this name already exists. Choose it below instead of adding another.");
+        } else {
+          const created = await center.createStore({ name });
+          if (created) {
+            setAttemptId(newId());
+            onSelect({ id: created.id, name: created.name, contact_person: created.contact_person, phone: created.phone, address: created.address, notes: null, is_active: true, version: 0, created_at: "", updated_at: "" });
+          } else {
+            setError("This phone could not keep the new store (its storage is full or blocked).");
+          }
+        }
+      } else if (e instanceof ClientApiError && e.code === "similar_store") {
         setMatches((e.matches ?? []) as Store[]);
         setError("A store with this name already exists. Choose it below instead of adding another.");
       } else {

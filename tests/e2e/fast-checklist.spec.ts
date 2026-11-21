@@ -3,6 +3,7 @@ import { insertMedicines } from "../helpers/fast";
 import type { TestTenant } from "../helpers/supabase-test";
 import { addMedicine, createOrder, line, seedStore, waitSaved } from "./orders-helpers";
 import { expect, signIn, smallTargets, test } from "./fixtures";
+import { blockDeviceStorage } from "../helpers/offline";
 
 // User story 6 of Module 008: the last order as a checklist (mobile, 360 px). The owner's orders have 20 to 30 lines.
 test.describe("US6: choose from the last order on a checklist", () => {
@@ -159,6 +160,7 @@ test.describe("US6: choose from the last order on a checklist", () => {
   test("an inactive medicine is not a row and is named in a message; a failing load shows Retry and keeps the order", async ({ page, freshTenant }) => {
     const { ids } = await seed(freshTenant);
     await freshTenant.client.from("products").update({ is_active: false }).eq("id", ids[9]);
+    await blockDeviceStorage(page); // this test checks the online failure state, with no copy kept on the device
     await signIn(page, freshTenant);
     let fail = true;
     await page.route(/\/api\/orders\/repeat\?/, (route) => (fail ? route.abort("failed") : route.continue()));

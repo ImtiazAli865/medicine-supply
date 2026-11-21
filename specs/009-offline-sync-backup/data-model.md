@@ -17,7 +17,7 @@ The registry holds no orders, medicines or prices.
 | Store | Key | Fields | Purpose |
 |-------|-----|--------|---------|
 | `meta` | `key` | `value` | `schemaVersion`, `medicinesUpdatedAt`, `storesUpdatedAt`, `lastSyncAt`, `lastSyncAttemptAt`, `journalSeq`, `deviceId` (random id made on first use), `recentStores` (ids of the stores whose order screens were opened here) |
-| `medicines` | `id` | the slim medicine shape of Module 008 (`name`, `unit`, `brand`, `generic_name`, `strength`, `dosage_form`, `manufacturer`, `pack_size`, `sku`, `selling_price`), `generation` | Active medicines. A refresh writes a new `generation` and swaps `meta.medicinesGeneration` only when complete. Never a purchase price, MRP or cost. |
+| `medicines` | `id` | the slim medicine shape of Module 008 (`name`, `unit`, `brand`, `generic_name`, `strength`, `dosage_form`, `manufacturer`, `pack_size`, `sku`, `selling_price`) | Active medicines. A refresh replaces the whole list in ONE transaction, so an interrupted refresh leaves the previous list. Never a purchase price, MRP or cost. |
 | `stores` | `id` | `name`, `contact_person`, `phone`, `is_active`, `pending` (true for a store made on this device and not yet created on the server) , `pendingSeq` | Active stores plus device-made stores. |
 | `storeExtras` | `storeId` | `usual` (the `/api/orders/usual` answer), `repeatPlan` (the `/api/orders/repeat` answer), `updatedAt` | Recently used stores only (the last 10). |
 | `drafts` | `orderId` | see "Draft journal record" | Every draft with a change the server has not confirmed, and the last confirmed copy of drafts opened on this device. |

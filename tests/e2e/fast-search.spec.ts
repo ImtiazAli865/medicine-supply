@@ -1,6 +1,7 @@
 import { insertMedicines, seedSimilar } from "../helpers/fast";
 import { addMedicine, line, seedStore, startOrder, waitSaved } from "./orders-helpers";
 import { expect, signIn, test } from "./fixtures";
+import { blockDeviceStorage } from "../helpers/offline";
 
 // US3 of Module 008: the search box that stays on the order screen (mobile, 360 px).
 test.describe("US3: continuous search", () => {
@@ -155,6 +156,7 @@ test.describe("US3: continuous search", () => {
 
   test("while the list cannot load the server search answers; previous results stay while a search is slow; a failed search shows Retry and keeps the text", async ({ page, freshTenant }) => {
     await seed(freshTenant);
+    await blockDeviceStorage(page); // this test checks the online failure state, with no copy kept on the device
     await signIn(page, freshTenant);
     let listMode: "fail" | "ok" = "fail";
     let searchMode: "ok" | "slow" | "fail" = "ok";

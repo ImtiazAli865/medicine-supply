@@ -58,4 +58,40 @@ Question: does `context.setOffline(true)` stop requests made by the service work
 
 ## 6. Results
 
-(Filled in during implementation: spike outcome, test runs with dates and counts, owner answers.)
+### Baseline (T001, 2026-11-21, branch `009-offline-sync-backup`, before any Module 009 change to existing files)
+
+- `npm run lint`: passed (including the secrets check). `npm run typecheck`: passed.
+- `npm test`: **128 test files, 1327 tests, all passed**, duration 1,704 s (28 minutes). Note: while this run was in progress, new Module 009 files and some edits of existing files were being written; vitest had already collected its file list, and every test passed, so no result was influenced. The Supabase TEST project was reachable.
+
+### Gating spike (T002, 2026-11-21): does `context.setOffline(true)` cut the service worker's network?
+
+Run on the Playwright mobile project against the production build (`npm run build && npm run start`, TEST project), with a throwaway worker that forwards every request to the network and answers `SW-FALLBACK` when the network fails. After `context.setOffline(true)`: a `fetch` made from inside the worker **failed** (`SW-NETWORK-FAILED`), a `fetch` made by the page was answered through the worker with the fallback, and a page reload was answered by the worker with the fallback. So the emulation also cuts the worker's requests.
+
+**Decision: the offline specs use `context.setOffline` (`goOffline` / `goOnline` in `tests/helpers/offline.ts`). The stop-the-server fallback is not needed.** The throwaway worker, the throwaway spec and the temporary proxy matcher entry were deleted. The production build with the new `make-sw-assets` step also succeeded (`public/sw-assets.json` written).
+
+### Final verification (T069, 2026-11-21 to 2026-11-22, branch `009-offline-sync-backup`, TEST Supabase project, production build)
+
+| Check | Result |
+|---|---|
+| `npm run lint` and `npm run typecheck` | passed |
+| `npm test` (unit and integration) | **151 test files, 1,511 tests.** First run: 1,509 passed and 2 failed. The two failures were latency measurements against the hosted TEST database (`market-scale`: a searched market list took 6.9 s against a 3 s budget; `search-5000`: 37 of 40 searches under 1 s against 95 % needed). Neither touches Module 009 code. Run alone, both files passed (6 tests). |
+| `npm run build` (includes `make-sw-assets`) | passed; `public/sw-assets.json` written with 54 files |
+| `npm run test:e2e`, both projects, whole suite | **772 tests: 473 passed, 19 failed, 280 skipped** (skipped by design: mobile-only specs on the desktop project and the other way round). The computer went to sleep during this run (`ERR_NETWORK_IO_SUSPENDED` in the log), so most failures were 60-second timeouts. |
+| The 19 failures, run again alone | 17 passed unchanged. 2 needed a test change and then passed: `market-home` (the page adds the date to the address, so the regular expression now allows it) and `touch-targets` pending screens (it opens many screens, so its timeout is now 150 s). |
+| New Module 009 specs | `offline-take-order`, `offline-honest-states`, `offline-search-scale`, `offline-sync-once`, `offline-sync-scale`, `offline-conflicts`, `offline-protect`, `offline-two-businesses`, `offline-new-store`, `offline-backup`, `offline-settings`, `offline-touch-targets`, `offline-states`, `offline-upgrade`: all passed on the mobile project; the integration specs `offline-replay` and `backup-export` (11 tests) passed. |
+
+Not done as one clean run: after the last two test edits only those two specs, not the whole suite, were run again. The suite also had to be run twice in full because the first full run found real defects, listed next.
+
+Real defects found by the full run and fixed (not test changes):
+
+1. **Two copies of the page content for a moment after opening a page.** The offline provider shared its state through a React context whose value changed while the page was still arriving, which made React draw the waiting page content a second time in the browser. The state now goes through a small external store and the context carries only that store; 40 page opens in a row showed no duplicate (before: 6 to 14 of 40).
+2. **A second tab could not send its own changes.** Only the tab holding the sender role sent anything, so an order edited in another tab stayed "Saved on this device, not yet sent" for good. Now a tab always sends the draft that is open on its own screen, and the sender tab looks at the journal every 30 seconds for drafts another tab left unsent.
+3. **Retry did nothing while the connection flag still said offline** after an earlier failed request. The person's own Retry is now always tried (it does not override a pause).
+4. "Open the full app" link on the offline page was only 19 px high; it is now a proper 44 px target.
+
+Older specs of Modules 002 to 008 that expected "Not saved" or "Changed elsewhere" for an edit made with the device storage on now expect the Module 009 wording (`on_device`, "not yet sent", and the side-by-side `conflict-panel`); the failure states with no device storage are still tested through `blockDeviceStorage`.
+
+Measured: an offline search of a 5,000-medicine list answered in about 38 to 66 ms on the test machine.
+
+Still to do by the owner (T074): the airplane-mode walkthrough in section 5 on a real phone against the DEV project. Until the owner reports, this is recorded as **not tried on a real phone**; the owner's answers are recorded as "reported, not seen".
+

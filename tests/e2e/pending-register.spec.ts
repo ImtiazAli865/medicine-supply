@@ -172,7 +172,7 @@ test.describe("US1: register a typed medicine from the order line", () => {
     await expect(line(page, 0).getByTestId("line-typed-name")).toBeVisible();
 
     await line(other, 0).getByLabel("Quantity").fill("9");
-    await expect(other.getByTestId("save-status")).toHaveAttribute("data-state", "changed_elsewhere", { timeout: 15_000 });
+    await expect(other.getByTestId("conflict-panel")).toBeVisible({ timeout: 30_000 }); // Module 009: the supplier decides, nothing is overwritten
     await expect(line(other, 0).getByLabel("Quantity")).toHaveValue("9"); // its text is not thrown away
     const stored = await freshTenant.client.from("order_lines").select("quantity, item_status").is("removed_at", null).order("position");
     expect(stored.data![0]).toEqual({ quantity: 3, item_status: "registered" });

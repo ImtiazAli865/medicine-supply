@@ -1,6 +1,7 @@
 import { insertMedicines, seedSimilar } from "../helpers/fast";
 import { createOrder, seedStore, startOrder } from "./orders-helpers";
 import { expect, signIn, smallTargets, test } from "./fixtures";
+import { blockDeviceStorage } from "../helpers/offline";
 
 // SC-009 of Module 008: every new control and message on the order screen is at least 44 x 44 px at 360 px, nothing
 // scrolls sideways, and the bottom navigation keeps its five items.
@@ -85,6 +86,7 @@ test.describe("Module 008: touch targets and layout at 360 px", () => {
     const [m] = await insertMedicines(freshTenant.client, [{ name: "State Med", strength: "5 mg", selling_price: "10.00" }]);
     const storeId = await seedStore(freshTenant, "State Layout Store");
     await createOrder(freshTenant, storeId, [{ product_id: m!, quantity: 3, unit: "strip" }], { confirm: true });
+    await blockDeviceStorage(page); // this test checks the online failure state, with no copy kept on the device
     await signIn(page, freshTenant);
     await page.route(/\/api\/orders\/(usual|repeat|medicines)\?/, (route) => route.abort("failed"));
     await startOrder(page, "State Layout Store");

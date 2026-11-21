@@ -147,7 +147,7 @@ test.describe("US3: propose linking the same typed medicine in other orders", ()
     await expect(dialog.getByTestId("proposal-line").filter({ hasText: "Bravo Store" }).getByTestId("proposal-linked")).toBeVisible();
 
     await line(other, 0).getByLabel("Quantity").fill("8");
-    await expect(other.getByTestId("save-status")).toHaveAttribute("data-state", "changed_elsewhere", { timeout: 15_000 });
+    await expect(other.getByTestId("conflict-panel")).toBeVisible({ timeout: 30_000 }); // Module 009: the supplier decides, nothing is overwritten
     await expect(line(other, 0).getByLabel("Quantity")).toHaveValue("8");
     expect((await stored(freshTenant, orders.bravo.id)).lines[0].quantity).toBe(5); // nothing was overwritten
   });
