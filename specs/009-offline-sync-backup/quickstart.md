@@ -49,6 +49,7 @@ Question: does `context.setOffline(true)` stop requests made by the service work
 
 ## 5. Owner's trial (SC-010) on a real phone, in airplane mode
 
+0. **The phone must open the app through a secure address.** A browser starts a service worker only on `https://` or on `localhost`. On a plain `http://192.168.x.x:3000` address from a computer on the same network the worker does not start, so steps 2 and 4 (reloading or reopening the app without a signal) cannot work there, although taking an order on a screen that is already open still does. Use one of: the deployed `https://` address of the app; or, on an Android phone only, Chrome's `chrome://flags/#unsafely-treat-insecure-origin-as-secure` set to the computer's address (a test-only setting, switch it off afterwards); or a USB cable with port forwarding so the phone reaches the computer as `localhost`. The server must be a production build (`npm run build`, then `npm run start`), not `npm run dev`.
 1. Open the app on the phone while online and wait a few seconds (the lists and files are kept).
 2. Switch on airplane mode. Reload the app. It should open and say "Offline".
 3. Take a real order (search a few medicines, use Repeat or the checklist for a store you ordered for before). The screen should say "Saved on this device, not yet sent".
@@ -93,5 +94,19 @@ Older specs of Modules 002 to 008 that expected "Not saved" or "Changed elsewher
 
 Measured: an offline search of a 5,000-medicine list answered in about 38 to 66 ms on the test machine.
 
-Still to do by the owner (T074): the airplane-mode walkthrough in section 5 on a real phone against the DEV project. Until the owner reports, this is recorded as **not tried on a real phone**; the owner's answers are recorded as "reported, not seen".
+### Owner's real-phone trial (T074, 2026-11-23, Android Chrome, production build served from the computer, DEV project)
+
+Reported by the owner in chat. Where a screenshot was sent, the screenshot was seen; everything else is **reported, not seen**.
+
+| Step | Result |
+|---|---|
+| 0. Secure address | The first attempts failed: with airplane mode on, a reload showed Chrome's own "No internet" page, because the phone did not treat `http://192.168.1.4:3000` as a secure address and so no service worker started. After the Chrome flag `unsafely-treat-insecure-origin-as-secure` was set correctly for that address and Chrome was relaunched, the offline reload worked. The same worker was checked on the computer at `localhost`: it registered, activated and kept all 54 app files. Not a defect of the app; the need is documented in step 0 above. |
+| 1 to 2. Reload in airplane mode | Reported and seen in screenshots: the app's own "Offline" page opened with its header, bottom navigation and the buttons New order, Orders on this phone, Sync status. |
+| 3. Take a real order offline | Reported: the owner took an order with New order and it was taken. Seen in screenshots: the offline order screen with search and "Added Panadol." with Undo; the header showed "Offline · 1 waiting". |
+| Bottom navigation offline | Reported and seen in screenshots: Home shows the Offline page; Orders shows the orders kept on this phone with the note that the other orders need the internet; Settings shows "Sync and backup"; Products and Stores show "This needs the internet" with a "Take an order" button. No Chrome error page. |
+| 4. Close and reopen the app offline | Reported: Chrome was closed completely and opened again in airplane mode; the order was still saved. |
+| 5. Reconnect: the order arrives once | Reported and seen in a screenshot: Settings showed "Last successful send: 23 Nov 2026, 01:07", "0 waiting, 0 sending, 0 failed, 0 need a decision", "Everything is sent as of 01:07". The owner switched Wi-Fi on briefly to use WhatsApp, which is when the send happened, so the send was not triggered by the planned "airplane mode off" step. Reported: the order appears exactly once in Orders. |
+| 6. Time against paper | Reported: taking the order in the app was faster than writing it on paper; writing on paper took about 15 seconds longer. (First time on the phone; no speed target is set for offline order taking, SC-010 is about keeping and sending the order.) |
+
+SC-010 is **confirmed by the owner's report**: every step worked (offline reload, order taken offline, order kept after closing and reopening Chrome offline, order sent once, order appears once in Orders). One caveat: the send happened when Wi-Fi was switched on briefly for WhatsApp, not at a planned "airplane mode off" moment. Everything except the screenshots listed above is reported, not seen.
 
