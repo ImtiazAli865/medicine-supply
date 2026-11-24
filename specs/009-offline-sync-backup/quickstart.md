@@ -110,3 +110,10 @@ Reported by the owner in chat. Where a screenshot was sent, the screenshot was s
 
 SC-010 is **confirmed by the owner's report**: every step worked (offline reload, order taken offline, order kept after closing and reopening Chrome offline, order sent once, order appears once in Orders). One caveat: the send happened when Wi-Fi was switched on briefly for WhatsApp, not at a planned "airplane mode off" moment. Everything except the screenshots listed above is reported, not seen.
 
+### Before the pull request (T075, 2026-11-24, branch `009-offline-sync-backup`, TEST Supabase project)
+
+- The branch was 0 commits behind `origin/master` (8853c64) and 6 ahead, so no merge was needed.
+- `npm run lint` (including the secrets check) and `npm run typecheck`: passed. `npm run build` (includes `make-sw-assets`): passed, `public/sw-assets.json` written with 54 files.
+- `npm test`: **151 test files, 1,511 tests, all passed** (1,363 s). The two hosted-database latency tests that failed once in the earlier run (`market-scale`, `search-5000`) passed in this run.
+- The full Playwright suite was **not** run again for the pull request; the last full run and the reruns of its failures are recorded in the "Final verification" table above (473 passed, 19 failed on that full run, all 19 passing on rerun, 2 after test edits). One clean full run after the last two test edits was not done.
+
