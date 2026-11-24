@@ -193,7 +193,7 @@ Same single Next.js project: `src/app`, `src/components`, `src/lib`, `tests/{uni
 
 - [ ] T059 Owner (TEST part done on 2026-11-24, DEV part still open): say yes before `0011_reports.sql` is applied to the TEST project (T021); that one yes also covers re-applying the same growing file to TEST in T031, T037 and T041. Say yes again, separately, before it is applied to the DEV project after the checks pass.
 - [ ] T060 Owner trial (quickstart section 4), recorded as reported, not seen: open Reports on the phone with real data; can the owner say "how much did I sell and what profit can I trust this month" within 30 seconds (SC-011)? Do the figures of one remembered day match? Is "Incomplete" understandable? Record the answers in `quickstart.md`.
-- [ ] T061 Pull request: open it only when the owner says so (title and description in English; end the description with the attribution line the harness asks for); merge only when the owner says so. An ADR (`/sp.adr reports-cost-rule-and-read-only-functions`) and the optional constitution PATCH clarification for Principle II are the owner's decision.
+- [x] T061 Pull request (opened 2026-11-24 as ImtiazAli865/medicine-supply#10 at the owner's word; not merged): open it only when the owner says so (title and description in English; end the description with the attribution line the harness asks for); merge only when the owner says so. An ADR (`/sp.adr reports-cost-rule-and-read-only-functions`) and the optional constitution PATCH clarification for Principle II are the owner's decision.
 
 ---
 
