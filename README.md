@@ -91,6 +91,13 @@ Not included yet: the Account Summary and payments (Module 007), paid statuses, 
 - **Honest limits.** Offline data is on this phone only: other devices do not see it until it has been sent, and it is not safe if the phone is lost or its browser data is cleared. There is no background sending while the app is closed and no real-time sync between devices.
 - **If the app cannot read what is waiting on the phone.** A database written by a newer version of the app is never changed or deleted: the app says so in Settings and keeps working online. Before using an older copy of the app, or before clearing the browser data of a phone that still has waiting orders, use Settings > Sync and backup > Export backup first (while the phone can still read its data); the file can be imported again later and its orders are sent through the same safe queue.
 
+## What works in Module 010 (reports and profit; code written and checked on the test project, not yet applied to the owner's dev project, see its quickstart for what has been verified)
+
+- **Reports** (Home → Reports, or Settings → Reports): sales and profit, purchases, sales by store, sales by medicine, cost missing, and outstanding balances. They are for the owner only and read-only: nothing is changed by looking, and no report number, label or link is on any invoice, statement, print, offline copy or backup.
+- **Two profit figures, never mixed.** *Estimate* uses the purchase price saved on the order line when the order was confirmed. *Realized* uses the weighted average actual cost you recorded for that medicine and unit on the day of the order (the owner's rule: a purchase on another day is never used). A line with no cost makes its figure *Incomplete*, with the number of lines and the sales amount that have no cost; no cost is ever guessed. Cancelled invoices, drafts and cancelled purchases are left out and counted.
+- **Exact and fast.** Totals are computed in the database from the frozen invoice lines (a 5,000-invoice, 50,000-line history answered in 1.3 to 1.5 seconds on the test project), money stays exact and is rounded once. Day, week and month groupings add up to the same total. Each report exports a CSV that equals the screen (Estimate and Incomplete markers kept, a loss stays a number). No PDF.
+- **Online only** (a failed load shows an error with Retry, never a zero; offline says "Reports need the internet"). It needs migration `supabase/migrations/0011_reports.sql` (read-only functions and one index; no table, no new package). Migrations 0009 and 0010 belong to the dropped voice work and are not in this repository.
+
 ## Status and limits
 
 See `specs/001-auth-products-stores/quickstart.md`, section 8 "Verification results". In short: lint,

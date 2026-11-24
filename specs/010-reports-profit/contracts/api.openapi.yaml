@@ -1,0 +1,270 @@
+openapi: 3.0.3
+info:
+  title: Reports API (Module 010)
+  version: 1.0.0
+  description: >
+    Internal, read-only business reports for the signed-in owner. Every route runs as the signed-in user (cookie
+    session), returns Cache-Control no-store, and is limited to the user's own business by Row Level Security and by
+    the database functions. Money is a decimal string with two decimals ("125.50"); profit may be negative or null
+    ("not available"). These are the ONLY responses in the application that carry a cost or profit; no invoice, order,
+    market list, account, offline or backup response may ever carry these keys.
+servers:
+  - url: /api
+security:
+  - session: []
+paths:
+  /reports/sales:
+    get:
+      summary: Sales summary with estimated and realized profit and a time series
+      parameters:
+        - { $ref: '#/components/parameters/from' }
+        - { $ref: '#/components/parameters/to' }
+        - { $ref: '#/components/parameters/group' }
+      responses:
+        '200': { description: Sales report, content: { application/json: { schema: { $ref: '#/components/schemas/SalesReport' } } } }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '500': { $ref: '#/components/responses/ServerError' }
+  /reports/purchases:
+    get:
+      summary: Purchase summary (actual quantity and actual unit cost, cancelled entries left out)
+      parameters:
+        - { $ref: '#/components/parameters/from' }
+        - { $ref: '#/components/parameters/to' }
+        - { $ref: '#/components/parameters/group' }
+      responses:
+        '200': { description: Purchase report, content: { application/json: { schema: { $ref: '#/components/schemas/PurchaseReport' } } } }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /reports/stores:
+    get:
+      summary: Sales by store
+      parameters:
+        - { $ref: '#/components/parameters/from' }
+        - { $ref: '#/components/parameters/to' }
+        - { $ref: '#/components/parameters/q' }
+        - { $ref: '#/components/parameters/sort' }
+        - { $ref: '#/components/parameters/limit' }
+        - { $ref: '#/components/parameters/offset' }
+      responses:
+        '200': { description: Store rows, content: { application/json: { schema: { $ref: '#/components/schemas/StoreReport' } } } }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /reports/medicines:
+    get:
+      summary: Sales by medicine (grouped by product id and unit; typed lines in a separate group)
+      parameters:
+        - { $ref: '#/components/parameters/from' }
+        - { $ref: '#/components/parameters/to' }
+        - { $ref: '#/components/parameters/q' }
+        - { $ref: '#/components/parameters/sort' }
+        - { $ref: '#/components/parameters/limit' }
+        - { $ref: '#/components/parameters/offset' }
+      responses:
+        '200': { description: Medicine rows, content: { application/json: { schema: { $ref: '#/components/schemas/MedicineReport' } } } }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /reports/cost-missing:
+    get:
+      summary: Sold medicines that have no cost for the estimated or the realized figure
+      parameters:
+        - { $ref: '#/components/parameters/from' }
+        - { $ref: '#/components/parameters/to' }
+      responses:
+        '200': { description: Cost-missing rows, content: { application/json: { schema: { $ref: '#/components/schemas/CostMissingReport' } } } }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /reports/balances-note:
+    get:
+      summary: Count and total of issued invoices that are not in the store accounts (shown with Outstanding balances)
+      responses:
+        '200': { description: Note, content: { application/json: { schema: { $ref: '#/components/schemas/NotInAccount' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /reports/export:
+    get:
+      summary: CSV of the report on screen (same period, filters and rows). No PDF.
+      parameters:
+        - name: report
+          in: query
+          required: true
+          schema: { type: string, enum: [sales, purchases, stores, medicines, cost-missing, balances] }
+          description: from and to are required for every report except balances. For balances there is no period; the file holds the balances as on the day of the export (one row per store, a TOTAL row, the not-in-account note)
+        - { $ref: '#/components/parameters/from' }
+        - { $ref: '#/components/parameters/to' }
+        - { $ref: '#/components/parameters/group' }
+        - { $ref: '#/components/parameters/q' }
+        - { $ref: '#/components/parameters/sort' }
+      responses:
+        '200':
+          description: CSV file; text cells that start with a formula character carry a leading apostrophe, numbers do not
+          content: { text/csv: { schema: { type: string } } }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '409':
+          description: More than 5,000 rows; the owner must narrow the report (error code list_too_large, HTTP 409 like the market list export)
+          content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+components:
+  securitySchemes:
+    session: { type: apiKey, in: cookie, name: sb-session }
+  parameters:
+    from: { name: from, in: query, required: true, schema: { type: string, format: date }, description: First day, Pakistan date }
+    to: { name: to, in: query, required: true, schema: { type: string, format: date }, description: Last day, Pakistan date; not before from; period at most 731 days }
+    group: { name: group, in: query, schema: { type: string, enum: [day, week, month], default: day } }
+    q: { name: q, in: query, schema: { type: string, maxLength: 100 }, description: Name search; totals say they cover filtered rows }
+    sort: { name: sort, in: query, schema: { type: string, enum: [sales, profit, name], default: sales }, description: 'profit means the realized profit; rows whose realized profit is not available come last' }
+    limit: { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 50, default: 20 } }
+    offset: { name: offset, in: query, schema: { type: integer, minimum: 0, default: 0 } }
+  responses:
+    ValidationError: { description: Bad period, group, sort or limit (code validation_error, message names the field), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+    Unauthorized: { description: Not signed in (code unauthorized), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+    ServerError: { description: Failed; the screen shows an error with Retry and never a zero, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  schemas:
+    Error:
+      type: object
+      required: [code, message]
+      properties: { code: { type: string }, message: { type: string } }
+    Money: { type: string, pattern: '^-?\d+\.\d{2}$' }
+    Period:
+      type: object
+      required: [from, to, group, generated_at]
+      properties:
+        from: { type: string, format: date }
+        to: { type: string, format: date }
+        group: { type: string, enum: [day, week, month] }
+        generated_at: { type: string, format: date-time }
+    ProfitFigure:
+      type: object
+      required: [cost, covered_sales, profit, missing_lines, missing_sales, status]
+      properties:
+        cost: { $ref: '#/components/schemas/Money' }
+        covered_sales: { $ref: '#/components/schemas/Money' }
+        profit: { type: string, nullable: true, description: 'null when no line has a cost (not available), never a zero standing for unknown' }
+        missing_lines: { type: integer }
+        missing_sales: { $ref: '#/components/schemas/Money' }
+        status: { type: string, enum: [complete, incomplete] }
+    Bucket:
+      type: object
+      required: [bucket_start, bucket_end, partial, sales, invoices, estimated, realized]
+      properties:
+        bucket_start: { type: string, format: date }
+        bucket_end: { type: string, format: date }
+        partial: { type: boolean }
+        sales: { $ref: '#/components/schemas/Money' }
+        invoices: { type: integer }
+        estimated: { $ref: '#/components/schemas/ProfitFigure' }
+        realized: { $ref: '#/components/schemas/ProfitFigure' }
+    SalesReport:
+      type: object
+      required: [period, totals, estimated, realized, excluded, series]
+      properties:
+        period: { $ref: '#/components/schemas/Period' }
+        totals:
+          type: object
+          properties:
+            sales: { $ref: '#/components/schemas/Money' }
+            invoices: { type: integer }
+            lines: { type: integer }
+            quantity: { type: integer }
+        estimated: { $ref: '#/components/schemas/ProfitFigure' }
+        realized: { $ref: '#/components/schemas/ProfitFigure' }
+        excluded:
+          type: object
+          properties: { cancelled_invoices: { type: integer }, draft_invoices: { type: integer } }
+        series: { type: array, items: { $ref: '#/components/schemas/Bucket' } }
+    PurchaseBucket:
+      type: object
+      properties:
+        bucket_start: { type: string, format: date }
+        bucket_end: { type: string, format: date }
+        partial: { type: boolean }
+        cost: { $ref: '#/components/schemas/Money' }
+        entries: { type: integer }
+        entries_without_cost: { type: integer }
+    PurchaseReport:
+      type: object
+      required: [period, totals, series]
+      properties:
+        period: { $ref: '#/components/schemas/Period' }
+        totals:
+          type: object
+          properties:
+            cost: { $ref: '#/components/schemas/Money' }
+            entries: { type: integer }
+            entries_with_cost: { type: integer }
+            entries_without_cost: { type: integer }
+            quantity_without_cost: { type: integer }
+            cancelled_entries_left_out: { type: integer }
+            status: { type: string, enum: [complete, incomplete] }
+        series: { type: array, items: { $ref: '#/components/schemas/PurchaseBucket' } }
+    StoreRow:
+      type: object
+      properties:
+        store_id: { type: string, format: uuid }
+        name: { type: string }
+        sales: { $ref: '#/components/schemas/Money' }
+        invoices: { type: integer }
+        share: { type: string, description: 'Percent of the period sales, one decimal' }
+        estimated: { $ref: '#/components/schemas/ProfitFigure' }
+        realized: { $ref: '#/components/schemas/ProfitFigure' }
+    StoreReport:
+      type: object
+      properties:
+        period: { $ref: '#/components/schemas/Period' }
+        items: { type: array, items: { $ref: '#/components/schemas/StoreRow' } }
+        total: { type: integer }
+        totals: { type: object, description: Whole period sales and both figures }
+        filtered_totals: { type: object, description: Same shape for the filtered rows only }
+    MedicineRow:
+      type: object
+      properties:
+        key: { type: string }
+        product_id: { type: string, format: uuid, nullable: true }
+        name: { type: string }
+        typed_name: { type: string, nullable: true }
+        strength: { type: string, nullable: true }
+        dosage_form: { type: string, nullable: true }
+        pack_size: { type: string, nullable: true }
+        manufacturer: { type: string, nullable: true }
+        unit: { type: string }
+        billed_quantity: { type: integer }
+        sales: { $ref: '#/components/schemas/Money' }
+        estimated: { $ref: '#/components/schemas/ProfitFigure' }
+        realized: { $ref: '#/components/schemas/ProfitFigure' }
+    MedicineReport:
+      type: object
+      properties:
+        period: { $ref: '#/components/schemas/Period' }
+        items: { type: array, items: { $ref: '#/components/schemas/MedicineRow' } }
+        typed_rows: { type: array, items: { $ref: '#/components/schemas/MedicineRow' }, description: 'The "Not registered" group, by exact typed text' }
+        total: { type: integer }
+        totals: { type: object }
+        filtered_totals: { type: object }
+    CostMissingRow:
+      type: object
+      properties:
+        product_id: { type: string, format: uuid, nullable: true }
+        name: { type: string }
+        strength: { type: string, nullable: true }
+        dosage_form: { type: string, nullable: true }
+        pack_size: { type: string, nullable: true }
+        manufacturer: { type: string, nullable: true }
+        unit: { type: string }
+        sales_amount: { $ref: '#/components/schemas/Money' }
+        billed_quantity: { type: integer }
+        lines: { type: integer }
+        estimate_missing: { type: boolean }
+        realized_missing: { type: boolean }
+        realized_dates: { type: array, items: { type: string, format: date }, maxItems: 10 }
+        reason: { type: string, enum: [no_purchase_price_saved, no_purchase_on_market_day, typed_line, unit_differs] }
+    CostMissingReport:
+      type: object
+      properties:
+        period: { $ref: '#/components/schemas/Period' }
+        items: { type: array, items: { $ref: '#/components/schemas/CostMissingRow' } }
+        total: { type: integer }
+        truncated: { type: boolean, description: 'true when there are more than 500 medicines; the first 500 (largest sales first) are listed' }
+    NotInAccount:
+      type: object
+      properties:
+        invoices: { type: integer }
+        total: { $ref: '#/components/schemas/Money' }

@@ -27,6 +27,9 @@ describe("offline shell routes", () => {
     expect(parseGo("/accounts/xyz")).toEqual({ kind: "blocked", area: "Store accounts" });
     expect(parseGo("/products/import")).toEqual({ kind: "blocked", area: "Products" });
     expect(parseGo("/market-list/print")).toEqual({ kind: "blocked", area: "The market list" });
+    expect(parseGo("/reports")).toEqual({ kind: "blocked", area: "Reports" });
+    expect(parseGo("/reports/sales?from=2026-11-01&to=2026-11-25")).toEqual({ kind: "blocked", area: "Reports" });
+    expect(parseGo("/reports/balances")).toEqual({ kind: "blocked", area: "Reports" });
     expect(parseGo("/something-else")).toEqual({ kind: "blocked", area: "This page" });
   });
 

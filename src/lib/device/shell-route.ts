@@ -20,6 +20,7 @@ const BLOCKED_AREAS: Array<[string, string]> = [
   ["/accounts", "Store accounts"],
   ["/market-list", "The market list"],
   ["/pending", "Pending items"],
+  ["/reports", "Reports"],
 ];
 
 export function parseGo(go: string | null | undefined): ShellRoute {
