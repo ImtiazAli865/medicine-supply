@@ -1,4 +1,4 @@
-import { Pill, Plus, Store } from "lucide-react";
+import { BarChart3, Pill, Plus, Store } from "lucide-react";
 import Link from "next/link";
 import { AccountsSummaryCard } from "@/components/accounts/AccountsSummaryCard";
 import { InvoiceSummaryCard } from "@/components/invoices/InvoiceSummaryCard";
@@ -18,6 +18,7 @@ export const dynamic = "force-dynamic";
 const cards = [
   { href: "/products", title: "Products", description: "Your medicine list, prices and units.", icon: Pill },
   { href: "/stores", title: "Stores", description: "The pharmacies you supply.", icon: Store },
+  { href: "/reports", title: "Reports", description: "Your sales and what stores owe.", icon: BarChart3 },
 ] as const;
 
 export default async function HomePage() {
