@@ -2,9 +2,10 @@
 
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { ClientApiError, fetchJson } from "@/lib/api/client";
+import { fetchJson } from "@/lib/api/client";
+import type { DraftHandle } from "@/lib/device/sync-center";
 import { newId } from "@/lib/ids";
-import { createAutosave, type Autosave, type SaveOutcome, type SaveRequest } from "@/lib/orders/autosave";
+import { createAutosave, ON_DEVICE_MESSAGE, type Autosave, type SaveOutcome, type SaveRequest } from "@/lib/orders/autosave";
 import {
   appendLines,
   cleanTypedName,
@@ -14,11 +15,11 @@ import {
   infoFromProduct,
   removeLinesById,
   stateFromOrder,
-  toSaveInput,
   type EditorState,
   type LineInfo,
 } from "@/lib/orders/editor-state";
 import type { SlimMedicine } from "@/lib/orders/fast-types";
+import { sendSaveRequest } from "@/lib/orders/save-transport";
 import type { Order, OrderLineInput, OrderResult } from "@/lib/orders/types";
 import type { Product } from "@/lib/products/types";
 
@@ -29,23 +30,10 @@ export type NewLineEntry =
 
 // Binds the autosave machine (src/lib/orders/autosave.ts) to React for one order.
 
+/** The order screen's own save (no device journal): a 401 takes the person to sign-in as before. */
 async function sendSave(orderId: string, request: SaveRequest<EditorState>): Promise<SaveOutcome<Order>> {
-  try {
-    const { data } = await fetchJson<OrderResult>(`/api/orders/${orderId}`, {
-      method: "PUT",
-      json: toSaveInput(request.state, request.requestId, request.expectedVersion),
-    });
-    return { kind: "ok", version: data.order.version, savedAt: data.order.updated_at, order: data.order };
-  } catch (error) {
-    if (error instanceof ClientApiError) {
-      if (error.code === "version_conflict" || error.code === "order_not_editable" || error.code === "store_locked") {
-        return error.current ? { kind: "conflict", current: error.current as Order } : { kind: "fatal", message: error.message };
-      }
-      if (error.code === "network" || error.status >= 500) return { kind: "retryable", message: error.message };
-      return { kind: "fatal", message: error.fields?.lines ?? error.fields?.store_id ?? error.message };
-    }
-    throw error;
-  }
+  const result = await sendSaveRequest(orderId, request, "redirect");
+  return result.kind === "unauthorized" ? { kind: "retryable", message: "Sign in again to save this order." } : result;
 }
 
 export interface OrderEditorArgs {
@@ -55,11 +43,14 @@ export interface OrderEditorArgs {
   storeId: string;
   /** draft: every change is saved automatically. edit: a confirmed order, saved only by saveChanges(). */
   mode?: "draft" | "edit";
+  /** The draft opened through the sync centre (Module 009): every change is kept on the device and sent by the centre. */
+  handle?: DraftHandle | null;
 }
 
-export function useOrderEditor({ orderId, initialOrder, storeId, mode = "draft" }: OrderEditorArgs) {
+export function useOrderEditor({ orderId, initialOrder, storeId, mode = "draft", handle = null }: OrderEditorArgs) {
   const router = useRouter();
   const [machine] = useState<Autosave<EditorState, Order>>(() =>
+    handle?.machine ??
     createAutosave<EditorState, Order>(
       { send: (request) => sendSave(orderId, request), newId, manual: mode === "edit" },
       {
@@ -74,9 +65,18 @@ export function useOrderEditor({ orderId, initialOrder, storeId, mode = "draft" 
   const state = snapshot.state;
 
   // Display-only details for lines added on this screen; the server's order wins once it has returned them.
-  const [added, setAdded] = useState<Record<string, LineInfo>>(() => (initialOrder ? infoFromOrder(initialOrder) : {}));
+  const [added, setAdded] = useState<Record<string, LineInfo>>(() => ({ ...(handle?.lineInfo ?? {}), ...(initialOrder ? infoFromOrder(initialOrder) : {}) }));
+
+  // The journal keeps the details shown for each line, so they come back after a restart. They are set BEFORE the edit that
+  // needs them, because the journal write follows the edit at once.
+  const noteInfo = useCallback(
+    (more: Record<string, LineInfo>) => {
+      if (handle) handle.setLineInfo({ ...handle.lineInfo, ...more });
+    },
+    [handle],
+  );
   const serverInfo = snapshot.serverOrder ? infoFromOrder(snapshot.serverOrder) : {};
-  const info: Record<string, LineInfo> = { ...added, ...serverInfo };
+  const info: Record<string, LineInfo> = { ...added, ...(handle?.lineInfo ?? {}), ...serverInfo };
 
   // Bumped when the screen state is replaced by the server's (rows restart from the new values).
   const [epoch, setEpoch] = useState(0);
@@ -90,11 +90,12 @@ export function useOrderEditor({ orderId, initialOrder, storeId, mode = "draft" 
   const addCatalogLine = useCallback(
     (product: SlimMedicine | Product, quantity = 1, unit?: string): string => {
       const id = newId();
+      noteInfo({ [id]: infoFromProduct(product) });
       setAdded((prev) => ({ ...prev, [id]: infoFromProduct(product) }));
       update((s) => ({ ...s, lines: [...s.lines, { id, product_id: product.id, name: null, quantity, unit: unit ?? product.unit }] }));
       return id;
     },
-    [update],
+    [update, noteInfo],
   );
 
   /**
@@ -116,28 +117,32 @@ export function useOrderEditor({ orderId, initialOrder, storeId, mode = "draft" 
       });
       const result = appendLines(machine.getLocalState(), inputs);
       if (result.added.length === 0) return { ids: [], refused: result.refused };
+      noteInfo(Object.fromEntries(result.added.map((l) => [l.id, infos[l.id]!])));
       setAdded((prev) => ({ ...prev, ...Object.fromEntries(result.added.map((l) => [l.id, infos[l.id]!])) }));
       machine.edit(result.state);
       return { ids: result.added.map((l) => l.id), refused: result.refused };
     },
-    [machine],
+    [machine, noteInfo],
   );
 
   const addTypedLine = useCallback(
     (name: string, quantity: number, unit: string): string => {
       const id = newId();
       const clean = cleanTypedName(name);
+      noteInfo({ [id]: infoForTyped(clean) });
       setAdded((prev) => ({ ...prev, [id]: infoForTyped(clean) }));
       update((s) => ({ ...s, lines: [...s.lines, { id, product_id: null, name: clean, quantity, unit: unit.trim() }] }));
       return id;
     },
-    [update],
+    [update, noteInfo],
   );
 
   const updateLine = useCallback(
     (id: string, patch: Partial<Pick<OrderLineInput, "quantity" | "unit" | "name">>) => {
       if (patch.name !== undefined) {
         const clean = cleanTypedName(patch.name ?? "");
+        const current = handle?.lineInfo[id];
+        if (current) noteInfo({ [id]: { ...current, name: clean } });
         setAdded((prev) => (prev[id] ? { ...prev, [id]: { ...prev[id], name: clean } } : prev));
       }
       update((s) => ({
@@ -145,7 +150,20 @@ export function useOrderEditor({ orderId, initialOrder, storeId, mode = "draft" 
         lines: s.lines.map((l) => (l.id === id ? { ...l, ...patch, name: patch.name !== undefined ? cleanTypedName(patch.name ?? "") : l.name } : l)),
       }));
     },
-    [update],
+    [update, handle, noteInfo],
+  );
+
+  /** A catalog line the server will not take (for example a medicine made inactive) becomes a typed line with its exact name. */
+  const convertLineToTyped = useCallback(
+    (id: string) => {
+      const current = machine.getLocalState().lines.find((l) => l.id === id);
+      if (!current || current.product_id === null) return;
+      const name = cleanTypedName((added[id] ?? handle?.lineInfo[id])?.name ?? "Medicine");
+      noteInfo({ [id]: infoForTyped(name) });
+      setAdded((prev) => ({ ...prev, [id]: infoForTyped(name) }));
+      update((s) => ({ ...s, lines: s.lines.map((l) => (l.id === id ? { ...l, product_id: null, name } : l)) }));
+    },
+    [machine, added, handle, noteInfo, update],
   );
 
   const removeLine = useCallback((id: string) => update((s) => ({ ...s, lines: s.lines.filter((l) => l.id !== id) })), [update]);
@@ -158,7 +176,15 @@ export function useOrderEditor({ orderId, initialOrder, storeId, mode = "draft" 
 
   /** Saves every unsaved edit first, then confirms with the version the server returned. */
   const confirm = useCallback(async (): Promise<Order> => {
-    await machine.flush();
+    try {
+      await machine.flush();
+    } catch (error) {
+      // Only on this phone for now: confirming fixes the prices on the server, so it needs the internet.
+      if (error instanceof Error && error.message === ON_DEVICE_MESSAGE) {
+        throw new Error("Confirming needs the internet. The order is saved on this phone and can be confirmed when the connection returns.");
+      }
+      throw error;
+    }
     const version = machine.getSnapshot().version;
     if (version === null) throw new Error("Add at least one medicine before confirming the order.");
     confirmRequestId.current ??= newId();
@@ -175,14 +201,18 @@ export function useOrderEditor({ orderId, initialOrder, storeId, mode = "draft" 
     async (reason: string | null): Promise<Order | null> => {
       await machine.flush().catch(() => undefined); // best effort: the last saved version is what gets cancelled
       const version = machine.getSnapshot().version;
-      if (version === null) return null;
+      if (version === null) {
+        // Never reached the server: there is nothing to cancel there; remove it from this phone (the supplier was asked first).
+        await handle?.discardLocal();
+        return null;
+      }
       const { data } = await fetchJson<OrderResult>(`/api/orders/${orderId}/cancel`, {
         json: { request_id: newId(), expected_version: version, reason },
       });
       machine.adopt(stateFromOrder(data.order), data.order.version, data.order);
       return data.order;
     },
-    [machine, orderId],
+    [machine, orderId, handle],
   );
 
   /** Edit mode: saves all the changes made on this screen as one change and returns the saved order. */
@@ -237,7 +267,8 @@ export function useOrderEditor({ orderId, initialOrder, storeId, mode = "draft" 
     [machine],
   );
 
-  const isDirty = snapshot.isDirty;
+  // A change that is safely kept on this device needs no warning; one that is only on the screen does.
+  const isDirty = snapshot.isDirty && snapshot.status !== "on_device";
 
   // Warn before the page is closed or reloaded with an unsaved change.
   useEffect(() => {
@@ -272,7 +303,8 @@ export function useOrderEditor({ orderId, initialOrder, storeId, mode = "draft" 
       if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
       const anchor = (event.target as HTMLElement | null)?.closest?.("a[href]") as HTMLAnchorElement | null;
       if (!anchor || anchor.target === "_blank" || anchor.origin !== window.location.origin) return;
-      if (!machine.getSnapshot().isDirty) return;
+      const snap = machine.getSnapshot();
+      if (!snap.isDirty || snap.status === "on_device") return; // nothing to save, or kept safely on this device
       event.preventDefault();
       event.stopPropagation();
       const href = anchor.pathname + anchor.search + anchor.hash;
@@ -287,7 +319,14 @@ export function useOrderEditor({ orderId, initialOrder, storeId, mode = "draft" 
     return () => document.removeEventListener("click", onClick, true);
   }, [machine, router]);
 
-  useEffect(() => () => machine.dispose(), [machine]);
+  // With a sync-centre handle the centre owns the machine (it keeps sending after this screen is closed); the screen that
+  // opened the handle releases it.
+  useEffect(
+    () => () => {
+      if (!handle) machine.dispose();
+    },
+    [machine, handle],
+  );
 
   return {
     state,
@@ -301,6 +340,7 @@ export function useOrderEditor({ orderId, initialOrder, storeId, mode = "draft" 
     addTypedLine,
     updateLine,
     removeLine,
+    convertLineToTyped,
     removeLines,
     setNotes,
     setStore,

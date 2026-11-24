@@ -1,0 +1,78 @@
+# ADR-0008: Offline-First Device Sync (per-business device database, journalled drafts with a sync centre, service-worker shell, local answers for reads, conflicts decided by the supplier, backup built on the queue)
+
+> **Scope**: One decision cluster made in Module 009 (offline order taking, automatic sync and backup). The parts were chosen together and would change together: where an order is kept on the phone, how a change reaches the server exactly once, how the app opens without a connection, how the existing screens read their data without a connection, what happens when the server copy changed, and how a backup file is made and restored. It follows ADR-0002 (client-generated ids, REST handlers over row level security) and ADR-0003 (order write model: idempotent `order_save`, versions) and adds no server write path.
+
+- **Status:** Accepted (the owner asked for this ADR on 2026-11-24). Implemented as written in the plan, with the changes listed under "Changes made during implementation". Verified on 2026-11-22 to 2026-11-24: lint, typecheck, build, 151 unit and integration files (1,511 tests) passed, the Module 009 browser specs pass on the mobile project, and the owner reported on 2026-11-23 that the airplane-mode walkthrough on a real Android phone worked (reported, not seen; screenshots of the offline pages and the sync status were seen). Measured details: `specs/009-offline-sync-backup/quickstart.md`, section 6. The decision is revisited if later measurements or modules disagree.
+- **Date:** 2026-11-24
+- **Feature:** 009-offline-sync-backup
+- **Related:** ADR-0002 (client-generated ids; the queue relies on them), ADR-0003 (the idempotent `order_save` with `request_id` and `expected_version` is the only order write path used by the queue), ADR-0007 (the ledger already carries client idempotency keys, which keeps offline payments possible in a later module, see Consequences).
+- **Context:** The supplier takes orders in shops and markets where the connection drops. Module 009 must meet these rules together: an order taken offline is never lost, even if the app is closed, the phone restarts or the same draft is open in two tabs; the same order is never created twice, however often a send is retried; nothing is called "saved" or "synced" until the server has confirmed it; a newer server copy is never silently overwritten by an older phone copy, and the phone copy is never silently thrown away; one business on a shared phone never sees another business's data; no purchase price, MRP, cost, margin, profit, balance, invoice or payment data reaches the device copy or a backup file; Module 008's fast entry (search of a 5,000-medicine list, usual medicines, repeat last order) keeps working; confirming an order, invoices, payments and prices stay online; and the module adds no database migration and no npm package. Every order screen of the app is a server-rendered page, so a reload without a connection has no page to show today.
+
+<!-- Significance checklist: 1) Impact: yes, every later module that adds an editable screen has to decide whether it goes through the journal, and the device data format is versioned. 2) Alternatives: yes, listed below. 3) Scope: yes, device storage, the autosave state machine, `fetchJson`, the service worker, the order screens, Settings and two read-only routes. -->
+
+## Decision
+
+1. **Device storage is raw IndexedDB with one database per business.** `medsupply-<businessId>` holds that business's drafts journal, the medicine and store copies and the sync state; a small `medsupply-registry` database maps a user id to a business id and name. A business's data is never written to another business's database, so isolation is a property of the file layout and not of a filter. A failed storage open leaves the app working online exactly as before and says so; there is no LocalStorage use for data.
+2. **A change is written to the journal before the screen says "Saved on this device, not yet sent".** The existing autosave machine gets an optional journal and an optional `canSend()`; without them it behaves as before, so the edit mode of confirmed orders (online only) and all older unit tests are untouched. A new status `on_device` means "kept here, the server has not confirmed it". A failed journal write shows "not saved" and never `on_device`. Every journal write is one transaction that checks a `rev` counter; a mismatch (another tab changed the draft) is shown as a conflict on the device.
+3. **A client `SyncCenter` sends the journal through the existing idempotent routes.** It owns one machine per unsynced draft, sends one request at a time per draft in the order the drafts were first changed, reuses the stored request id until the server answers, applies growing delays (2 s, 5 s, 15 s, 45 s, then 2 minutes), pauses sending on a 401 without leaving the screen (`onUnauthorized: "event"`), and exposes counts for the header and Settings. New stores taken offline are created through the existing idempotent `POST /api/stores`. Sending happens only while the app is open, and the app says so.
+4. **One sender per business, plus each tab's own open draft.** A Web Lock named after the business elects the leader tab, which sends every waiting draft and looks at the journal every 30 seconds for drafts another tab left unsent. Any tab also sends the draft that is open on its own screen, and the person's own Retry is always tried (it ignores a stale "offline" flag but still respects Pause and sign-in). Other tabs show the same state through a BroadcastChannel.
+5. **The app opens offline through a hand-written service worker and a client-only shell page.** `public/sw.js` does two jobs: keep every file under `/_next/static/` plus `/offline` (the list is written to a git-ignored `public/sw-assets.json` by `scripts/make-sw-assets.mjs` after each build and cached under the build id), and answer a failed or 4-second-slow page request with a redirect to `/offline?go=<path>`. The shell page renders the order list, new order, order screen and the Settings sync section from the device copy, and a plain "This needs the internet" page for everything else. The worker never handles `/api/`, never caches an API answer and never caches any page except `/offline`.
+6. **Existing screens read offline through `fetchJson`, not through new components.** For a short fixed list of GET paths (the Module 008 medicine, usual, repeat and checklist reads, the stores, a draft in the journal, the orders list), a network failure is answered from the device copy in the same JSON shape and marked as coming from the device. A local answer is never used while the network answers, and stale data is labelled with the time of the copy. Reads have timeouts (GET 15 s, other 20 s) so a hanging connection becomes a normal failure.
+7. **Connectivity is a real answer, not `navigator.onLine`.** The state is online after any successful request (including `GET /api/ping`) and offline after a failure or timeout; while offline a ping runs with growing delays and on the browser `online` event.
+8. **Who is signed in offline: the auth cookie only chooses which device database to open.** The user id is read from the Supabase cookie and looked up in the registry; no cookie, no entry or another user's entry shows "Sign in to see this device's orders". Every request that reaches the server is still checked with the real session and row level security, so a forged cookie gains nothing. Signing out keeps the data (so waiting orders are not lost) and hides it until the same user signs in again.
+9. **Conflicts are always decided by the supplier.** A server `version_conflict`, `order_not_editable` or missing order keeps the phone version untouched and stores the server's order beside it. The screen shows both and offers keep the phone version (re-based on the server version, only when the server order is still an editable draft), keep the server version (after a confirmation that names what is lost) or keep both (the phone lines become a new draft with a new id). Ordering uses counters and server versions, never the device clock.
+10. **Money and prices stay online.** Confirm, cancel of a confirmed order, edit of a confirmed order, invoices, payments, purchases and prices show "Needs the internet" and do nothing offline. The device copy holds identifying details and the last known selling price shown by the editor, never a purchase price, MRP, cost, margin, balance or invoice data.
+11. **The backup is a file built on the same queue.** `GET /api/backup/export` (signed in, explicit safe columns, row level security) plus the journal produce one JSON file (`format: "medsupply-backup"`, `version: 1`) of stores, orders with lines, the waiting items and the copy times, with no price, invoice, payment, ledger or password. Import checks format, version and business id, shows a preview and changes nothing until the supplier confirms; confirmed items become journal drafts that the normal sync sends, so duplicate protection is the same request-id and id rules. A confirmed or cancelled order missing from the server cannot be created by import and is listed as "cannot be restored".
+12. **Server additions are two read-only routes; no migration, no package.** `GET /api/ping` (no sign-in, no database) and `GET /api/backup/export`. The device schema is versioned (`schemaVersion` 1, one upgrade function per version); a database from a newer app version is refused and left untouched, and an unknown backup version is refused.
+
+### Changes made during implementation
+
+- The plan said only the leader tab sends; implementation also lets any tab send the draft open on its own screen and has the leader re-check the journal every 30 seconds (decision 4), after a browser spec found a second tab stuck on "not yet sent".
+- The person's own Retry ignores the connection flag (decision 4); the first version waited for the flag and did nothing.
+- The offline state reaches components through an external store read with `useSyncExternalStore` and a context that never changes, because a changing context value forced React to render the waiting page content twice in the browser for a moment.
+- The local answer for `/api/orders/{id}` covers only drafts that have a server copy; a never-sent order is "not found" locally and the editor recovers it from the journal.
+- A service worker starts only on `https://` or `localhost`. On a plain `http://` LAN address (the owner's trial) it needs Chrome's insecure-origin flag; this is documented in the quickstart and the app has no in-app warning yet.
+
+## Consequences
+
+### Positive
+
+- An order taken offline survives a closed app, a restart and two tabs, and reaches the server once: the request id is stored before the send and the existing `order_save` replays it.
+- No new write path: the server's request-id and version checks remain the final authority, so a sync bug cannot silently overwrite or duplicate an order.
+- Business isolation on a shared phone follows from separate databases, and a forged cookie gains nothing.
+- The online behaviour is unchanged (the journal is optional), and Module 008's components work offline without being rewritten.
+- A backup and restore reuse the queue, so there is one place where duplicates are prevented.
+- The module needs no migration and no package, so rollback means removing the journal option and the worker registration; device data is harmless and can be cleared from Settings.
+
+### Negative
+
+- Sending works only while the app is open; an order waits on the phone until the app is opened again. The app says so next to waiting items.
+- The device copy is not available on other devices and is not safe if the phone is lost or its storage is cleared; the backup file and the "Export backup first" warnings are the only protection.
+- Two data formats now need migration care (the device schema and the backup file), and the `fetchJson` list of locally answered paths has to be kept in step with the screens that use them.
+- Offline behaviour has to be tested in a real browser (Playwright `context.setOffline` was confirmed to also cut the worker's requests, but IndexedDB, locks and the worker are not covered by unit tests with in-memory storage alone), and the full browser suite takes about 1.3 to 2 hours.
+- A service worker needs a secure origin, so a plain `http://` address cannot reload offline; this limits the owner's LAN trials and depends on the deployed address being `https://`.
+- The sync code adds about a dozen modules under `src/lib/device/`, and any new editable screen has to choose deliberately whether it goes through the journal.
+- Principle VII of the constitution says payment recording must work offline; this module keeps payments online (the owner's decision, recorded in the plan's Complexity Tracking, constitution text not amended). A later module has to add offline payments, with a pending-sync balance and an allocation order that works with unsent invoices.
+
+## Alternatives Considered
+
+- **One shared IndexedDB database with a `business_id` column and filters.** Rejected: one missed filter shows business A's orders to business B.
+- **LocalStorage, OPFS or a browser SQLite.** Rejected: LocalStorage is forbidden as storage by the constitution; the others are heavier with no benefit for a few thousand small rows.
+- **A second, separate queue engine.** Rejected: it duplicates the request-id and conflict logic of the tested autosave machine.
+- **Every edit goes through the journal even online.** Rejected: it rewrites every Module 003 and 008 flow and test for no user benefit.
+- **Background Sync API for sending after the app is closed.** Rejected: Chromium only, and it would not be honest about what the app can do on every phone.
+- **Cache whole page responses in the service worker.** Rejected: stale authenticated HTML and hydration against the wrong route.
+- **Make the existing `/orders/[id]` page client-only.** Rejected: it needs the server session check and would change every online test.
+- **Serwist, Workbox or an IndexedDB library such as `idb`.** Rejected: the brief says no new package unless proven needed, and a short wrapper and a short worker are enough.
+- **Pass a data-source object through every component, or answer reads inside the service worker.** Rejected: the first touches about twenty files; the second leaves untyped, untested worker code that cannot reuse the search code.
+- **Trust `navigator.onLine`.** Rejected: phones report "online" on a Wi-Fi with no internet.
+- **A server-side import route and a CSV backup.** Rejected: a second write path, and CSV cannot hold nested order lines.
+- **Last write wins, or merge by timestamp.** Rejected: the device clock is not trustworthy and a silent overwrite is forbidden; the supplier decides.
+- **Add offline payments in this module.** Rejected: it would double the scope and risk the ledger rules of ADR-0007; the owner asked for orders first.
+
+## References
+
+- Feature Spec: specs/009-offline-sync-backup/spec.md
+- Implementation Plan: specs/009-offline-sync-backup/plan.md (the ADR suggestion is in "Key decisions and ADR"); research D1 to D13 and the risks: specs/009-offline-sync-backup/research.md; data model: specs/009-offline-sync-backup/data-model.md; API and backup file: specs/009-offline-sync-backup/contracts/; verification and the owner's trial: specs/009-offline-sync-backup/quickstart.md
+- Pull request: ImtiazAli865/medicine-supply#9
+- Related ADRs: history/adr/0002-rest-handlers-over-rls-with-client-generated-ids.md, history/adr/0003-order-write-model-and-price-snapshots.md, history/adr/0007-store-ledger-and-account-summary.md

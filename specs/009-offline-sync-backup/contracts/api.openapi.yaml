@@ -1,0 +1,103 @@
+openapi: 3.0.3
+info:
+  title: Offline order taking, sync and backup (Module 009) - new routes
+  version: 1.0.0
+  description: >
+    Two new read-only routes. Everything the queue sends to the server is an EXISTING route used as before:
+    PUT /api/orders/{id} (create or change a draft, idempotent by request_id, optimistic by expected_version, Module 003)
+    and POST /api/stores (create a store, idempotent by id, refuses a similar name with 409 similar_store unless
+    confirm_duplicate is true, Module 001). No database function, table or migration is added.
+paths:
+  /api/ping:
+    get:
+      summary: Is the server reachable? Used only for the online/offline state.
+      description: >
+        No sign-in and no database access, so it works with an expired session and answers fast. It returns no
+        business data and no user data. "Cache-Control: no-store".
+      responses:
+        '200':
+          description: The server answered.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok]
+                properties:
+                  ok: { type: boolean, enum: [true] }
+  /api/backup/export:
+    get:
+      summary: The signed-in business's stores and orders with their lines, for the backup file.
+      description: >
+        Runs as the signed-in user (Row Level Security applies; nothing of another business can be returned) and reads
+        tables with an explicit list of columns. It never returns a price snapshot, purchase price, MRP, cost, margin,
+        profit, balance, invoice, payment, ledger or purchase data. "Cache-Control: private, no-store".
+      parameters:
+        - { name: cursor, in: query, required: false, schema: { type: string }, description: 'Opaque cursor from the previous page.' }
+        - { name: limit, in: query, required: false, schema: { type: integer, minimum: 1, maximum: 500, default: 200 }, description: 'Orders per page.' }
+      responses:
+        '200':
+          description: One page of orders (oldest first, then id) with their lines; stores are returned on the first page only.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [exported_at, stores, orders, next_cursor]
+                properties:
+                  exported_at: { type: string, format: date-time }
+                  stores:
+                    type: array
+                    description: Empty on pages after the first.
+                    items: { $ref: '#/components/schemas/BackupStore' }
+                  orders: { type: array, items: { $ref: '#/components/schemas/BackupOrder' } }
+                  next_cursor: { type: string, nullable: true }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/NoBusiness' }
+components:
+  schemas:
+    BackupStore:
+      type: object
+      required: [id, name, is_active]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        contact_person: { type: string, nullable: true }
+        phone: { type: string, nullable: true }
+        address: { type: string, nullable: true }
+        is_active: { type: boolean }
+    BackupLine:
+      type: object
+      required: [id, position, product_id, name, quantity, unit]
+      properties:
+        id: { type: string, format: uuid }
+        position: { type: integer }
+        product_id: { type: string, format: uuid, nullable: true, description: 'null for a typed (not registered) line.' }
+        name: { type: string, description: 'The typed text, or the medicine name for a catalog line.' }
+        strength: { type: string, nullable: true }
+        dosage_form: { type: string, nullable: true }
+        pack_size: { type: string, nullable: true }
+        manufacturer: { type: string, nullable: true }
+        quantity: { type: integer }
+        unit: { type: string }
+        delivered_quantity: { type: integer, nullable: true }
+    BackupOrder:
+      type: object
+      required: [id, order_number, status, version, store_id, created_at, updated_at, lines]
+      properties:
+        id: { type: string, format: uuid }
+        order_number: { type: integer }
+        status: { type: string, enum: [draft, confirmed, cancelled, fulfilled] }
+        source: { type: string, enum: [manual, voice] }
+        notes: { type: string, nullable: true }
+        version: { type: integer }
+        store_id: { type: string, format: uuid }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+        confirmed_at: { type: string, format: date-time, nullable: true }
+        cancelled_at: { type: string, format: date-time, nullable: true }
+        cancel_reason: { type: string, nullable: true }
+        lines: { type: array, items: { $ref: '#/components/schemas/BackupLine' } }
+  responses:
+    ValidationError: { description: 'Invalid query (code validation_error).' }
+    Unauthenticated: { description: 'Not signed in or the session expired (code unauthenticated).' }
+    NoBusiness: { description: 'Signed in but the account has no business (code no_business).' }

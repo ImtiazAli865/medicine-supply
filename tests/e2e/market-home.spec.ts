@@ -22,7 +22,7 @@ test.describe("US4: the market list stays easy to reach and to filter", () => {
     await expect(page.getByTestId("market-summary-count")).toHaveText("Market list: 3 medicines to buy today");
 
     await page.getByTestId("market-summary-link").click();
-    await expect(page).toHaveURL(/\/market-list\?status=to_buy/);
+    await expect(page).toHaveURL(/\/market-list\?(.*&)?status=to_buy/); // the page may add the date to the address
     await expect(page.getByTestId("market-status-to_buy")).toHaveAttribute("aria-pressed", "true");
     await expect(page.getByTestId("market-count")).toBeVisible(); // the list has loaded before it is counted
     const rows = await page.getByTestId("market-row").count();

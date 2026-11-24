@@ -3,12 +3,15 @@
 import { ClipboardList, Plus, Search, X } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { DeviceOrderCard } from "@/components/offline/DeviceOrderCard";
+import { DeviceStoreCard } from "@/components/offline/DeviceStoreCard";
+import { useOffline } from "@/components/offline/OfflineProvider";
 import { OrderListItem } from "@/components/orders/OrderListItem";
 import { StoreSelector } from "@/components/orders/StoreSelector";
 import { Button, ButtonLink } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
 import { LoadingBlock } from "@/components/ui/Spinner";
-import { EmptyState, ErrorState } from "@/components/ui/States";
+import { Banner, EmptyState, ErrorState } from "@/components/ui/States";
 import { ClientApiError, fetchJson } from "@/lib/api/client";
 import { useApiResource } from "@/lib/hooks/useApiResource";
 import { useDebouncedValue } from "@/lib/hooks/useDebouncedValue";
@@ -42,6 +45,7 @@ interface Loaded {
 export function OrderHistory() {
   const router = useRouter();
   const params = useSearchParams();
+  const { online, status: syncStatus } = useOffline();
   const filters = useMemo<Filters>(
     () => ({ store: params.get("store") ?? "", status: params.get("status") ?? "", from: params.get("from") ?? "", to: params.get("to") ?? "", q: params.get("q") ?? "" }),
     [params],
@@ -109,6 +113,10 @@ export function OrderHistory() {
   }
 
   const current = loaded?.key === key ? loaded : null;
+  // Orders kept on this phone that the server has not confirmed yet (shown above the list, once each).
+  const deviceItems = (syncStatus?.items ?? []).filter((i) => (!filters.store || i.storeId === filters.store) && (!filters.status || filters.status === "draft"));
+  const deviceIds = new Set(deviceItems.map((i) => i.orderId));
+  const serverItems = (current?.items ?? []).filter((o) => !deviceIds.has(o.id));
   const filtering = Boolean(filters.store || filters.status || filters.from || filters.to || filters.q.trim());
   const today = todayInPakistan();
 
@@ -184,11 +192,26 @@ export function OrderHistory() {
         </div>
       </div>
 
+      {!online ? (
+        <div data-testid="offline-orders-note">
+          <Banner kind="info">You are offline. The list shows the orders kept on this phone only; the other orders need the internet.</Banner>
+        </div>
+      ) : null}
+
+      {deviceItems.length > 0 ? (
+        <section aria-label="On this phone, not yet sent" className="space-y-2">
+          <h2 className="text-base font-semibold">On this phone, not yet sent</h2>
+          <ul className="space-y-3" data-testid="device-order-list">
+            {deviceItems.map((item) => (item.kind === "store" ? <DeviceStoreCard key={`store-${item.storeId}`} item={item} /> : <DeviceOrderCard key={item.orderId} item={item} />))}
+          </ul>
+        </section>
+      ) : null}
+
       {!current ? (
         <LoadingBlock label="Loading orders…" />
       ) : current.error && current.items.length === 0 ? (
         <ErrorState message={current.error} onRetry={() => setAttempt((a) => a + 1)} />
-      ) : current.items.length === 0 ? (
+      ) : serverItems.length === 0 && deviceItems.length > 0 ? null : serverItems.length === 0 ? (
         filtering ? (
           <EmptyState
             icon={Search}
@@ -212,7 +235,7 @@ export function OrderHistory() {
       ) : (
         <>
           <ul className="space-y-3" data-testid="order-list">
-            {current.items.map((order) => (
+            {serverItems.map((order) => (
               <OrderListItem key={order.id} order={order} />
             ))}
           </ul>

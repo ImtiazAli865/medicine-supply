@@ -11,6 +11,9 @@ next-env.d.ts
 # production
 /build
 
+# generated after every build: the files the offline service worker keeps (Module 009)
+/public/sw-assets.json
+
 # testing
 /coverage
 /playwright-report/

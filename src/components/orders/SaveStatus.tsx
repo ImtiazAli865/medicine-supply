@@ -1,13 +1,14 @@
 "use client";
 
-import { AlertTriangle, Check, Loader2 } from "lucide-react";
+import { AlertTriangle, Check, HardDrive, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import type { AutosaveStatus } from "@/lib/orders/autosave";
 import { formatPakistanTime } from "@/lib/orders/dates";
 
 /**
  * The honest save state of an order: Saving, Saved at HH:MM, Not saved (with Retry) or Changed elsewhere
- * (with Review). "Saved" is shown only after the server confirmed the change.
+ * (with Review). "Saved" is shown only after the server confirmed the change. "Saved on this device, not yet sent" (Module 009)
+ * means the change is kept on this phone and the server has not confirmed it.
  */
 export function SaveStatus({
   status,
@@ -42,6 +43,18 @@ export function SaveStatus({
         <span className="text-sm">This order was changed in another tab or device. Your changes are not saved.</span>
         <Button variant="secondary" onClick={onReview}>
           Review the current order
+        </Button>
+      </div>
+    );
+  }
+  if (status === "on_device") {
+    return (
+      <div role="status" aria-live="polite" data-testid="save-status" data-state="on_device" className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg bg-warning-soft px-3 py-2 text-warning">
+        <HardDrive size={18} aria-hidden="true" />
+        <span className="font-medium">Saved on this device, not yet sent</span>
+        <span className="text-sm">It is sent when the connection returns, while the app is open.</span>
+        <Button variant="secondary" onClick={onRetry} data-testid="sync-retry">
+          Send now
         </Button>
       </div>
     );

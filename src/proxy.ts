@@ -6,6 +6,6 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
-  // Skip static assets and image optimization; everything else is checked.
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)"],
+  // Skip static assets, image optimization and the connectivity check (`/api/ping` needs no session), and the service worker files; everything else is checked.
+  matcher: ["/((?!_next/static|_next/image|favicon.ico|api/ping$|sw\\.js$|sw-assets\\.json$|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)"],
 };

@@ -2,6 +2,7 @@ import { insertMedicines } from "../helpers/fast";
 import type { TestTenant } from "../helpers/supabase-test";
 import { addMedicine, createOrder, line, seedStore, startOrder, waitSaved } from "./orders-helpers";
 import { expect, signIn, test } from "./fixtures";
+import { blockDeviceStorage } from "../helpers/offline";
 
 // US5 of Module 008: failures and honest limits (mobile, 360 px). Nothing here may say "saved on this device" or "pending sync".
 test.describe("US5: failures and honest limits", () => {
@@ -22,6 +23,7 @@ test.describe("US5: failures and honest limits", () => {
 
   test("the medicine list fails: Retry appears, the lines already added are kept, and the typed path still works", async ({ page, freshTenant }) => {
     await seed(freshTenant);
+    await blockDeviceStorage(page); // this test checks the online failure state, with no copy kept on the device
     await signIn(page, freshTenant);
     let failList = false;
     await page.route(/\/api\/orders\/medicines\?/, (route) => (failList && !new URL(route.request().url()).searchParams.has("q") ? route.abort("failed") : route.continue()));
@@ -55,6 +57,7 @@ test.describe("US5: failures and honest limits", () => {
 
   test("the repeat fails: an error with Retry, nothing is added, and Retry then adds the lines once", async ({ page, freshTenant }) => {
     await seed(freshTenant);
+    await blockDeviceStorage(page); // this test checks the online failure state, with no copy kept on the device
     await signIn(page, freshTenant);
     let failRepeat = true;
     await page.route(/\/api\/orders\/repeat\?/, (route) => (failRepeat ? route.abort("failed") : route.continue()));
@@ -79,8 +82,10 @@ test.describe("US5: failures and honest limits", () => {
     await context.setOffline(true);
     await page.getByTestId("usual-add").nth(1).click();
     await expect(page.getByTestId("order-line")).toHaveCount(2);
-    await expect(page.getByTestId("save-status")).toHaveAttribute("data-state", "not_saved", { timeout: 20_000 });
-    await expect(page.locator("body")).not.toContainText(NEVER);
+    // Module 009: the change is kept on the phone and the screen says plainly that the server has not got it yet
+    await expect(page.getByTestId("save-status")).toHaveAttribute("data-state", "on_device", { timeout: 20_000 });
+    await expect(page.getByTestId("save-status")).toContainText("not yet sent");
+    await expect(page.getByTestId("save-status")).not.toContainText(/synced|pending sync/i);
     await context.setOffline(false);
     await waitSaved(page); // the editor saves again when the connection returns
     await expect(page.getByTestId("order-line")).toHaveCount(2);
@@ -153,7 +158,7 @@ test.describe("US5: failures and honest limits", () => {
     expect(saved.data?.saved).toBe(true);
 
     await page.getByTestId("usual-add").nth(1).click();
-    await expect(page.getByTestId("save-status")).toHaveAttribute("data-state", "changed_elsewhere", { timeout: 20_000 });
+    await expect(page.getByTestId("conflict-panel")).toBeVisible({ timeout: 30_000 }); // Module 009: the supplier decides; nothing is overwritten
     // nothing of the other session was overwritten
     const after = await freshTenant.client.rpc("order_get", { p_id: orderId });
     const names = (after.data.lines as Array<{ name: string }>).map((l) => l.name);

@@ -1,9 +1,10 @@
 "use client";
 
-import { ChevronLeft, FileQuestion, Pencil } from "lucide-react";
+import { ChevronLeft, CloudOff, FileQuestion, Pencil } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { OrderInvoiceAction } from "@/components/invoices/OrderInvoiceAction";
+import { useOffline } from "@/components/offline/OfflineProvider";
 import { CancelOrderDialog } from "@/components/orders/CancelOrderDialog";
 import { OrderEditor } from "@/components/orders/OrderEditor";
 import { OrderHistoryLog } from "@/components/orders/OrderHistoryLog";
@@ -86,6 +87,7 @@ export function OrderScreen({ id, storeParam }: { id: string; storeParam: string
   const [override, setOverride] = useState<Order | null>(null);
   const [editing, setEditing] = useState(false);
   const proposals = usePendingProposals(id, setOverride);
+  const { online } = useOffline();
 
   useEffect(() => {
     let cancelled = false;
@@ -116,6 +118,19 @@ export function OrderScreen({ id, storeParam }: { id: string; storeParam: string
 
   if (!load) return <LoadingBlock label="Loading order…" />;
   if (load.kind === "error") return <ErrorState message={load.message} onRetry={() => setAttempt((a) => a + 1)} />;
+  if (load.kind === "missing" && !online) {
+    // Offline, an order that is not kept on this phone is not "missing": it needs the internet.
+    return (
+      <div data-testid="offline-blocked">
+        <EmptyState
+          icon={CloudOff}
+          title="This needs the internet"
+          description="This order is not saved on this phone. Open it when you are online."
+          action={<ButtonLink href="/orders">Back to orders</ButtonLink>}
+        />
+      </div>
+    );
+  }
   if (load.kind === "missing") {
     return (
       <EmptyState

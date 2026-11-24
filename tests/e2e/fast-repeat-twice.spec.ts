@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { TestTenant } from "../helpers/supabase-test";
 import { addMedicine, createOrder, seedMedicines, seedStore, waitSaved } from "./orders-helpers";
 import { expect, signIn, test } from "./fixtures";
+import { blockDeviceStorage } from "../helpers/offline";
 
 // US1 of Module 008: a double tap, a retry and the cases where the button must not appear (mobile, 360 px).
 test.describe("US1: repeat the last order twice, retry and guards", () => {
@@ -52,6 +53,7 @@ test.describe("US1: repeat the last order twice, retry and guards", () => {
 
   test("a failed save keeps the lines on screen, and the retry creates one draft with one copy of each line", async ({ page, freshTenant }) => {
     const { storeId } = await seedSource(freshTenant);
+    await blockDeviceStorage(page); // this test checks the online failure state, with no copy kept on the device
     await signIn(page, freshTenant);
     await open(page, "Twice Store");
     let block = true;

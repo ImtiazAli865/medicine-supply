@@ -96,6 +96,7 @@ test.describe("pending screens at 360 px", () => {
   test.skip(({ viewport }) => !viewport || viewport.width > 400, "mobile project only");
 
   test("every pending screen and dialog has no small targets and no sideways scroll", async ({ page, freshTenant }) => {
+    test.setTimeout(150_000); // many screens and dialogs are opened one after another
     const { seedMedicines, seedStore, createOrder } = await import("./orders-helpers");
     const catalog = await seedMedicines(freshTenant);
     const alpha = await seedStore(freshTenant, "Alpha Store");

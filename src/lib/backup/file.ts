@@ -1,0 +1,256 @@
+// The backup file (Module 009, contracts/backup-file.schema.json): orders and their lines, stores, typed lines and the items
+// still waiting on the phone, of ONE business. It never contains a price of any kind, an invoice, a payment, a ledger entry,
+// a purchase, a password, a key, a token or the cookie. Pure code: building, writing, reading and checking a file.
+
+import { z } from "zod";
+import type { LineInfo } from "@/lib/orders/editor-state";
+import type { DraftRecord, StoreOpRecord } from "@/lib/device/schema";
+
+export const BACKUP_FORMAT = "medsupply-backup";
+export const BACKUP_VERSION = 1;
+
+const UUID = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
+const uuid = z.string().regex(UUID, "not a valid id");
+const text = z.string().nullable().optional();
+const quantity = z.number().int().min(1).max(100000);
+
+const storeSchema = z
+  .object({
+    id: uuid,
+    name: z.string().min(1).max(200),
+    contact_person: z.string().max(200).nullable().optional(),
+    phone: z.string().max(50).nullable().optional(),
+    address: z.string().max(500).nullable().optional(),
+    is_active: z.boolean(),
+  })
+  .strict();
+
+const lineSchema = z
+  .object({
+    id: uuid,
+    position: z.number().int().min(0),
+    product_id: uuid.nullable(),
+    name: z.string().min(1).max(200),
+    strength: text,
+    dosage_form: text,
+    pack_size: text,
+    manufacturer: text,
+    quantity,
+    unit: z.string().min(1).max(50),
+    delivered_quantity: z.number().int().min(0).nullable().optional(),
+  })
+  .strict();
+
+const orderSchema = z
+  .object({
+    id: uuid,
+    order_number: z.number().int().min(1),
+    status: z.enum(["draft", "confirmed", "cancelled", "fulfilled"]),
+    source: z.enum(["manual", "voice"]).optional(),
+    notes: z.string().max(1000).nullable().optional(),
+    version: z.number().int().min(1),
+    store_id: uuid,
+    created_at: z.string().min(1),
+    updated_at: z.string().min(1),
+    confirmed_at: z.string().nullable().optional(),
+    cancelled_at: z.string().nullable().optional(),
+    cancel_reason: z.string().max(500).nullable().optional(),
+    lines: z.array(lineSchema).max(200),
+  })
+  .strict();
+
+const waitingLineSchema = z
+  .object({
+    id: uuid,
+    product_id: uuid.nullable(),
+    name: z.string().max(200).nullable(),
+    display_name: z.string().max(200).optional(),
+    strength: text,
+    dosage_form: text,
+    pack_size: text,
+    manufacturer: text,
+    quantity,
+    unit: z.string().min(1).max(50),
+  })
+  .strict();
+
+const waitingOrderSchema = z
+  .object({
+    orderId: uuid,
+    storeId: uuid,
+    baseVersion: z.number().int().min(1).nullable(),
+    neverSent: z.boolean(),
+    syncState: z.enum(["on_device", "waiting", "failed", "conflict", "blocked"]),
+    reason: z.string().nullable().optional(),
+    notes: z.string().max(1000),
+    lines: z.array(waitingLineSchema).max(200),
+  })
+  .strict();
+
+const waitingStoreSchema = z
+  .object({
+    storeId: uuid,
+    name: z.string().min(1).max(200),
+    contact_person: z.string().nullable().optional(),
+    phone: z.string().nullable().optional(),
+    syncState: z.enum(["on_device", "waiting", "failed", "similar"]),
+  })
+  .strict();
+
+export const backupSchema = z
+  .object({
+    format: z.literal(BACKUP_FORMAT),
+    version: z.literal(BACKUP_VERSION),
+    exportedAt: z.string().min(1),
+    businessId: uuid,
+    source: z.enum(["server+device", "device-only"]),
+    counts: z
+      .object({ stores: z.number().int().min(0), orders: z.number().int().min(0), lines: z.number().int().min(0), waitingOrders: z.number().int().min(0), waitingStores: z.number().int().min(0) })
+      .strict(),
+    stores: z.array(storeSchema),
+    orders: z.array(orderSchema),
+    waiting: z.object({ orders: z.array(waitingOrderSchema), stores: z.array(waitingStoreSchema) }).strict(),
+  })
+  .strict();
+
+export type BackupFile = z.infer<typeof backupSchema>;
+export type BackupStore = z.infer<typeof storeSchema>;
+export type BackupOrder = z.infer<typeof orderSchema>;
+export type BackupWaitingOrder = z.infer<typeof waitingOrderSchema>;
+export type BackupWaitingStore = z.infer<typeof waitingStoreSchema>;
+
+// ---------------------------------------------------------------- building
+
+/** Keys that must never appear anywhere in a backup, at any depth. */
+const FORBIDDEN_KEY = /price|mrp|cost|margin|profit|balance|invoice|payment|ledger|purchase|token|password|secret|cookie|device_?id|api_?key|authorization/i;
+
+export function findForbiddenKeys(value: unknown, path = "$"): string[] {
+  if (value === null || typeof value !== "object") return [];
+  if (Array.isArray(value)) return value.flatMap((v, i) => findForbiddenKeys(v, `${path}[${i}]`));
+  const found: string[] = [];
+  for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
+    if (FORBIDDEN_KEY.test(key)) found.push(`${path}.${key}`);
+    found.push(...findForbiddenKeys(child, `${path}.${key}`));
+  }
+  return found;
+}
+
+function infoOf(info: LineInfo | undefined) {
+  return {
+    display_name: info?.name,
+    strength: info?.strength ?? null,
+    dosage_form: info?.dosage_form ?? null,
+    pack_size: info?.pack_size ?? null,
+    manufacturer: info?.manufacturer ?? null,
+  };
+}
+
+export function waitingOrderFromDraft(draft: DraftRecord): BackupWaitingOrder {
+  const syncState = draft.syncState === "syncing" ? "waiting" : draft.syncState;
+  return {
+    orderId: draft.orderId,
+    storeId: draft.state.storeId,
+    baseVersion: draft.baseVersion,
+    neverSent: draft.neverSent,
+    syncState: syncState === "synced" ? "on_device" : syncState,
+    reason: draft.reason,
+    notes: draft.state.notes,
+    lines: draft.state.lines.map((l) => ({
+      id: l.id,
+      product_id: l.product_id,
+      name: l.product_id === null ? l.name : null,
+      ...infoOf(draft.lineInfo[l.id]),
+      quantity: l.quantity,
+      unit: l.unit,
+    })),
+  };
+}
+
+export function waitingStoreFromOp(op: StoreOpRecord): BackupWaitingStore {
+  return {
+    storeId: op.storeId,
+    name: op.payload.name,
+    contact_person: op.payload.contact_person,
+    phone: op.payload.phone,
+    syncState: op.state === "syncing" ? "waiting" : op.state === "synced" ? "on_device" : op.state,
+  };
+}
+
+export interface BuildInput {
+  businessId: string;
+  exportedAt: string;
+  source: BackupFile["source"];
+  stores: BackupStore[];
+  orders: BackupOrder[];
+  waitingOrders: BackupWaitingOrder[];
+  waitingStores: BackupWaitingStore[];
+}
+
+export function buildBackup(input: BuildInput): BackupFile {
+  return {
+    format: BACKUP_FORMAT,
+    version: BACKUP_VERSION,
+    exportedAt: input.exportedAt,
+    businessId: input.businessId,
+    source: input.source,
+    counts: {
+      stores: input.stores.length,
+      orders: input.orders.length,
+      lines: input.orders.reduce((n, o) => n + o.lines.length, 0),
+      waitingOrders: input.waitingOrders.length,
+      waitingStores: input.waitingStores.length,
+    },
+    stores: input.stores,
+    orders: input.orders,
+    waiting: { orders: input.waitingOrders, stores: input.waitingStores },
+  };
+}
+
+export function serializeBackup(file: BackupFile): string {
+  return `${JSON.stringify(file, null, 1)}\n`;
+}
+
+/** A file name that carries the date, for example `medsupply-backup-2026-11-21.json`. */
+export function backupFileName(exportedAt: string): string {
+  return `medsupply-backup-${exportedAt.slice(0, 10)}.json`;
+}
+
+// ---------------------------------------------------------------- reading
+
+export type ParseResult =
+  | { ok: true; file: BackupFile }
+  | { ok: false; reason: "damaged" | "unknown_version" | "other_business"; message: string };
+
+export function parseBackup(textContent: string, expectedBusinessId: string): ParseResult {
+  let raw: unknown;
+  try {
+    raw = JSON.parse(textContent);
+  } catch {
+    return { ok: false, reason: "damaged", message: "This file is damaged or is not a backup file. Nothing was imported." };
+  }
+  if (raw === null || typeof raw !== "object" || (raw as { format?: unknown }).format !== BACKUP_FORMAT) {
+    return { ok: false, reason: "damaged", message: "This is not a backup file of this app. Nothing was imported." };
+  }
+  const version = (raw as { version?: unknown }).version;
+  if (version !== BACKUP_VERSION) {
+    return { ok: false, reason: "unknown_version", message: "This backup was made by a different version of the app and cannot be read. Nothing was imported." };
+  }
+  const forbidden = findForbiddenKeys(raw);
+  if (forbidden.length > 0) {
+    return { ok: false, reason: "damaged", message: "This file holds data a backup never contains, so it was refused. Nothing was imported." };
+  }
+  const parsed = backupSchema.safeParse(raw);
+  if (!parsed.success) {
+    return { ok: false, reason: "damaged", message: "This backup file is damaged or incomplete. Nothing was imported." };
+  }
+  const file = parsed.data;
+  if (file.businessId.toLowerCase() !== expectedBusinessId.toLowerCase()) {
+    return { ok: false, reason: "other_business", message: "This backup belongs to another business and cannot be imported here. Nothing was imported." };
+  }
+  const lines = file.orders.reduce((n, o) => n + o.lines.length, 0);
+  const c = file.counts;
+  if (c.stores !== file.stores.length || c.orders !== file.orders.length || c.lines !== lines || c.waitingOrders !== file.waiting.orders.length || c.waitingStores !== file.waiting.stores.length) {
+    return { ok: false, reason: "damaged", message: "The counts in this backup do not match its contents, so it may be damaged. Nothing was imported." };
+  }
+  return { ok: true, file };
+}

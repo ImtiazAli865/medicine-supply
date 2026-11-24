@@ -1,0 +1,141 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "medsupply-backup-v1",
+  "title": "Medicine Supply backup file, version 1",
+  "description": "Orders, stores, typed lines and unsynced items of ONE business. It never contains a price of any kind, an invoice, a payment, a ledger entry, a purchase, a password, a key or a token.",
+  "type": "object",
+  "required": ["format", "version", "exportedAt", "businessId", "source", "counts", "stores", "orders", "waiting"],
+  "additionalProperties": false,
+  "properties": {
+    "format": { "const": "medsupply-backup" },
+    "version": { "const": 1 },
+    "exportedAt": { "type": "string", "format": "date-time" },
+    "businessId": { "type": "string", "format": "uuid" },
+    "source": { "enum": ["server+device", "device-only"], "description": "device-only means the file was made offline and holds only what the device had." },
+    "counts": {
+      "type": "object",
+      "required": ["stores", "orders", "lines", "waitingOrders", "waitingStores"],
+      "additionalProperties": false,
+      "properties": {
+        "stores": { "type": "integer", "minimum": 0 },
+        "orders": { "type": "integer", "minimum": 0 },
+        "lines": { "type": "integer", "minimum": 0 },
+        "waitingOrders": { "type": "integer", "minimum": 0 },
+        "waitingStores": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "stores": { "type": "array", "items": { "$ref": "#/$defs/store" } },
+    "orders": { "type": "array", "items": { "$ref": "#/$defs/order" } },
+    "waiting": {
+      "type": "object",
+      "required": ["orders", "stores"],
+      "additionalProperties": false,
+      "properties": {
+        "orders": { "type": "array", "items": { "$ref": "#/$defs/waitingOrder" } },
+        "stores": { "type": "array", "items": { "$ref": "#/$defs/waitingStore" } }
+      }
+    }
+  },
+  "$defs": {
+    "uuid": { "type": "string", "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$" },
+    "quantity": { "type": "integer", "minimum": 1, "maximum": 100000 },
+    "store": {
+      "type": "object",
+      "required": ["id", "name", "is_active"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "$ref": "#/$defs/uuid" },
+        "name": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "contact_person": { "type": ["string", "null"], "maxLength": 200 },
+        "phone": { "type": ["string", "null"], "maxLength": 50 },
+        "address": { "type": ["string", "null"], "maxLength": 500 },
+        "is_active": { "type": "boolean" }
+      }
+    },
+    "line": {
+      "type": "object",
+      "required": ["id", "position", "product_id", "name", "quantity", "unit"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "$ref": "#/$defs/uuid" },
+        "position": { "type": "integer", "minimum": 0 },
+        "product_id": { "oneOf": [{ "$ref": "#/$defs/uuid" }, { "type": "null" }] },
+        "name": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "strength": { "type": ["string", "null"] },
+        "dosage_form": { "type": ["string", "null"] },
+        "pack_size": { "type": ["string", "null"] },
+        "manufacturer": { "type": ["string", "null"] },
+        "quantity": { "$ref": "#/$defs/quantity" },
+        "unit": { "type": "string", "minLength": 1, "maxLength": 50 },
+        "delivered_quantity": { "type": ["integer", "null"], "minimum": 0 }
+      }
+    },
+    "order": {
+      "type": "object",
+      "required": ["id", "order_number", "status", "version", "store_id", "created_at", "updated_at", "lines"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "$ref": "#/$defs/uuid" },
+        "order_number": { "type": "integer", "minimum": 1 },
+        "status": { "enum": ["draft", "confirmed", "cancelled", "fulfilled"] },
+        "source": { "enum": ["manual", "voice"] },
+        "notes": { "type": ["string", "null"], "maxLength": 1000 },
+        "version": { "type": "integer", "minimum": 1 },
+        "store_id": { "$ref": "#/$defs/uuid" },
+        "created_at": { "type": "string", "format": "date-time" },
+        "updated_at": { "type": "string", "format": "date-time" },
+        "confirmed_at": { "type": ["string", "null"], "format": "date-time" },
+        "cancelled_at": { "type": ["string", "null"], "format": "date-time" },
+        "cancel_reason": { "type": ["string", "null"], "maxLength": 500 },
+        "lines": { "type": "array", "maxItems": 200, "items": { "$ref": "#/$defs/line" } }
+      }
+    },
+    "waitingOrder": {
+      "type": "object",
+      "required": ["orderId", "storeId", "baseVersion", "neverSent", "syncState", "notes", "lines"],
+      "additionalProperties": false,
+      "properties": {
+        "orderId": { "$ref": "#/$defs/uuid" },
+        "storeId": { "$ref": "#/$defs/uuid" },
+        "baseVersion": { "type": ["integer", "null"], "minimum": 1 },
+        "neverSent": { "type": "boolean" },
+        "syncState": { "enum": ["on_device", "waiting", "failed", "conflict", "blocked"] },
+        "reason": { "type": ["string", "null"] },
+        "notes": { "type": "string", "maxLength": 1000 },
+        "lines": {
+          "type": "array",
+          "maxItems": 200,
+          "items": {
+            "type": "object",
+            "required": ["id", "product_id", "name", "quantity", "unit"],
+            "additionalProperties": false,
+            "properties": {
+              "id": { "$ref": "#/$defs/uuid" },
+              "product_id": { "oneOf": [{ "$ref": "#/$defs/uuid" }, { "type": "null" }] },
+              "name": { "type": ["string", "null"], "maxLength": 200 },
+              "display_name": { "type": "string" },
+              "strength": { "type": ["string", "null"] },
+              "dosage_form": { "type": ["string", "null"] },
+              "pack_size": { "type": ["string", "null"] },
+              "manufacturer": { "type": ["string", "null"] },
+              "quantity": { "$ref": "#/$defs/quantity" },
+              "unit": { "type": "string", "minLength": 1, "maxLength": 50 }
+            }
+          }
+        }
+      }
+    },
+    "waitingStore": {
+      "type": "object",
+      "required": ["storeId", "name", "syncState"],
+      "additionalProperties": false,
+      "properties": {
+        "storeId": { "$ref": "#/$defs/uuid" },
+        "name": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "contact_person": { "type": ["string", "null"] },
+        "phone": { "type": ["string", "null"] },
+        "syncState": { "enum": ["on_device", "waiting", "failed", "similar"] }
+      }
+    }
+  }
+}

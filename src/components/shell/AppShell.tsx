@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { SyncIndicator } from "@/components/offline/SyncIndicator";
 import { BottomNav } from "./BottomNav";
 import { SessionExpiredBanner } from "./SessionExpiredBanner";
 import { SignOutButton } from "./SignOutButton";
@@ -10,7 +11,10 @@ export function AppShell({ businessName, children }: { businessName: string; chi
         <p className="truncate text-base font-semibold" dir="auto" data-testid="business-name">
           {businessName}
         </p>
-        <SignOutButton />
+        <div className="flex shrink-0 items-center gap-1">
+          <SyncIndicator />
+          <SignOutButton />
+        </div>
       </header>
       <div className="flex flex-1 flex-col md:flex-row">
         <BottomNav />

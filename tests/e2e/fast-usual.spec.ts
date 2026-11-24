@@ -3,6 +3,7 @@ import type { TestTenant } from "../helpers/supabase-test";
 import { insertMedicines } from "../helpers/fast";
 import { createOrder, line, seedStore, waitSaved } from "./orders-helpers";
 import { expect, signIn, test } from "./fixtures";
+import { blockDeviceStorage } from "../helpers/offline";
 
 // US2 of Module 008: the store's usual medicines, one tap each (mobile, 360 px).
 test.describe("US2: usual medicines in one tap", () => {
@@ -158,6 +159,7 @@ test.describe("US2: usual medicines states", () => {
     const [m] = await insertMedicines(freshTenant.client, [{ name: "Retry Med", strength: "5 mg", selling_price: "10.00" }]);
     const storeId = await seedStore(freshTenant, "Retry Store");
     await createOrder(freshTenant, storeId, [{ product_id: m!, quantity: 3, unit: "strip" }], { confirm: true });
+    await blockDeviceStorage(page); // this test checks the online failure state, with no copy kept on the device
     await signIn(page, freshTenant);
 
     let mode: "slow" | "fail" | "ok" = "slow";

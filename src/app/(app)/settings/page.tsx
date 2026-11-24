@@ -1,3 +1,4 @@
+import { SyncStatusSection } from "@/components/offline/SyncStatusSection";
 import { SettingsForm } from "@/components/settings/SettingsForm";
 import { requirePageContext } from "@/lib/api/auth";
 import { getSettings } from "@/lib/settings/repository";
@@ -12,6 +13,7 @@ export default async function SettingsPage() {
     <div className="space-y-4">
       <h1 className="text-2xl font-semibold">Settings</h1>
       <SettingsForm initial={settings} />
+      <SyncStatusSection />
     </div>
   );
 }

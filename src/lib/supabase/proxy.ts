@@ -2,7 +2,8 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { getSupabaseConfig, isSupabaseConfigured } from "./env";
 
-const PUBLIC_PATHS = ["/sign-in"];
+// /offline is the client-only offline shell (Module 009): it holds no data, and what it shows is decided on the device.
+const PUBLIC_PATHS = ["/sign-in", "/offline"];
 
 function isPublic(pathname: string): boolean {
   return PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`));

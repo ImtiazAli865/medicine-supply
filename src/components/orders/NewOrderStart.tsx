@@ -1,6 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import { DeviceNotes } from "@/components/offline/DeviceNotes";
 import { StoreSelector } from "@/components/orders/StoreSelector";
 import { newId } from "@/lib/ids";
 
@@ -16,6 +17,7 @@ export function NewOrderStart() {
         <h1 className="text-2xl font-semibold">New order</h1>
         <p className="text-muted">Choose the store this order is for.</p>
       </div>
+      <DeviceNotes />
       <StoreSelector onSelect={(store) => router.replace(`/orders/${newId()}?store=${store.id}`)} />
     </div>
   );

@@ -1,5 +1,6 @@
 import { addMedicine, createOrder, line, seedMedicines, seedStore, setQuantity, startOrder, waitSaved } from "./orders-helpers";
 import { expect, signIn, test } from "./fixtures";
+import { blockDeviceStorage } from "../helpers/offline";
 
 // US2: nothing is lost mid-entry, and the screen never claims more than the server confirmed.
 test.describe("US2: automatic draft saving", () => {
@@ -59,6 +60,7 @@ test.describe("US2: automatic draft saving", () => {
   test("with the network cut an edit shows Not saved, keeps the typed data, warns before leaving, and Retry saves it once", async ({ page, freshTenant }) => {
     await seedMedicines(freshTenant);
     await seedStore(freshTenant);
+    await blockDeviceStorage(page); // this test checks the online failure state, with no copy kept on the device
     await signIn(page, freshTenant);
     await startOrder(page, "Al Shifa Pharmacy");
     await addMedicine(page, "panadol");
@@ -96,6 +98,7 @@ test.describe("US2: automatic draft saving", () => {
   test("an edit typed while the connection is failing is saved after it returns, with no false 'changed elsewhere'", async ({ page, freshTenant }) => {
     await seedMedicines(freshTenant);
     await seedStore(freshTenant);
+    await blockDeviceStorage(page); // this test checks the online failure state, with no copy kept on the device
     await signIn(page, freshTenant);
     await startOrder(page, "Al Shifa Pharmacy");
     await addMedicine(page, "panadol");
@@ -127,15 +130,16 @@ test.describe("US2: automatic draft saving", () => {
     await waitSaved(other);
 
     await setQuantity(page, 0, "9"); // this page is still on the old version
-    await expect(page.getByTestId("save-status")).toHaveAttribute("data-state", "changed_elsewhere", { timeout: 15_000 });
+    // Module 009: the supplier decides between the phone's version and the server's; nothing is overwritten
+    await expect(page.getByTestId("conflict-panel")).toBeVisible({ timeout: 30_000 });
     await expect(line(page, 0).getByLabel("Quantity")).toHaveValue("9"); // its text is not thrown away
     const stored = await freshTenant.client.from("order_lines").select("quantity").is("removed_at", null);
     expect(stored.data).toEqual([{ quantity: 5 }]); // the other page's change was not overwritten
 
-    page.once("dialog", (dialog) => dialog.accept());
-    await page.getByRole("button", { name: "Review the current order" }).click();
+    await page.getByTestId("keep-server").click();
+    await page.getByTestId("conflict-confirm").click();
+    await expect(page.getByTestId("conflict-panel")).toHaveCount(0);
     await expect(line(page, 0).getByLabel("Quantity")).toHaveValue("5");
-    await expect(page.getByTestId("save-status")).toContainText(/Saved at/);
   });
 
   test("two drafts for two stores keep only their own lines", async ({ page, freshTenant }) => {
