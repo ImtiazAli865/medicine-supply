@@ -41,9 +41,11 @@ Open Reports on the phone with real data: can the owner say "how much did I sell
 
 | Date | What the owner did | What the owner reported |
 |------|--------------------|-------------------------|
-| (not done yet) | | |
+| 2026-11-24, evening | Opened Reports on the phone at http://192.168.1.9:3000 against the DEV project (after applying 0011 there), with the orders, invoices and balances already in the DEV data | Reported by the owner (not seen by the assistant): Reports opened on the phone, and the orders already confirmed, the invoices already made and the balance already added all show up in the reports. Then, asked what the profit figures and Cost missing looked like, the owner answered "everything was understood" (reported, not seen). Not separately reported: whether the figures matched the owner's memory of one remembered day, the CSV file on the phone, the balances equal to Home on the phone, and a timed answer to the 30-second question (SC-011), so SC-011 is recorded as reported-understood, not measured |
 
 ## 5. Results
+
+**Migration 0011 on the DEV project:** applied by the owner in the Supabase SQL editor on 2026-11-24 (about 8:10 pm, "Success. No rows returned", seen in the owner's screenshot). Not yet run on any other project.
 
 Results of real runs, newest last. Nothing is listed here that was not run.
 
