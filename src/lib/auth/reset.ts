@@ -50,6 +50,14 @@ export function cleanConfirmParams(params: { tokenHash: string | null | undefine
   return params.tokenHash;
 }
 
+// The one-time code of the service's own link (the default email template): letters, digits, underscore, hyphen and dot.
+const AUTH_CODE = /^[A-Za-z0-9_.-]{8,256}$/;
+
+/** The one-time code when the link carries a well-formed one, otherwise null. */
+export function cleanAuthCode(code: string | null | undefined): string | null {
+  return typeof code === "string" && AUTH_CODE.test(code) ? code : null;
+}
+
 export type ConfirmTarget = typeof RESET_PATH | typeof FORGOT_LINK_ERROR_PATH;
 
 /**
@@ -58,14 +66,19 @@ export type ConfirmTarget = typeof RESET_PATH | typeof FORGOT_LINK_ERROR_PATH;
  * addresses, never anything taken from the request, and a malformed link is never sent to the service.
  */
 export async function confirmRedirect(
-  params: { tokenHash: string | null | undefined; type: string | null | undefined },
+  params: { tokenHash: string | null | undefined; type: string | null | undefined; code?: string | null },
   verify: (tokenHash: string) => Promise<boolean>,
+  exchange?: (code: string) => Promise<boolean>,
 ): Promise<ConfirmTarget> {
   const hash = cleanConfirmParams(params);
-  if (hash === null) return FORGOT_LINK_ERROR_PATH;
+  const code = hash === null ? cleanAuthCode(params.code) : null;
   try {
-    return (await verify(hash)) ? RESET_PATH : FORGOT_LINK_ERROR_PATH;
+    if (hash !== null) return (await verify(hash)) ? RESET_PATH : FORGOT_LINK_ERROR_PATH;
+    // The default email template of the service sends a one-time code instead of a token hash. It only works in the browser that
+    // asked for the email (the service keeps a matching secret there), which is what the owner's trial on one computer does.
+    if (code !== null && exchange) return (await exchange(code)) ? RESET_PATH : FORGOT_LINK_ERROR_PATH;
   } catch {
     return FORGOT_LINK_ERROR_PATH;
   }
+  return FORGOT_LINK_ERROR_PATH;
 }

@@ -42,6 +42,6 @@ A file made before payments existed (version 1) still restores exactly as before
 
 ## The restore drill
 
-A restore was tried once on real data to check this guide:
+The restore was only partly tried on real data so far:
 
-> Result: **not yet done.** It is the owner's trial step. To do it: record a payment on the phone with the signal off, export a backup, clear the phone's data, import the file, turn the signal on, and check that the payment is in the store's account **once**. Write the date and the result here.
+> Result (2026-11-25, reported by the owner, not seen): importing a backup file on the phone did **not** add a payment that was already waiting there a second time. The full drill below (clear the phone's data first, then restore into the empty phone, then send) is **not yet done**.

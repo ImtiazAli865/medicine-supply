@@ -43,16 +43,18 @@ Optional but recommended: in Authentication → Policies set the **minimum passw
 
 ## 5. Password reset by email
 
-The sign-in page has **Forgot password?**. It asks Supabase to email a link; the link opens the app, which checks it and lets the owner choose a new password. Two things must be set once in the dashboard:
+The sign-in page has **Forgot password?**. It asks Supabase to email a link; the link opens the app, which checks it and lets the owner choose a new password. The app accepts two kinds of link:
 
-1. **Email template.** Authentication → Email Templates → **Reset Password**. Replace the link in the template with:
+- **The default email** (nothing to edit; this is what a new project sends). The link only works in the **same browser** that asked for the email, so ask for it and open it on the same computer.
+- **Your own template** (needs a custom SMTP service, because Supabase does not let a project without one edit its templates). Authentication → Emails → Templates → **Reset password**: replace the link with
 
-   ```
-   {{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=recovery
-   ```
+  ```
+  {{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=recovery
+  ```
 
-   This form of link works when the email is asked for on a computer and opened on the phone. The default link only works in the browser that asked for it.
-2. **Addresses.** Authentication → URL Configuration: set **Site URL** to the address where the app runs (for a phone trial, the app's own address) and add the same address to the **Redirect URLs** list.
+  This form also works when the email is asked for on a computer and opened on the phone.
+
+Either way, set the address once: Authentication → URL Configuration: **Site URL** is the address where the app runs (`http://localhost:3000` for a trial on one computer; the app's own `https` address later) and add the same address with `/**` to the **Redirect URLs** list.
 
 Good to know:
 

@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  cleanAuthCode,
   cleanConfirmParams,
   confirmRedirect,
   LINK_ERROR_MESSAGE,
@@ -101,5 +102,47 @@ describe("the emailed link", () => {
 
   it("has the plain sentence for a link that does not work", () => {
     expect(LINK_ERROR_MESSAGE).toBe("This link has expired or was already used. Ask for a new one.");
+  });
+});
+
+describe("the default email template's one-time code", () => {
+  const code = "0b8a5d3e-1c2f-4a6b-9d7e-123456789abc";
+
+  it("accepts a well-formed code and rejects anything else", () => {
+    expect(cleanAuthCode(code)).toBe(code);
+    for (const bad of [null, undefined, "", "short", "has space in it", "a/b/c/d/e/f/g/h", "../../etc/passwd", "x".repeat(257)]) {
+      expect(cleanAuthCode(bad as string | null | undefined), String(bad)).toBeNull();
+    }
+  });
+
+  it("goes to the reset page when the code is accepted, and to the plain error page when it is not or the service fails", async () => {
+    expect(await confirmRedirect({ tokenHash: null, type: null, code }, async () => false, async () => true)).toBe("/reset-password");
+    expect(await confirmRedirect({ tokenHash: null, type: null, code }, async () => false, async () => false)).toBe("/forgot-password?error=link");
+    expect(
+      await confirmRedirect({ tokenHash: null, type: null, code }, async () => false, async () => {
+        throw new Error("down");
+      }),
+    ).toBe("/forgot-password?error=link");
+  });
+
+  it("never sends a malformed code to the service, and a link with no token and no code goes to the error page", async () => {
+    let calls = 0;
+    const exchange = async () => {
+      calls += 1;
+      return true;
+    };
+    expect(await confirmRedirect({ tokenHash: null, type: null, code: "bad code" }, async () => true, exchange)).toBe("/forgot-password?error=link");
+    expect(await confirmRedirect({ tokenHash: null, type: null, code: null }, async () => true, exchange)).toBe("/forgot-password?error=link");
+    expect(calls).toBe(0);
+  });
+
+  it("uses the token hash first when both are present", async () => {
+    let exchanged = false;
+    const target = await confirmRedirect({ tokenHash: "abcdefgh12", type: "recovery", code }, async () => true, async () => {
+      exchanged = true;
+      return true;
+    });
+    expect(target).toBe("/reset-password");
+    expect(exchanged).toBe(false);
   });
 });

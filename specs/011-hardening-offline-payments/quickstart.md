@@ -39,7 +39,7 @@ Take a payment with the signal off on the phone (SC-013), then check after the s
 
 | Date | What the owner did | What the owner reported |
 |------|--------------------|-------------------------|
-| (not done yet) | | |
+| 2026-11-25 | Phone on the same Wi-Fi, production build against the DEV project, Chrome flag for the insecure address. Recorded a test payment with the signal off, then turned the signal on. | Reported by the owner, not seen: the payment appeared once as recorded (not twice). The password reset by real email was tried on DEV and not completed (the built-in email service allowed only 2 emails, then answered 429, and the first one-time link was used before the owner's click); the owner chose to skip it for now. The owner then exported a backup file on the phone and imported it again: a payment that was already on the phone was not added a second time. |
 
 ## 5. Documents to read
 
