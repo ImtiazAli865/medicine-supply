@@ -9,7 +9,8 @@
     "lint": "eslint && node scripts/check-secrets.mjs",
     "typecheck": "next typegen && tsc --noEmit",
     "test": "vitest run",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "test:sweep": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/sweep-test-project.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.7",

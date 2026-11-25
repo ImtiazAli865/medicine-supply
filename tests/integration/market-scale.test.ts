@@ -4,7 +4,7 @@ import { getMarketList, getMarketSummary, listPurchases, recordPurchase } from "
 import { ListQuerySchema, RecordPurchaseBodySchema } from "@/lib/validation/market";
 import { recordBody, todayPkt } from "../helpers/market";
 import { seedOrderWithClient } from "../helpers/pending";
-import { createTenant, deleteTenant, hasTestEnv, SKIP_REASON, type TestTenant } from "../helpers/supabase-test";
+import { createTenant, assertTenantGone, deleteTenant, hasTestEnv, SKIP_REASON, type TestTenant } from "../helpers/supabase-test";
 
 // SC-010: the market list of a day with 200 confirmed orders and 1,000 lines opens within 3 seconds, and a
 // purchase save answers within 2 seconds. Run against the Supabase test project; every request is made as a real
@@ -75,6 +75,7 @@ suite("the market list at scale", () => {
   afterAll(async () => {
     console.info(`SC-010 measured times in ms over ${RUNS} runs each:\n${Object.entries(measured).map(([k, v]) => `  ${k}: ${v.join(", ")} (max ${Math.max(...v)})`).join("\n")}`);
     await deleteTenant(a);
+    await assertTenantGone(a); // the scale data is really gone, not just not mentioned
   }, 300_000);
 
   const query = (extra: Record<string, string> = {}) => ListQuerySchema().parse({ date: TODAY, ...extra });

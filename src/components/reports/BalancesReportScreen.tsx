@@ -3,6 +3,7 @@
 import { BookOpen } from "lucide-react";
 import { useMemo } from "react";
 import { AccountListItem } from "@/components/accounts/AccountListItem";
+import { PendingSyncTotalNote } from "@/components/accounts/PendingSyncNote";
 import { ButtonLink } from "@/components/ui/Button";
 import { accountsApiUrl } from "@/lib/accounts/client";
 import { formatAccountMoney } from "@/lib/accounts/status";
@@ -66,6 +67,8 @@ export function BalancesReportScreen() {
                 : ""}
             </p>
           </section>
+
+          <PendingSyncTotalNote />
 
           {note.data && note.data.invoices > 0 ? (
             <p className="text-sm text-muted" data-testid="balances-not-in-account">

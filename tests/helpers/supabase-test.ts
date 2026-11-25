@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { assertCleaned, cleanBusiness, type CleanupClient } from "./tenant-cleanup";
 
 // Helpers for tests that run against a dedicated TEST Supabase project (never real business data).
 // The service-role key is read from the environment only (.env.test.local, git-ignored). It is used
@@ -64,30 +65,20 @@ export async function createTenant(label: string, withBusiness = true): Promise<
   return { label, email, password, userId, businessId, client };
 }
 
-/** Removes everything a tenant created. Safe to call more than once. */
+/**
+ * Removes everything a tenant created, and FAILS LOUDLY if anything is left (Module 011). It finds the tables that carry a business
+ * id from the project's own `rls_audit()`, so a table it was never told about (business_settings, the tables of the dropped voice
+ * work) is cleaned too; it deletes in batches when a delete times out; it throws one error naming every table it could not clean.
+ * Safe to call more than once. The service role is the only role allowed to delete order history rows (the app never uses it).
+ */
 export async function deleteTenant(tenant: TestTenant): Promise<void> {
-  const admin = serviceClient();
-  if (tenant.businessId) {
-    // Orders reference stores and medicines, so they go first. The service role is the only role
-    // allowed to delete order history rows (the app itself never uses it). Before migration 0003 is
-    // applied these tables do not exist and the errors are ignored on purpose.
-    await admin.from("ledger_entries").delete().eq("business_id", tenant.businessId); // Module 007 (before the invoices and stores)
-    await admin.from("invoice_events").delete().eq("business_id", tenant.businessId); // Module 006 (before the orders)
-    await admin.from("invoice_lines").delete().eq("business_id", tenant.businessId);
-    await admin.from("invoices").delete().eq("business_id", tenant.businessId);
-    await admin.from("invoice_counters").delete().eq("business_id", tenant.businessId);
-    await admin.from("purchase_voids").delete().eq("business_id", tenant.businessId); // Module 005 (before entries)
-    await admin.from("purchase_entries").delete().eq("business_id", tenant.businessId); // Module 005 (before products)
-    await admin.from("pending_requests").delete().eq("business_id", tenant.businessId); // Module 004
-    await admin.from("order_events").delete().eq("business_id", tenant.businessId);
-    await admin.from("order_lines").delete().eq("business_id", tenant.businessId);
-    await admin.from("orders").delete().eq("business_id", tenant.businessId);
-    await admin.from("order_counters").delete().eq("business_id", tenant.businessId);
-    await admin.from("products").delete().eq("business_id", tenant.businessId);
-    await admin.from("imports").delete().eq("business_id", tenant.businessId); // after products (they reference it)
-    await admin.from("stores").delete().eq("business_id", tenant.businessId);
-    await admin.from("profiles").delete().eq("user_id", tenant.userId);
-    await admin.from("businesses").delete().eq("id", tenant.businessId);
-  }
-  await admin.auth.admin.deleteUser(tenant.userId);
+  await cleanBusiness(serviceClient() as unknown as CleanupClient, { businessId: tenant.businessId, userId: tenant.userId });
+}
+
+/**
+ * Throws when anything of the tenant is still on the project (a row in a table that carries its business id, or its business row).
+ * The scale tests call it after their own clean-up, so a test that seeded thousands of rows proves it left none.
+ */
+export async function assertTenantGone(tenant: TestTenant): Promise<void> {
+  if (tenant.businessId) await assertCleaned(serviceClient() as unknown as CleanupClient, tenant.businessId);
 }

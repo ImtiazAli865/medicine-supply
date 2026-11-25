@@ -9,6 +9,7 @@ import { Banner } from "@/components/ui/States";
 import { formatPakistanDateTime } from "@/lib/orders/dates";
 import { BackupSection } from "./BackupSection";
 import { DeviceOrderCard } from "./DeviceOrderCard";
+import { DevicePaymentCard } from "./DevicePaymentCard";
 import { DeviceStoreCard } from "./DeviceStoreCard";
 import { ExportOffer } from "./ExportOffer";
 import { useOffline } from "./OfflineProvider";
@@ -72,7 +73,7 @@ export function SyncStatusSection() {
             : "The medicine and store lists are not saved on this phone yet. Connect once."}
         </p>
         {storageLow ? <Banner kind="warning">This phone&apos;s storage is nearly full, so the lists were not refreshed.</Banner> : null}
-        <p className="text-xs text-muted">Orders are sent only while this app is open. What is kept here is on this phone only: other devices do not see it until it has been sent.</p>
+        <p className="text-xs text-muted">Orders and payments are sent only while this app is open. What is kept here is on this phone only: other devices do not see it until it has been sent.</p>
         <div className="flex flex-wrap gap-2 pt-1">
           {online ? (
             <Button variant="secondary" onClick={() => void refresh()} loading={refreshing} data-testid="refresh-device-copy">
@@ -94,7 +95,15 @@ export function SyncStatusSection() {
         </p>
       ) : (
         <ul className="space-y-3" data-testid="sync-items">
-          {status.items.map((item) => (item.kind === "store" ? <DeviceStoreCard key={`store-${item.storeId}`} item={item} /> : <DeviceOrderCard key={item.orderId} item={item} />))}
+          {status.items.map((item) =>
+            item.kind === "store" ? (
+              <DeviceStoreCard key={`store-${item.storeId}`} item={item} />
+            ) : item.kind === "payment" ? (
+              <DevicePaymentCard key={`payment-${item.orderId}`} item={item} />
+            ) : (
+              <DeviceOrderCard key={item.orderId} item={item} />
+            ),
+          )}
         </ul>
       )}
 
@@ -105,11 +114,11 @@ export function SyncStatusSection() {
           <Trash2 size={18} aria-hidden="true" />
           Clear device data
         </Button>
-        <p className="text-sm text-muted">Deletes the lists and orders kept on this phone for this business. Orders that are on the server are not touched.</p>
+        <p className="text-sm text-muted">Deletes the lists, orders and waiting payments kept on this phone for this business. Orders and payments that are on the server are not touched.</p>
       </div>
 
       <Dialog open={clearOpen} title="Clear the data of this phone?" onClose={() => (clearing ? undefined : setClearOpen(false))}>
-        <p>The medicine and store lists and every order kept on this phone for this business will be deleted from this phone.</p>
+        <p>The medicine and store lists and every order and waiting payment kept on this phone for this business will be deleted from this phone.</p>
         <ExportOffer count={unsent} />
         {clearError ? <Banner kind="error">{clearError}</Banner> : null}
         <div className="flex flex-wrap gap-2">

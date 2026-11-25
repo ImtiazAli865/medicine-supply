@@ -106,6 +106,10 @@ test.describe("US6: sync status in Settings", () => {
     await expect(page.getByTestId("conflict-panel")).toBeVisible({ timeout: 30_000 });
     hold = false;
     expect((await readJournal(page)).length).toBeGreaterThan(0);
+    // The page must stop sending before the test business is removed, or a late send writes a new order event after the clean-up
+    // (the honest clean-up of Module 011 reported exactly that).
+    await goOffline(context);
+    await page.close();
   });
 
   test("pausing keeps every order on the phone and says so; resuming sends it", async ({ page, context, freshTenant }) => {

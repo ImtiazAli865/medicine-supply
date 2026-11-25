@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { SLIM_MEDICINE_KEYS } from "@/lib/orders/fast-types";
-import { businessDbName, KEY_PATH, REGISTRY_DB_NAME, SCHEMA_UPGRADES, SCHEMA_VERSION, type StoredMedicine } from "@/lib/device/schema";
+import { businessDbName, KEY_PATH, REGISTRY_DB_NAME, SCHEMA_UPGRADES, SCHEMA_VERSION, type PaymentOpRecord, type StoredMedicine } from "@/lib/device/schema";
 
 const FORBIDDEN = /purchase|mrp|cost|margin|profit|balance|snapshot|invoice/i;
 
@@ -28,7 +28,36 @@ describe("device schema", () => {
 
   it("has an upgrade step for every version up to the current one", () => {
     for (let v = 1; v <= SCHEMA_VERSION; v += 1) expect(SCHEMA_UPGRADES[v]).toBeDefined();
-    expect(SCHEMA_UPGRADES[SCHEMA_VERSION]).toEqual(Object.keys(KEY_PATH));
+    const all = Object.keys(SCHEMA_UPGRADES).flatMap((v) => SCHEMA_UPGRADES[Number(v)] ?? []);
+    expect([...all].sort()).toEqual(Object.keys(KEY_PATH).sort());
+    expect(new Set(all).size).toBe(all.length); // no store is created by two versions
+  });
+
+  it("adds the payment queue in version 2 and keeps version 1 as it was", () => {
+    expect(SCHEMA_VERSION).toBe(2);
+    expect(SCHEMA_UPGRADES[1]).toEqual(["meta", "medicines", "stores", "storeExtras", "drafts", "storeOps"]);
+    expect(SCHEMA_UPGRADES[2]).toEqual(["paymentOps"]);
+    expect(KEY_PATH.paymentOps).toBe("paymentId");
+  });
+
+  it("keeps no balance, invoice, ledger or price field on a waiting payment", () => {
+    const sample: PaymentOpRecord = {
+      paymentId: "p",
+      rev: 1,
+      seq: 1,
+      storeId: "s",
+      amount: "5000.00",
+      date: "2026-11-24",
+      reference: null,
+      state: "waiting",
+      reason: null,
+      conflict: null,
+      attempted: false,
+      tries: 0,
+      nextTryTick: 0,
+      recordedOn: "2026-11-24T10:00:00Z",
+    };
+    for (const key of Object.keys(sample)) expect(key).not.toMatch(FORBIDDEN);
   });
 
   it("builds a business database name only from a valid business id", () => {

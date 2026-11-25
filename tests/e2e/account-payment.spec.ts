@@ -91,6 +91,42 @@ test.describe("US3: record a payment", () => {
     await expect(page.getByTestId("entry-row")).toHaveCount(1);
   });
 
+  test("a server error offers no way to keep the payment on the phone, but a lost connection does, and it is recorded once", async ({ page, freshTenant }) => {
+    const store = await accountStore(freshTenant);
+    await addOpening(freshTenant, store.id, "1000.00", "owes");
+    await signIn(page, freshTenant);
+    await openAccount(page, store.id);
+    let mode: "server_error" | "lost" | "ok" = "server_error";
+    await page.route("**/api/accounts/*/payments", (route) => {
+      if (mode === "server_error") return route.fulfill({ status: 500, json: { code: "server_error", message: "Something went wrong. Please try again." } });
+      if (mode === "lost") return route.abort("connectionreset");
+      return route.continue();
+    });
+    await page.getByTestId("open-payment").click();
+    await page.getByTestId("payment-amount").fill("400");
+    await page.getByTestId("payment-save").click();
+    await expect(page.getByRole("dialog")).toContainText("Something went wrong. Please try again.");
+    await expect(page.getByTestId("payment-keep-on-phone")).toHaveCount(0);
+
+    // The connection is lost: the payment can be kept on the phone, with the same key the form holds
+    mode = "lost";
+    await page.getByTestId("payment-save").click();
+    await expect(page.getByRole("dialog")).toContainText("Can't reach the server");
+    await page.getByTestId("payment-keep-on-phone").click();
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    await expect(page.getByTestId("account-notice")).toHaveText("Saved on this phone. It is not in the store's account until it is sent.");
+    await expect(page.getByTestId("balance-pending-sync")).toHaveText("Pending sync");
+    await expect(page.getByTestId("pending-sync-text")).toHaveText("1 payment waiting on this phone, PKR 400.00, not counted yet");
+    await expect(page.getByTestId("account-balance")).toHaveText("Owes PKR 1,000.00");
+    await expect(page.getByTestId("entry-row")).toHaveCount(1); // only the opening balance
+
+    // The server can be reached again: the payment is sent, recorded once, and the screen reads the new balance
+    mode = "ok";
+    await expect(page.getByTestId("pending-sync-note")).toHaveCount(0, { timeout: 90_000 });
+    await expect(page.getByTestId("account-balance")).toHaveText("Owes PKR 600.00", { timeout: 30_000 });
+    await expect(page.getByTestId("entry-row").filter({ hasText: "Payment" })).toHaveCount(1);
+  });
+
   test("the account lists what is still unpaid and its status moves to paid after the payment", async ({ page, freshTenant }) => {
     const store = await accountStore(freshTenant);
     await issueFor(freshTenant, store.id, "800.00");

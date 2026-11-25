@@ -12,11 +12,12 @@ import type { BackupFile } from "@/lib/backup/file";
 import { previewImport, type ImportPreview as Preview } from "@/lib/backup/preview";
 import { ImportPreview } from "./ImportPreview";
 import { useOffline } from "./OfflineProvider";
-import { useBackupExport } from "./useBackupExport";
+import { paymentsInFile, useBackupExport } from "./useBackupExport";
 
 /**
  * Export and import of the supplier's own order data and the orders waiting on the phone (Module 009, US5). The file holds no
- * price, invoice, payment, ledger entry or secret. Import shows a preview first and changes nothing until it is confirmed.
+ * price, invoice, balance, ledger entry or secret; the cash payments waiting on the phone are in it (only what was typed). Import
+ * shows a preview first and changes nothing until it is confirmed.
  */
 export function BackupSection() {
   const { runtime, center } = useOffline();
@@ -73,7 +74,7 @@ export function BackupSection() {
       await center?.adoptJournal();
       if (outcome.failed.length > 0) setError(outcome.failed.join(" "));
       setResult(
-        `Imported: ${outcome.ordersAdded} ${outcome.ordersAdded === 1 ? "order" : "orders"} and ${outcome.storesAdded} ${outcome.storesAdded === 1 ? "store" : "stores"} kept on this phone and sent by the normal queue. ${outcome.ordersSkipped + outcome.storesSkipped} already here.`,
+        `Imported: ${outcome.ordersAdded} ${outcome.ordersAdded === 1 ? "order" : "orders"}, ${outcome.storesAdded} ${outcome.storesAdded === 1 ? "store" : "stores"} and ${outcome.paymentsAdded} ${outcome.paymentsAdded === 1 ? "payment" : "payments"} kept on this phone and sent by the normal queue. ${outcome.ordersSkipped + outcome.storesSkipped + outcome.paymentsSkipped} already here.`,
       );
       setStaged(null);
     } finally {
@@ -85,7 +86,7 @@ export function BackupSection() {
     <section aria-label="Backup" data-testid="backup-section" className="space-y-3">
       <h2 className="text-lg font-semibold">Backup</h2>
       <p className="text-sm text-muted">
-        A backup file holds your orders and their lines, your stores, typed medicines and the orders still waiting on this phone. It never holds prices, invoices, payments, the ledger or any password.
+        A backup file holds your orders and their lines, your stores, typed medicines, and the orders and cash payments still waiting on this phone (a payment is only its store, amount, date and reference). It never holds prices, invoices, balances, the ledger or any password.
       </p>
       {!ready ? (
         <Banner kind="warning">The backup needs the phone&apos;s storage, which is not available in this browser.</Banner>
@@ -104,7 +105,7 @@ export function BackupSection() {
       )}
       {done ? (
         <p role="status" data-testid="backup-export-done" className="text-sm text-primary-strong">
-          Saved {done.name}: {done.counts.stores} stores, {done.counts.orders} orders, {done.counts.lines} lines, {done.counts.waitingOrders} waiting orders.
+          Saved {done.name}: {done.counts.stores} stores, {done.counts.orders} orders, {done.counts.lines} lines, {done.counts.waitingOrders} waiting orders. {paymentsInFile(done)}
           {done.source === "device-only" ? " This file was made offline, so it holds only what this phone has." : ""}
         </p>
       ) : null}

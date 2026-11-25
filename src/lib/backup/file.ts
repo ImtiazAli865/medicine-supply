@@ -1,13 +1,19 @@
 // The backup file (Module 009, contracts/backup-file.schema.json): orders and their lines, stores, typed lines and the items
-// still waiting on the phone, of ONE business. It never contains a price of any kind, an invoice, a payment, a ledger entry,
-// a purchase, a password, a key, a token or the cookie. Pure code: building, writing, reading and checking a file.
+// still waiting on the phone, of ONE business. It never contains a price of any kind, an invoice, a balance, a ledger entry,
+// a purchase, a password, a key, a token or the cookie. Since version 2 it also holds the cash payments waiting on the phone
+// (only what was typed: the store, amount, date, reference and the payment's key). Pure code: building, writing, reading and checking a file.
 
 import { z } from "zod";
 import type { LineInfo } from "@/lib/orders/editor-state";
-import type { DraftRecord, StoreOpRecord } from "@/lib/device/schema";
+import type { DraftRecord, PaymentOpRecord, StoreOpRecord } from "@/lib/device/schema";
+import { isValidMoney, parseMoneyToPaisa } from "@/lib/money";
 
 export const BACKUP_FORMAT = "medsupply-backup";
-export const BACKUP_VERSION = 1;
+/** Version 2 (Module 011) adds the cash payments waiting on the phone. Version 1 files are still read (they have no payments). */
+export const BACKUP_VERSION = 2;
+const READABLE_VERSIONS: readonly number[] = [1, 2];
+/** The most waiting payments one file may hold. */
+export const MAX_BACKUP_PAYMENTS = 5000;
 
 const UUID = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
 const uuid = z.string().regex(UUID, "not a valid id");
@@ -97,19 +103,47 @@ const waitingStoreSchema = z
   })
   .strict();
 
+const DAY = /^\d{4}-\d{2}-\d{2}$/;
+
+// A waiting payment holds only what the person typed. It never holds a balance, an invoice, a ledger entry or a price.
+const waitingPaymentSchema = z
+  .object({
+    paymentId: uuid,
+    storeId: uuid,
+    amount: z
+      .string()
+      .regex(/^\d{1,10}\.\d{2}$/, "not a money amount")
+      .refine((a) => isValidMoney(a) && (parseMoneyToPaisa(a) ?? 0) > 0, "not above zero"),
+    date: z
+      .string()
+      .regex(DAY)
+      .refine((d) => !Number.isNaN(Date.parse(`${d}T00:00:00Z`)) && new Date(`${d}T00:00:00Z`).toISOString().startsWith(d), "not a date"),
+    reference: z.string().max(100).nullable().optional(),
+    syncState: z.enum(["on_device", "waiting", "conflict"]),
+    reason: z.string().nullable().optional(),
+  })
+  .strict();
+
 export const backupSchema = z
   .object({
     format: z.literal(BACKUP_FORMAT),
-    version: z.literal(BACKUP_VERSION),
+    version: z.union([z.literal(1), z.literal(2)]),
     exportedAt: z.string().min(1),
     businessId: uuid,
     source: z.enum(["server+device", "device-only"]),
     counts: z
-      .object({ stores: z.number().int().min(0), orders: z.number().int().min(0), lines: z.number().int().min(0), waitingOrders: z.number().int().min(0), waitingStores: z.number().int().min(0) })
+      .object({
+        stores: z.number().int().min(0),
+        orders: z.number().int().min(0),
+        lines: z.number().int().min(0),
+        waitingOrders: z.number().int().min(0),
+        waitingStores: z.number().int().min(0),
+        waitingPayments: z.number().int().min(0),
+      })
       .strict(),
     stores: z.array(storeSchema),
     orders: z.array(orderSchema),
-    waiting: z.object({ orders: z.array(waitingOrderSchema), stores: z.array(waitingStoreSchema) }).strict(),
+    waiting: z.object({ orders: z.array(waitingOrderSchema), stores: z.array(waitingStoreSchema), payments: z.array(waitingPaymentSchema).max(MAX_BACKUP_PAYMENTS) }).strict(),
   })
   .strict();
 
@@ -118,18 +152,31 @@ export type BackupStore = z.infer<typeof storeSchema>;
 export type BackupOrder = z.infer<typeof orderSchema>;
 export type BackupWaitingOrder = z.infer<typeof waitingOrderSchema>;
 export type BackupWaitingStore = z.infer<typeof waitingStoreSchema>;
+export type BackupWaitingPayment = z.infer<typeof waitingPaymentSchema>;
 
 // ---------------------------------------------------------------- building
 
 /** Keys that must never appear anywhere in a backup, at any depth. */
 const FORBIDDEN_KEY = /price|mrp|cost|margin|profit|balance|invoice|payment|ledger|purchase|token|password|secret|cookie|device_?id|api_?key|authorization/i;
 
+/**
+ * The one exception (Module 011): waiting payments are device data, so the key `payments` is allowed at `$.waiting` and the key
+ * `paymentId` inside an entry of `$.waiting.payments`, and the count `waitingPayments` at `$.counts`. Nothing else is allowed: a `payments` key anywhere else, and every other
+ * forbidden key (balance, invoice, ledger, a price, a cost...) anywhere, including inside a payment entry, is still found.
+ */
+function isAllowedPaymentKey(path: string, key: string): boolean {
+  if (key === "payments") return path === "$.waiting";
+  if (key === "waitingPayments") return path === "$.counts";
+  if (key === "paymentId") return /^\$\.waiting\.payments\[\d+\]$/.test(path);
+  return false;
+}
+
 export function findForbiddenKeys(value: unknown, path = "$"): string[] {
   if (value === null || typeof value !== "object") return [];
   if (Array.isArray(value)) return value.flatMap((v, i) => findForbiddenKeys(v, `${path}[${i}]`));
   const found: string[] = [];
   for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
-    if (FORBIDDEN_KEY.test(key)) found.push(`${path}.${key}`);
+    if (FORBIDDEN_KEY.test(key) && !isAllowedPaymentKey(path, key)) found.push(`${path}.${key}`);
     found.push(...findForbiddenKeys(child, `${path}.${key}`));
   }
   return found;
@@ -176,6 +223,19 @@ export function waitingStoreFromOp(op: StoreOpRecord): BackupWaitingStore {
   };
 }
 
+/** What a backup keeps of a payment waiting on the phone: the typed values and its key, never how it is being sent. */
+export function waitingPaymentFromOp(op: PaymentOpRecord): BackupWaitingPayment {
+  return {
+    paymentId: op.paymentId,
+    storeId: op.storeId,
+    amount: op.amount,
+    date: op.date,
+    reference: op.reference,
+    syncState: op.state === "syncing" ? "waiting" : op.state,
+    reason: op.reason,
+  };
+}
+
 export interface BuildInput {
   businessId: string;
   exportedAt: string;
@@ -184,9 +244,11 @@ export interface BuildInput {
   orders: BackupOrder[];
   waitingOrders: BackupWaitingOrder[];
   waitingStores: BackupWaitingStore[];
+  waitingPayments?: BackupWaitingPayment[];
 }
 
 export function buildBackup(input: BuildInput): BackupFile {
+  const waitingPayments = input.waitingPayments ?? [];
   return {
     format: BACKUP_FORMAT,
     version: BACKUP_VERSION,
@@ -199,10 +261,11 @@ export function buildBackup(input: BuildInput): BackupFile {
       lines: input.orders.reduce((n, o) => n + o.lines.length, 0),
       waitingOrders: input.waitingOrders.length,
       waitingStores: input.waitingStores.length,
+      waitingPayments: waitingPayments.length,
     },
     stores: input.stores,
     orders: input.orders,
-    waiting: { orders: input.waitingOrders, stores: input.waitingStores },
+    waiting: { orders: input.waitingOrders, stores: input.waitingStores, payments: waitingPayments },
   };
 }
 
@@ -232,12 +295,21 @@ export function parseBackup(textContent: string, expectedBusinessId: string): Pa
     return { ok: false, reason: "damaged", message: "This is not a backup file of this app. Nothing was imported." };
   }
   const version = (raw as { version?: unknown }).version;
-  if (version !== BACKUP_VERSION) {
+  if (typeof version !== "number" || !READABLE_VERSIONS.includes(version)) {
     return { ok: false, reason: "unknown_version", message: "This backup was made by a different version of the app and cannot be read. Nothing was imported." };
   }
   const forbidden = findForbiddenKeys(raw);
   if (forbidden.length > 0) {
     return { ok: false, reason: "damaged", message: "This file holds data a backup never contains, so it was refused. Nothing was imported." };
+  }
+  if (version === 1) {
+    // A version 1 file has no payments: it is read as an empty list. A version 1 file that names payments is not a file this app wrote.
+    const v1 = raw as { waiting?: { payments?: unknown }; counts?: { waitingPayments?: unknown } };
+    if (v1.waiting?.payments !== undefined || v1.counts?.waitingPayments !== undefined) {
+      return { ok: false, reason: "damaged", message: "This backup file is damaged or incomplete. Nothing was imported." };
+    }
+    if (v1.waiting && typeof v1.waiting === "object") v1.waiting.payments = [];
+    if (v1.counts && typeof v1.counts === "object") v1.counts.waitingPayments = 0;
   }
   const parsed = backupSchema.safeParse(raw);
   if (!parsed.success) {
@@ -249,7 +321,14 @@ export function parseBackup(textContent: string, expectedBusinessId: string): Pa
   }
   const lines = file.orders.reduce((n, o) => n + o.lines.length, 0);
   const c = file.counts;
-  if (c.stores !== file.stores.length || c.orders !== file.orders.length || c.lines !== lines || c.waitingOrders !== file.waiting.orders.length || c.waitingStores !== file.waiting.stores.length) {
+  if (
+    c.stores !== file.stores.length ||
+    c.orders !== file.orders.length ||
+    c.lines !== lines ||
+    c.waitingOrders !== file.waiting.orders.length ||
+    c.waitingStores !== file.waiting.stores.length ||
+    c.waitingPayments !== file.waiting.payments.length
+  ) {
     return { ok: false, reason: "damaged", message: "The counts in this backup do not match its contents, so it may be damaged. Nothing was imported." };
   }
   return { ok: true, file };

@@ -2,8 +2,9 @@
 // phone hold, and nothing is changed until the supplier confirms. Pure code. The server snapshot is needed, so an import is
 // previewed (and applied) only while online: a file is never compared with a guess.
 
-import type { DraftRecord, StoreOpRecord } from "@/lib/device/schema";
-import type { BackupFile, BackupOrder, BackupWaitingOrder } from "./file";
+import { parseMoneyToPaisa } from "@/lib/money";
+import type { DraftRecord, PaymentOpRecord, StoreOpRecord } from "@/lib/device/schema";
+import type { BackupFile, BackupOrder, BackupWaitingOrder, BackupWaitingPayment } from "./file";
 
 export type Verdict = "new" | "already_on_server" | "already_on_device" | "conflict" | "cannot_restore";
 
@@ -16,10 +17,12 @@ export interface DeviceSnapshot {
   drafts: Map<string, DraftRecord>;
   storeOps: Map<string, StoreOpRecord>;
   stores: Set<string>;
+  /** The payments waiting on this phone, by payment id. */
+  payments: Map<string, PaymentOpRecord>;
 }
 
 export interface PreviewItem {
-  kind: "order" | "store";
+  kind: "order" | "store" | "payment";
   id: string;
   label: string;
   verdict: Verdict;
@@ -31,12 +34,16 @@ export interface ImportPlan {
   orders: BackupWaitingOrder[];
   /** Stores to create through the normal store queue. */
   stores: Array<{ id: string; name: string; contact_person: string | null; phone: string | null; address: string | null }>;
+  /** Payments to put on this phone as waiting payments (the normal sync sends them; the server records each key once). */
+  payments: BackupWaitingPayment[];
 }
 
 export interface ImportPreview {
   items: PreviewItem[];
   counts: Record<Verdict, number>;
   plan: ImportPlan;
+  /** How many payments would be added to this phone and their exact total in paisa. */
+  payments: { count: number; paisa: number };
   /** Something would change if the supplier confirms. */
   canApply: boolean;
 }
@@ -80,12 +87,37 @@ function orderLabel(storeName: string | undefined, lines: number, id: string): s
 
 export function previewImport(file: BackupFile, server: ServerSnapshot, device: DeviceSnapshot): ImportPreview {
   const items: PreviewItem[] = [];
-  const plan: ImportPlan = { orders: [], stores: [] };
+  const plan: ImportPlan = { orders: [], stores: [], payments: [] };
   const storeNames = new Map<string, string>();
   for (const s of file.stores) storeNames.set(s.id, s.name);
   for (const s of file.waiting.stores) storeNames.set(s.storeId, s.name);
 
-  // Stores first: orders may depend on them.
+  // Payments come first (money is what the supplier looks for), then stores, then orders.
+  const knownStores = new Set<string>([...server.stores, ...device.stores, ...device.storeOps.keys(), ...file.stores.map((s) => s.id), ...file.waiting.stores.map((s) => s.storeId)]);
+  const paymentItems: PreviewItem[] = [];
+  let paymentPaisa = 0;
+  for (const p of file.waiting.payments) {
+    const label = `${storeNames.get(p.storeId) ?? "Store"} · PKR ${p.amount} · ${p.date} · ${p.paymentId.slice(0, 8)}`;
+    if (device.payments.has(p.paymentId)) {
+      paymentItems.push({ kind: "payment", id: p.paymentId, label, verdict: "already_on_device", reason: "This phone already has this payment, waiting to be sent. It is kept as it is." });
+      continue;
+    }
+    const known = knownStores.has(p.storeId);
+    paymentItems.push({
+      kind: "payment",
+      id: p.paymentId,
+      label,
+      verdict: "new",
+      reason: known
+        ? "This payment will be kept on this phone and sent. The server records a payment once, also when it already has this one."
+        : "This payment will be kept on this phone, but its store is not on this phone or the server, so sending it will ask you what to do.",
+    });
+    plan.payments.push(p);
+    paymentPaisa += parseMoneyToPaisa(p.amount) ?? 0;
+  }
+  items.push(...paymentItems);
+
+  // Stores next: orders may depend on them.
   const seenStores = new Set<string>();
   const addStore = (id: string, name: string, contact: string | null | undefined, phone: string | null | undefined, address: string | null | undefined) => {
     if (seenStores.has(id)) return;
@@ -172,5 +204,5 @@ export function previewImport(file: BackupFile, server: ServerSnapshot, device: 
 
   const counts: Record<Verdict, number> = { new: 0, already_on_server: 0, already_on_device: 0, conflict: 0, cannot_restore: 0 };
   for (const i of items) counts[i.verdict] += 1;
-  return { items, counts, plan, canApply: plan.orders.length + plan.stores.length > 0 };
+  return { items, counts, plan, payments: { count: plan.payments.length, paisa: paymentPaisa }, canApply: plan.orders.length + plan.stores.length + plan.payments.length > 0 };
 }

@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { SyncIndicator } from "@/components/offline/SyncIndicator";
+import { InsecureAddressNotice } from "./InsecureAddressNotice";
 import { BottomNav } from "./BottomNav";
 import { SessionExpiredBanner } from "./SessionExpiredBanner";
 import { SignOutButton } from "./SignOutButton";
@@ -20,6 +21,7 @@ export function AppShell({ businessName, children }: { businessName: string; chi
         <BottomNav />
         <main className="flex-1 px-4 pb-28 pt-4 md:px-8 md:pb-8 print:p-0">
           <div className="mx-auto w-full max-w-3xl print:max-w-none">
+            <InsecureAddressNotice />
             <SessionExpiredBanner />
             {children}
           </div>

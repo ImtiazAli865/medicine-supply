@@ -4,6 +4,7 @@
 // is touched here.
 
 import { emptyDraft, Journal } from "@/lib/device/journal";
+import { newPaymentOp, nextSeq } from "@/lib/device/payments";
 import type { BusinessDatabase, StoreOpRecord } from "@/lib/device/schema";
 import type { EditorState, LineInfo } from "@/lib/orders/editor-state";
 import type { BackupWaitingOrder } from "./file";
@@ -14,6 +15,8 @@ export interface ApplyResult {
   ordersSkipped: number;
   storesAdded: number;
   storesSkipped: number;
+  paymentsAdded: number;
+  paymentsSkipped: number;
   failed: string[];
 }
 
@@ -45,7 +48,7 @@ function infoOf(w: BackupWaitingOrder): Record<string, LineInfo> {
 
 export async function applyImport(plan: ImportPlan, db: BusinessDatabase, nowText: () => string): Promise<ApplyResult> {
   const journal = new Journal(db);
-  const result: ApplyResult = { ordersAdded: 0, ordersSkipped: 0, storesAdded: 0, storesSkipped: 0, failed: [] };
+  const result: ApplyResult = { ordersAdded: 0, ordersSkipped: 0, storesAdded: 0, storesSkipped: 0, paymentsAdded: 0, paymentsSkipped: 0, failed: [] };
 
   for (const s of plan.stores) {
     const existing = await db.get("storeOps", s.id);
@@ -86,6 +89,27 @@ export async function applyImport(plan: ImportPlan, db: BusinessDatabase, nowTex
     if (write.ok) result.ordersAdded += 1;
     else if (write.reason === "rev_conflict") result.ordersSkipped += 1;
     else result.failed.push(`Order ${w.orderId.slice(0, 8)} could not be kept on this phone.`);
+  }
+
+  // Payments: read again now, so a payment that reached this phone since the preview is never overwritten or doubled, and write
+  // every new one in one step (all of them or none).
+  if (plan.payments.length > 0) {
+    const existing = await db.getAll("paymentOps");
+    const known = new Set(existing.map((p) => p.paymentId));
+    const fresh = plan.payments.filter((p) => !known.has(p.paymentId));
+    result.paymentsSkipped += plan.payments.length - fresh.length;
+    let seq = nextSeq(existing);
+    const records = fresh.map((w) =>
+      newPaymentOp({ paymentId: w.paymentId, storeId: w.storeId, input: { amount: w.amount, date: w.date, reference: w.reference ?? null }, seq: seq++, recordedOn: nowText() }),
+    );
+    if (records.length > 0) {
+      try {
+        await db.batch(records.map((value) => ({ op: "put" as const, store: "paymentOps" as const, value })));
+        result.paymentsAdded += records.length;
+      } catch {
+        result.failed.push(`The ${records.length === 1 ? "payment" : `${records.length} payments`} could not be kept on this phone.`);
+      }
+    }
   }
   return result;
 }

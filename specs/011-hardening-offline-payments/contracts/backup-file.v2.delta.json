@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Backup file version 2: the changes to Module 009's backup-file.schema.json",
+  "description": "Only the differences. version becomes 2 (a version 1 file is still read: waiting.payments is then empty); counts gains waitingPayments; waiting gains payments. Nothing else in the file changes. The file never contains a balance, an invoice, a ledger entry, a price, a cost, a margin or a profit; the key 'payments' is allowed only at $.waiting.payments.",
+  "type": "object",
+  "properties": {
+    "version": { "enum": [1, 2] },
+    "counts": {
+      "type": "object",
+      "properties": { "waitingPayments": { "type": "integer", "minimum": 0 } }
+    },
+    "waiting": {
+      "type": "object",
+      "properties": {
+        "payments": {
+          "type": "array",
+          "maxItems": 5000,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["paymentId", "storeId", "amount", "date", "syncState"],
+            "properties": {
+              "paymentId": { "type": "string", "format": "uuid" },
+              "storeId": { "type": "string", "format": "uuid" },
+              "amount": { "type": "string", "pattern": "^\\d{1,10}\\.\\d{2}$" },
+              "date": { "type": "string", "format": "date" },
+              "reference": { "type": ["string", "null"], "maxLength": 100 },
+              "syncState": { "enum": ["on_device", "waiting", "conflict"] },
+              "reason": { "type": ["string", "null"] }
+            }
+          }
+        }
+      }
+    }
+  }
+}

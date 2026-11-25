@@ -9,6 +9,7 @@ import {
   buildBackup,
   parseBackup,
   waitingOrderFromDraft,
+  waitingPaymentFromOp,
   waitingStoreFromOp,
   type BackupFile,
   type BackupOrder,
@@ -47,6 +48,7 @@ export async function buildBackupFile(args: BuildArgs): Promise<BackupFile> {
   const waitingOrders = (await journal.listUnsynced()).map(waitingOrderFromDraft);
   const ops = (await args.db.getAll("storeOps")).filter((o) => o.state !== "synced");
   const waitingStores = ops.map(waitingStoreFromOp);
+  const waitingPayments = (await args.db.getAll("paymentOps")).sort((a, b) => a.seq - b.seq).map(waitingPaymentFromOp);
 
   let source: BackupFile["source"] = "device-only";
   let stores: BackupStore[] = [];
@@ -67,7 +69,7 @@ export async function buildBackupFile(args: BuildArgs): Promise<BackupFile> {
       .filter((s) => !s.pending && !pending.has(s.id))
       .map((s) => ({ id: s.id, name: s.name, contact_person: s.contact_person, phone: s.phone, address: s.address, is_active: s.is_active }));
   }
-  return buildBackup({ businessId: args.businessId, exportedAt: args.now(), source, stores, orders, waitingOrders, waitingStores });
+  return buildBackup({ businessId: args.businessId, exportedAt: args.now(), source, stores, orders, waitingOrders, waitingStores, waitingPayments });
 }
 
 /** Reads the text of a chosen file and checks it. Nothing is changed. */
@@ -90,5 +92,6 @@ export async function loadDeviceSnapshot(db: BusinessDatabase): Promise<DeviceSn
     drafts: new Map((await db.getAll("drafts")).map((d) => [d.orderId, d])),
     storeOps: new Map((await db.getAll("storeOps")).map((o) => [o.storeId, o])),
     stores: new Set((await db.getAll("stores")).map((s) => s.id)),
+    payments: new Map((await db.getAll("paymentOps")).map((p) => [p.paymentId, p])),
   };
 }

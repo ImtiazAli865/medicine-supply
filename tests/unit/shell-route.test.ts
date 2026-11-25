@@ -42,8 +42,27 @@ describe("offline shell routes", () => {
     }
   });
 
+  it("knows the Record payment screen and keeps every other account address blocked (Module 011)", () => {
+    expect(parseGo("/accounts/pay")).toEqual({ kind: "payment" });
+    expect(parseGo("/accounts/pay/")).toEqual({ kind: "payment" });
+    expect(parseGo("/accounts/pay?store=abc")).toEqual({ kind: "payment" });
+    for (const path of ["/accounts", "/accounts/", `/accounts/${ID}`, "/accounts/xyz", `/accounts/${ID}/statement`, `/accounts/${ID}/payments`, "/accounts/payment", "/accounts/pay-now", "/accounts/pay/extra"]) {
+      expect(parseGo(path), path).toEqual({ kind: "blocked", area: "Store accounts" });
+    }
+  });
+
+  it("does not treat a crafted address as the Record payment screen", () => {
+    for (const bad of ["//evil.test/accounts/pay", "/accounts/pay\\x", "https://evil.test/accounts/pay", "accounts/pay", "/accounts/pay\u0000", "/accounts/pay/../x", "/accounts/%70ay/../../x"]) {
+      expect(parseGo(bad), bad).not.toEqual({ kind: "payment" });
+    }
+    // the address is normalised first, so a path that climbs out of /accounts/pay is the page it really points to
+    expect(parseGo("/accounts/pay/../x")).toEqual({ kind: "blocked", area: "Store accounts" });
+    expect(parseGo("/accounts/%70ay/../../x")).toEqual({ kind: "blocked", area: "This page" });
+  });
+
   it("builds shell addresses that parse back to the same screen", () => {
-    for (const route of [{ kind: "orders" }, { kind: "new_order" }, { kind: "settings" }, { kind: "order", id: ID, store: STORE }, { kind: "order", id: ID, store: null }] as const) {
+    expect(shellHref({ kind: "payment" })).toBe("/offline?go=%2Faccounts%2Fpay");
+    for (const route of [{ kind: "orders" }, { kind: "new_order" }, { kind: "settings" }, { kind: "payment" }, { kind: "order", id: ID, store: STORE }, { kind: "order", id: ID, store: null }] as const) {
       const href = shellHref(route);
       const go = new URL(href, "http://x").searchParams.get("go");
       expect(parseGo(go)).toEqual(route);

@@ -76,12 +76,12 @@ function sample(): BackupFile {
 }
 
 const emptyServer = (): ServerSnapshot => ({ orders: new Map(), stores: new Set() });
-const emptyDevice = (): DeviceSnapshot => ({ drafts: new Map(), storeOps: new Map(), stores: new Set() });
+const emptyDevice = (): DeviceSnapshot => ({ drafts: new Map(), storeOps: new Map(), stores: new Set(), payments: new Map() });
 
 describe("backup file", () => {
   it("counts stores, orders, lines and waiting items", () => {
     const f = sample();
-    expect(f.counts).toEqual({ stores: 1, orders: 2, lines: 2, waitingOrders: 1, waitingStores: 1 });
+    expect(f.counts).toEqual({ stores: 1, orders: 2, lines: 2, waitingOrders: 1, waitingStores: 1, waitingPayments: 0 });
     expect(backupFileName(f.exportedAt)).toBe("medsupply-backup-2026-11-21.json");
   });
 
@@ -112,7 +112,7 @@ describe("backup file", () => {
     const f = sample();
     expect(parseBackup("{not json", BIZ)).toMatchObject({ ok: false, reason: "damaged" });
     expect(parseBackup(JSON.stringify({ hello: 1 }), BIZ)).toMatchObject({ ok: false, reason: "damaged" });
-    expect(parseBackup(JSON.stringify({ ...f, version: 2 }), BIZ)).toMatchObject({ ok: false, reason: "unknown_version" });
+    expect(parseBackup(JSON.stringify({ ...f, version: 3 }), BIZ)).toMatchObject({ ok: false, reason: "unknown_version" });
     expect(parseBackup(serializeBackup(f), OTHER_BIZ)).toMatchObject({ ok: false, reason: "other_business" });
     expect(parseBackup(JSON.stringify({ ...f, counts: { ...f.counts, orders: 9 } }), BIZ)).toMatchObject({ ok: false, reason: "damaged" });
     const badQty = structuredClone(f);
@@ -183,11 +183,11 @@ describe("import preview", () => {
   it("recognises an order that is already waiting on this phone, and a different local version as a conflict", () => {
     const file = sample();
     const same = new Map([[O3, waitingDraft(O3, null)]]);
-    const preview = previewImport(file, emptyServer(), { drafts: same, storeOps: new Map(), stores: new Set() });
+    const preview = previewImport(file, emptyServer(), { drafts: same, storeOps: new Map(), stores: new Set(), payments: new Map() });
     expect(preview.items.find((i) => i.id === O3)!.verdict).toBe("already_on_device");
     const other = waitingDraft(O3, null);
     other.state.notes = "changed on the phone";
-    const conflict = previewImport(file, emptyServer(), { drafts: new Map([[O3, other]]), storeOps: new Map(), stores: new Set() });
+    const conflict = previewImport(file, emptyServer(), { drafts: new Map([[O3, other]]), storeOps: new Map(), stores: new Set(), payments: new Map() });
     expect(conflict.items.find((i) => i.id === O3)!.verdict).toBe("conflict");
   });
 
@@ -229,6 +229,7 @@ describe("applying an import", () => {
       drafts: new Map((await db.getAll("drafts")).map((d) => [d.orderId, d])),
       storeOps: new Map((await db.getAll("storeOps")).map((o) => [o.storeId, o])),
       stores: new Set((await db.getAll("stores")).map((s) => s.id)),
+      payments: new Map(),
     };
     const again = previewImport(file, emptyServer(), device);
     expect(again.canApply).toBe(false);

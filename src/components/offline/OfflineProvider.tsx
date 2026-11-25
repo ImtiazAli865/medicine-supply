@@ -13,8 +13,10 @@ import {
 } from "react";
 import type { CacheAge, RefreshOutcome } from "@/lib/device/cache";
 import type { ServerIdentity } from "@/lib/device/identity";
+import { workerStatus, type WorkerStatus } from "@/lib/device/worker-status";
 import { startDeviceRuntime, type DeviceMode, type DeviceRuntime } from "@/lib/device/runtime";
-import type { SyncCenter, SyncStatus } from "@/lib/device/sync-center";
+import type { PaymentInput } from "@/lib/accounts/payment-input";
+import type { RecordPaymentResult, SyncCenter, SyncStatus } from "@/lib/device/sync-center";
 
 // Starts the device side of the app once per page for the signed-in business and shares its state (Module 009). Nothing here
 // changes what an online screen shows when there is nothing to report: without a device database (private window, blocked
@@ -35,7 +37,15 @@ export interface OfflineContextValue {
   runtime: DeviceRuntime | null;
   center: SyncCenter | null;
   refresh(): Promise<RefreshOutcome | null>;
+  /** Whether the offline worker can run on this address; anything but "ok" is shown to the person (Module 011). */
+  worker: WorkerStatus;
+  /** Records a cash payment on this phone (kept until the server confirms it). Refused with a reason when the phone cannot keep it. */
+  recordPayment(args: { storeId: string; input: PaymentInput; paymentId?: string }): Promise<RecordPaymentResult>;
+  /** Removes a waiting payment after the supplier confirmed it. False when the rules do not allow it. */
+  removePayment(paymentId: string): Promise<boolean>;
 }
+
+const NO_STORAGE_MESSAGE = "This phone cannot keep the payment here, so nothing was recorded.";
 
 const NOOP_VALUE: OfflineContextValue = {
   mode: "starting",
@@ -49,6 +59,9 @@ const NOOP_VALUE: OfflineContextValue = {
   runtime: null,
   center: null,
   refresh: async () => null,
+  worker: "ok",
+  recordPayment: async () => ({ ok: false, reason: "storage", message: NO_STORAGE_MESSAGE }),
+  removePayment: async () => false,
 };
 
 // The state is shared through a small external store, and the React context carries only the (never changing) store. A context
@@ -87,19 +100,38 @@ export function useOffline(): OfflineContextValue {
   return useSyncExternalStore(store.subscribe, store.get, () => NOOP_VALUE);
 }
 
-function registerWorker() {
-  if (process.env.NODE_ENV !== "production" || typeof navigator === "undefined" || !("serviceWorker" in navigator))
-    return;
+/** Registers the service worker; resolves true when it is registered (or not needed) and false when the browser refused it. */
+function registerWorker(): Promise<boolean> {
+  if (process.env.NODE_ENV !== "production" || typeof navigator === "undefined" || !("serviceWorker" in navigator)) return Promise.resolve(true);
   const register = () =>
-    navigator.serviceWorker.register("/sw.js", { scope: "/" }).catch((error: unknown) => {
-      // Only the offline reload is lost; the app itself keeps working.
-      console.info("The offline service worker could not be registered.", error instanceof Error ? error.message : "");
-    });
-  if (document.readyState === "complete") void register();
-  else window.addEventListener("load", () => void register(), { once: true });
+    navigator.serviceWorker.register("/sw.js", { scope: "/" }).then(
+      () => true,
+      (error: unknown) => {
+        // Only the offline reload is lost; the app itself keeps working, and the person is told.
+        console.info("The offline service worker could not be registered.", error instanceof Error ? error.message : "");
+        return false;
+      },
+    );
+  if (document.readyState === "complete") return register();
+  return new Promise<boolean>((resolve) => window.addEventListener("load", () => void register().then(resolve), { once: true }));
 }
 
 const CACHE_AGE_EVERY_MS = 30_000;
+
+interface AddressFacts {
+  isSecureContext: boolean;
+  hasServiceWorker: boolean;
+}
+
+let addressFacts: AddressFacts | null = null;
+
+/** What the browser says about the address of this page; read once (it cannot change while the page is open). */
+function readAddressFacts(): AddressFacts {
+  addressFacts ??= { isSecureContext: window.isSecureContext, hasServiceWorker: "serviceWorker" in navigator };
+  return addressFacts;
+}
+
+const subscribeNever = () => () => undefined;
 
 /** `server` is the verified user and business of an online page; null in the offline shell (the cookie decides). */
 export function OfflineProvider({ server, children }: { server: ServerIdentity | null; children: ReactNode }) {
@@ -112,6 +144,7 @@ export function OfflineProvider({ server, children }: { server: ServerIdentity |
   const [storeNames, setStoreNames] = useState<Record<string, string>>({});
   const [storageLow, setStorageLow] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [registerFailed, setRegisterFailed] = useState(false);
 
   const runtimeRef = useRef<DeviceRuntime | null>(null);
   const userId = server?.userId ?? null;
@@ -156,7 +189,7 @@ export function OfflineProvider({ server, children }: { server: ServerIdentity |
           () => void rt.readCacheAge().then((age) => !cancelled && setCacheAge(age)),
           CACHE_AGE_EVERY_MS,
         );
-        if (identity) registerWorker();
+        if (identity) void registerWorker().then((ok) => !cancelled && setRegisterFailed(!ok));
       })
       .catch(() => {
         if (!cancelled) {
@@ -172,6 +205,11 @@ export function OfflineProvider({ server, children }: { server: ServerIdentity |
       started?.stop();
     };
   }, [userId, businessId, businessName]);
+
+  // The facts about the address, for the notice that says offline mode cannot start here. Nothing on the server (null), then the
+  // browser's own answer, so the page the server made and the first page of the browser agree.
+  const browser = useSyncExternalStore(subscribeNever, readAddressFacts, () => null);
+  const worker: WorkerStatus = browser ? workerStatus({ ...browser, production: process.env.NODE_ENV === "production", registerFailed }) : "ok";
 
   // The names of the stores on this phone, so an order that is not yet on the server can show its store.
   const waitingKey = status ? status.items.map((i) => i.storeId).join(",") : "";
@@ -203,6 +241,16 @@ export function OfflineProvider({ server, children }: { server: ServerIdentity |
     }
   }, [runtime]);
 
+  const recordPayment = useCallback<OfflineContextValue["recordPayment"]>(
+    async (args) => {
+      const center = runtime?.center;
+      if (!center) return { ok: false, reason: "storage", message: NO_STORAGE_MESSAGE };
+      return center.recordPayment(args);
+    },
+    [runtime],
+  );
+  const removePayment = useCallback(async (paymentId: string) => (runtime?.center ? runtime.center.removePayment(paymentId) : false), [runtime]);
+
   const value = useMemo<OfflineContextValue>(
     () => ({
       mode,
@@ -216,8 +264,11 @@ export function OfflineProvider({ server, children }: { server: ServerIdentity |
       runtime,
       center: runtime?.center ?? null,
       refresh,
+      worker,
+      recordPayment,
+      removePayment,
     }),
-    [mode, message, online, status, cacheAge, storeNames, storageLow, refreshing, runtime, refresh],
+    [mode, message, online, status, cacheAge, storeNames, storageLow, refreshing, runtime, refresh, worker, recordPayment, removePayment],
   );
 
   const [store] = useState(createOfflineStore);

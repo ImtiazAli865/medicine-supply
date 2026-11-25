@@ -1,6 +1,7 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
+import { forbiddenWordsIn, NAMES_ONLY } from "../helpers/offline-guard";
 
 // Static guards for the offline module (Module 009, task T066): the device code, the backup code, the offline screens, the
 // two new routes and the service worker must not touch prices, balances, invoices or secrets, must not keep data in
@@ -41,18 +42,17 @@ const OFFLINE_SOURCES = [
   "public/sw.js",
 ];
 
-const FORBIDDEN = /purchase_price|\bmrp\b|\bcost\b|\bmargin\b|\bprofit\b|\bbalance\b|invoice|snapshot_|ledger|payment/i;
-// The shell only NAMES the areas that need the internet ("Invoices", "Store accounts") and the backup file code lists the words a
-// backup must never contain (to refuse a file that has them); the backup screen tells the supplier what a backup never holds; none of them reads or writes any such data.
-const NAMES_ONLY = new Set([path.join("src", "lib", "device", "shell-route.ts"), path.join("src", "lib", "backup", "file.ts"), path.join("src", "components", "offline", "BackupSection.tsx")]);
+// The word rules live in tests/helpers/offline-guard.ts (Module 011): "payment" is allowed only in the named payment files, and
+// every other forbidden word stays forbidden everywhere. The shell, the backup file code and the backup screen only NAME the
+// words (the areas that need the internet; the keys a backup must never contain) and are exempt, as in Module 009.
 
 describe("offline module static guards", () => {
   it("finds the files it is meant to guard", () => {
     expect(OFFLINE_SOURCES.length).toBeGreaterThan(10);
   });
 
-  it("mentions no purchase price, MRP, cost, margin, profit, balance, invoice, ledger or payment", () => {
-    const offenders = OFFLINE_SOURCES.filter((f) => !NAMES_ONLY.has(path.normalize(f)) && FORBIDDEN.test(code(f)));
+  it("mentions no purchase price, MRP, cost, margin, profit, balance, invoice or ledger anywhere, and payment only in the payment files", () => {
+    const offenders = OFFLINE_SOURCES.map((f) => ({ f, words: forbiddenWordsIn(f, code(f)) })).filter((x) => x.words.length > 0);
     expect(offenders).toEqual([]);
   });
 

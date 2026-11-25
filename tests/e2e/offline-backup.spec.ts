@@ -13,7 +13,10 @@ test.describe("US5: backup and restore", () => {
   test.skip(({ viewport }) => !viewport || viewport.width > 400, "mobile project only");
   test.setTimeout(180_000);
 
+  // Since version 2 the file has the keys "payments" and "waitingPayments" (the cash payments waiting on the phone, only what was typed).
+  // Every other mention of money, and every price, balance, invoice, ledger or secret, is still forbidden.
   const FORBIDDEN = /price|mrp|\bcost\b|margin|profit|balance|invoice|payment|ledger|token|password|cookie/i;
+  const withoutPaymentKeys = (text: string) => text.replace(/"(payments|waitingPayments|paymentId)"/g, '""');
 
   async function seed(tenant: TestTenant) {
     const [m1] = await insertMedicines(tenant.client, [{ name: "Backup Med", strength: "10 mg", selling_price: "10.00" }]);
@@ -67,7 +70,7 @@ test.describe("US5: backup and restore", () => {
     const json = JSON.parse(file.text) as { source: string; counts: Record<string, number>; businessId: string };
     expect(json.source).toBe("server+device");
     expect(json.counts).toMatchObject({ stores: 1, orders: 2, waitingOrders: 1 });
-    expect(file.text).not.toMatch(FORBIDDEN);
+    expect(withoutPaymentKeys(file.text)).not.toMatch(FORBIDDEN);
 
     // the data of this phone is cleared (after a warning that offers the backup): the waiting order is gone from the phone
     await page.getByTestId("clear-device-data").click();
