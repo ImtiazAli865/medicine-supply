@@ -11,6 +11,7 @@ export type ShellRoute =
   | { kind: "new_order" }
   | { kind: "order"; id: string; store: string | null }
   | { kind: "settings" }
+  | { kind: "payment" }
   | { kind: "blocked"; area: string };
 
 const BLOCKED_AREAS: Array<[string, string]> = [
@@ -40,6 +41,9 @@ export function parseGo(go: string | null | undefined): ShellRoute {
   if (path === "/orders") return { kind: "orders" };
   if (path === "/orders/new") return { kind: "new_order" };
   if (path === "/settings") return { kind: "settings" };
+  // The one account screen that works without the internet (Module 011). Checked before the blocked areas; every other
+  // address under /accounts stays blocked.
+  if (path === "/accounts/pay") return { kind: "payment" };
 
   const order = /^\/orders\/([^/]+)$/.exec(path);
   if (order) {
@@ -54,7 +58,7 @@ export function parseGo(go: string | null | undefined): ShellRoute {
   return { kind: "blocked", area: "This page" };
 }
 
-/** The address of a screen inside the shell. Only the three order screens and Settings exist offline. */
+/** The address of a screen inside the shell. Only the three order screens, Settings and Record payment exist offline. */
 export function shellHref(route: Exclude<ShellRoute, { kind: "blocked" }>): string {
   switch (route.kind) {
     case "home":
@@ -65,6 +69,8 @@ export function shellHref(route: Exclude<ShellRoute, { kind: "blocked" }>): stri
       return "/offline?go=%2Forders%2Fnew";
     case "settings":
       return "/offline?go=%2Fsettings";
+    case "payment":
+      return "/offline?go=%2Faccounts%2Fpay";
     case "order": {
       const inner = route.store ? `/orders/${route.id}?store=${route.store}` : `/orders/${route.id}`;
       return `/offline?go=${encodeURIComponent(inner)}`;

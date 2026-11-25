@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { todayInPakistan } from "@/lib/orders/dates";
 import { getCostMissing, getMedicineReport, getPurchaseReport, getSalesReport, getStoreReport } from "@/lib/reports/repository";
-import { createTenant, deleteTenant, hasTestEnv, serviceClient, SKIP_REASON, type TestTenant } from "../helpers/supabase-test";
+import { createTenant, assertTenantGone, deleteTenant, hasTestEnv, serviceClient, SKIP_REASON, type TestTenant } from "../helpers/supabase-test";
 
 // SC-005 of Module 010: the reports of a business with 5,000 issued invoices (10 lines each, 50,000 lines, over 90 days)
 // answer within 2 seconds on the Supabase test project, and the totals are exact. Every request is made as a real
@@ -180,6 +180,7 @@ suite("reports at scale", () => {
     if (!a) return;
     for (const table of ["invoice_lines", "invoices", "purchase_entries", "order_lines", "orders"]) await removeInBatches(table, a.businessId as string);
     await deleteTenant(a);
+    await assertTenantGone(a); // the scale data is really gone, not just not mentioned
   }, 900_000);
 
   it("gives the sales report for 90 days within 2 seconds, exact, in every grouping", async () => {

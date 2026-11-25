@@ -114,7 +114,7 @@ export function OrderHistory() {
 
   const current = loaded?.key === key ? loaded : null;
   // Orders kept on this phone that the server has not confirmed yet (shown above the list, once each).
-  const deviceItems = (syncStatus?.items ?? []).filter((i) => (!filters.store || i.storeId === filters.store) && (!filters.status || filters.status === "draft"));
+  const deviceItems = (syncStatus?.items ?? []).filter((i) => (i.kind === "order" || i.kind === "store") && (!filters.store || i.storeId === filters.store) && (!filters.status || filters.status === "draft"));
   const deviceIds = new Set(deviceItems.map((i) => i.orderId));
   const serverItems = (current?.items ?? []).filter((o) => !deviceIds.has(o.id));
   const filtering = Boolean(filters.store || filters.status || filters.from || filters.to || filters.q.trim());

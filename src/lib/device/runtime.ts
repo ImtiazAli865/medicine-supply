@@ -12,6 +12,7 @@ import { answerLocal } from "./local-api";
 import { createLeaderElection } from "./locks";
 import { saveOrderTransport } from "@/lib/orders/save-transport";
 import { saveStoreTransport } from "./store-transport";
+import { sendPaymentTransport } from "./payment-transport";
 import type { BusinessDatabase, DeviceStorage } from "./schema";
 import { SyncCenter } from "./sync-center";
 
@@ -105,6 +106,7 @@ export async function startDeviceRuntime(args: StartArgs): Promise<DeviceRuntime
     election,
     transport: saveOrderTransport,
     storeTransport: saveStoreTransport,
+    paymentTransport: sendPaymentTransport,
     scheduler: { set: (fn, ms) => setTimeout(fn, ms), clear: (h) => clearTimeout(h as ReturnType<typeof setTimeout>) },
     newId,
     nowText: () => new Date().toISOString(),

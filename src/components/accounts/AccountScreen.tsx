@@ -7,6 +7,7 @@ import { AdjustmentDialog } from "@/components/accounts/AdjustmentDialog";
 import { BalanceBadge } from "@/components/accounts/BalanceBadge";
 import { EntryRow } from "@/components/accounts/EntryRow";
 import { OpeningBalanceDialog } from "@/components/accounts/OpeningBalanceDialog";
+import { PendingSyncBadge, PendingSyncNote, useOnPaymentsConfirmed } from "@/components/accounts/PendingSyncNote";
 import { RecordPaymentDialog } from "@/components/accounts/RecordPaymentDialog";
 import { ReverseEntryDialog } from "@/components/accounts/ReverseEntryDialog";
 import { Badge } from "@/components/ui/Badge";
@@ -39,6 +40,12 @@ export function AccountScreen({ storeId }: { storeId: string }) {
   const [adjustOpen, setAdjustOpen] = useState(false);
   const [reversing, setReversing] = useState<LedgerEntry | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+
+  // A payment waiting on this phone was confirmed by the server: its entry is new, so the balance and the entries are read again.
+  useOnPaymentsConfirmed(storeId, () => {
+    setMore({ base: "", entries: [], error: null, loading: false });
+    first.retry();
+  });
 
   const account = first.data;
   // Entries loaded by "Show more" belong to the first page they were loaded after; a reload starts again.
@@ -84,7 +91,10 @@ export function AccountScreen({ storeId }: { storeId: string }) {
       </div>
 
       <section aria-label="Balance" className="space-y-2 rounded-xl border border-border bg-surface p-4" data-testid="account-balance-card">
-        <BalanceBadge balance={account.balance} testId="account-balance" />
+        <div className="flex flex-wrap items-center gap-2">
+          <BalanceBadge balance={account.balance} testId="account-balance" />
+          <PendingSyncBadge storeId={storeId} />
+        </div>
         <p className="text-lg" data-testid="account-balance-sentence">
           {balanceSentence(account.balance)}
         </p>
@@ -92,6 +102,8 @@ export function AccountScreen({ storeId }: { storeId: string }) {
           The balance is worked out from the entries below. It is never typed or stored.
         </p>
       </section>
+
+      <PendingSyncNote storeId={storeId} />
 
       {notice ? (
         <p role="status" className="rounded-lg border border-primary/30 bg-primary-soft px-3 py-2 text-primary-strong" data-testid="account-notice">
@@ -176,7 +188,16 @@ export function AccountScreen({ storeId }: { storeId: string }) {
       </section>
 
       <OpeningBalanceDialog open={openingOpen} storeId={storeId} onClose={() => setOpeningOpen(false)} onDone={() => afterWrite("Opening balance saved.")} />
-      <RecordPaymentDialog open={paymentOpen} storeId={storeId} onClose={() => setPaymentOpen(false)} onDone={() => afterWrite("Payment saved.")} />
+      <RecordPaymentDialog
+        open={paymentOpen}
+        storeId={storeId}
+        onClose={() => setPaymentOpen(false)}
+        onDone={() => afterWrite("Payment saved.")}
+        onKept={() => {
+          setPaymentOpen(false);
+          setNotice("Saved on this phone. It is not in the store's account until it is sent.");
+        }}
+      />
       <AdjustmentDialog open={adjustOpen} storeId={storeId} onClose={() => setAdjustOpen(false)} onDone={() => afterWrite("Adjustment saved.")} />
       <ReverseEntryDialog entry={reversing} storeId={storeId} onClose={() => setReversing(null)} onDone={() => afterWrite("Entry reversed.")} />
     </div>

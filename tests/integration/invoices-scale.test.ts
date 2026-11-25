@@ -3,7 +3,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createInvoice, getInvoice, getInvoiceSummary, issueInvoice, listInvoices, listToInvoice } from "@/lib/invoices/repository";
 import { InvoiceListQuerySchema, ToInvoiceQuerySchema } from "@/lib/validation/invoice";
 import { seedOrderWithClient } from "../helpers/pending";
-import { createTenant, deleteTenant, hasTestEnv, serviceClient, SKIP_REASON, type TestTenant } from "../helpers/supabase-test";
+import { createTenant, assertTenantGone, deleteTenant, hasTestEnv, serviceClient, SKIP_REASON, type TestTenant } from "../helpers/supabase-test";
 
 // SC-001 and SC-009: the Invoices list of a business with 1,000 invoices opens within 3 seconds, a draft for an order
 // with 20 lines is created within 2 seconds and an invoice of 60 lines is issued within 2 seconds. Run against the
@@ -134,6 +134,7 @@ suite("invoices at scale", () => {
   afterAll(async () => {
     console.info(`SC-001 and SC-009 measured times in ms:\n${Object.entries(measured).map(([k, v]) => `  ${k}: ${v.join(", ")} (max ${Math.max(...v)})`).join("\n")}`);
     await deleteTenant(a);
+    await assertTenantGone(a); // the scale data is really gone, not just not mentioned
   }, 600_000);
 
   it("opens the first page of 1,000 invoices within 3 seconds and gives the right total", async () => {

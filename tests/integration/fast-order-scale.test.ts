@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { getRepeatPlan, listMedicinesPage, listUsual } from "@/lib/orders/fast-repository";
-import { createTenant, deleteTenant, hasTestEnv, SKIP_REASON, type TestTenant } from "../helpers/supabase-test";
+import { createTenant, assertTenantGone, deleteTenant, hasTestEnv, SKIP_REASON, type TestTenant } from "../helpers/supabase-test";
 import { insertMedicines, seedCatalog, seedConfirmedOrder, seedHistory, seedStoreWithClient } from "../helpers/fast";
 
 // Speed budgets of Module 008 (research D12) against the real Supabase test project, run from this machine through the
@@ -46,6 +46,7 @@ suite("fast order entry speed (real Supabase test project)", () => {
 
   afterAll(async () => {
     if (tenant) await deleteTenant(tenant);
+    if (tenant) await assertTenantGone(tenant); // the scale data is really gone, not just not mentioned
   }, 120_000);
 
   it("the usual route reads 100 orders of 20 lines within 1.5 s and ignores the orders beyond the 100 most recent", async () => {

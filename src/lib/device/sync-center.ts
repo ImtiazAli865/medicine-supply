@@ -18,7 +18,10 @@ import type { Connectivity, Scheduler } from "./connectivity";
 import { keepBothDraft } from "./conflict";
 import { emptyDraft, Journal } from "./journal";
 import type { LeaderElection } from "./locks";
-import type { BusinessDatabase, DraftRecord, StoreOpPayload, StoreOpRecord, StoredStore, SyncState } from "./schema";
+import { canRemove, dueNow, newPaymentOp, nextSeq, remapStore, waitingTotals, type PaymentSendResult, type WaitingTotal } from "./payments";
+import type { BusinessDatabase, DraftRecord, PaymentConflictKind, PaymentOpRecord, StoreOpPayload, StoreOpRecord, StoredStore, SyncState } from "./schema";
+import { validatePaymentInput, type PaymentFields, type PaymentInput } from "@/lib/accounts/payment-input";
+import { todayInPakistan } from "@/lib/orders/dates";
 
 export const DEVICE_CONFLICT_MESSAGE = "This order was changed in another tab of this phone.";
 
@@ -43,6 +46,10 @@ export interface SyncCenterDeps {
   transport: (orderId: string, request: SaveRequest<EditorState>) => Promise<SendResult>;
   /** Creates a store that was made on the phone (the real one is POST /api/stores with the client's id). */
   storeTransport?: (payload: StoreOpPayload, confirmDuplicate: boolean) => Promise<StoreSendResult>;
+  /** Sends one waiting payment (the real one is POST /api/accounts/{storeId}/payments with the payment's own key). */
+  paymentTransport?: (op: PaymentOpRecord) => Promise<PaymentSendResult>;
+  /** The Pakistan calendar day, YYYY-MM-DD, for the date rule of a new payment. */
+  today?: () => string;
   scheduler: Scheduler;
   newId: () => string;
   /** Display time only; never used for a decision. */
@@ -52,9 +59,24 @@ export interface SyncCenterDeps {
 
 export type ItemState = "waiting" | "syncing" | "failed" | "conflict" | "blocked" | "similar";
 
+/** What a waiting payment shows on the status screens (the typed values only; the phone keeps nothing else about it). */
+export interface PaymentItemDetail {
+  paymentId: string;
+  amount: string;
+  date: string;
+  reference: string | null;
+  conflict: PaymentConflictKind | null;
+  /** False for a payment that was sent and has no answer yet: it can only be sent again. */
+  canRemove: boolean;
+  recordedOn: string;
+}
+
 export interface SyncItem {
-  /** "store" for a store made on this phone that is not on the server yet (its id is in `orderId` and `storeId`). */
-  kind: "order" | "store";
+  /**
+   * "store" for a store made on this phone that is not on the server yet (its id is in `orderId` and `storeId`);
+   * "payment" for a cash payment recorded on this phone that the server has not confirmed (its id is in `orderId`).
+   */
+  kind: "order" | "store" | "payment";
   orderId: string;
   storeId: string;
   /** The store's name (for a store item). */
@@ -66,6 +88,8 @@ export interface SyncItem {
   lines: number;
   neverSent: boolean;
   tries: number;
+  /** Set for a payment item only. */
+  payment: PaymentItemDetail | null;
 }
 
 export interface SyncStatus {
@@ -81,7 +105,18 @@ export interface SyncStatus {
   /** Stores made on this phone that the server has not created yet. */
   pendingStoreIds: string[];
   items: SyncItem[];
+  /** Payments recorded on this phone that the server has not confirmed, by state. They are also part of `counts`. */
+  payments: { waiting: number; syncing: number; conflict: number };
+  /** How many payments wait on this phone and their exact total, overall. */
+  waitingTotal: WaitingTotal;
+  /** The same for each store (only stores that have a waiting payment appear). */
+  waitingByStore: Record<string, WaitingTotal>;
 }
+
+export type RecordPaymentResult =
+  | { ok: true; payment: PaymentOpRecord }
+  | { ok: false; reason: "invalid"; fields: PaymentFields }
+  | { ok: false; reason: "duplicate" | "storage"; message: string };
 
 export interface OpenArgs {
   orderId: string;
@@ -134,6 +169,9 @@ const EMPTY_STATUS: SyncStatus = {
   counts: { waiting: 0, syncing: 0, failed: 0, conflict: 0, blocked: 0 },
   pendingStoreIds: [],
   items: [],
+  payments: { waiting: 0, syncing: 0, conflict: 0 },
+  waitingTotal: { count: 0, paisa: 0 },
+  waitingByStore: {},
 };
 
 export class SyncCenter {
@@ -142,6 +180,13 @@ export class SyncCenter {
   /** Stores made on this phone that the server has not created yet, by store id. */
   private readonly storeOps = new Map<string, StoreOpRecord>();
   private readonly storeTimers = new Map<string, unknown>();
+  /** Cash payments recorded on this phone that the server has not confirmed, by payment id. */
+  private readonly paymentOps = new Map<string, PaymentOpRecord>();
+  private readonly paymentTimers = new Map<string, unknown>();
+  /** Payments being removed from the storage right now (so a reload cannot bring one back). */
+  private readonly removingPayments = new Set<string>();
+  /** Payments the supplier's own Retry asked for: tried at once, even in a tab that is not the sender and while the flag says offline. */
+  private readonly forcedPayments = new Set<string>();
   private journalTimer: unknown = null;
   private readonly listeners = new Set<() => void>();
   private status: SyncStatus = EMPTY_STATUS;
@@ -179,12 +224,24 @@ export class SyncCenter {
     this.lastAttemptAt = await meta("lastSyncAttemptAt");
     this.paused = ((await this.deps.db.get("meta", "sendingPaused"))?.value as boolean | undefined) ?? false;
     for (const op of await this.deps.db.getAll("storeOps")) if (op.state !== "synced") this.storeOps.set(op.storeId, op);
+    await this.loadPayments();
     for (const record of await this.journal.listUnsynced()) {
       if (!this.entries.has(record.orderId)) this.attach(record, 0);
     }
     this.emit();
     void this.wake();
     this.scheduleJournalCheck();
+  }
+
+  /**
+   * Reads the waiting payments from the phone's storage. A payment that was being sent when the app closed has no answer yet, so it
+   * comes back as waiting (still `attempted`, so it can only be sent again, with the same key).
+   */
+  private async loadPayments(): Promise<void> {
+    for (const stored of await this.deps.db.getAll("paymentOps")) {
+      if (this.paymentOps.has(stored.paymentId) || this.removingPayments.has(stored.paymentId)) continue;
+      this.paymentOps.set(stored.paymentId, stored.state === "syncing" ? { ...stored, state: "waiting" } : stored);
+    }
   }
 
   /** The tab that sends also looks at the journal now and then, so a draft left unsent by another tab is not forgotten. */
@@ -202,6 +259,7 @@ export class SyncCenter {
   /** Picks up drafts and stores that were written to the journal from outside (an import) and starts sending them. */
   async adoptJournal(): Promise<void> {
     for (const op of await this.deps.db.getAll("storeOps")) if (op.state !== "synced" && !this.storeOps.has(op.storeId)) this.storeOps.set(op.storeId, op);
+    await this.loadPayments();
     for (const record of await this.journal.listUnsynced()) {
       if (!this.entries.has(record.orderId)) this.attach(record, 0);
     }
@@ -222,6 +280,8 @@ export class SyncCenter {
     this.entries.clear();
     for (const t of this.storeTimers.values()) this.deps.scheduler.clear(t);
     this.storeTimers.clear();
+    for (const t of this.paymentTimers.values()) this.deps.scheduler.clear(t);
+    this.paymentTimers.clear();
     this.listeners.clear();
   }
 
@@ -484,6 +544,7 @@ export class SyncCenter {
       do {
         this.wakeAgain = false;
         await this.sendStores();
+        await this.sendPayments();
         const waiting = [...this.entries.values()]
           .filter((e) => e.timer === null && e.machine.getSnapshot().status === "on_device" && this.canSend(e))
           .sort((a, b) => a.seq - b.seq);
@@ -511,6 +572,19 @@ export class SyncCenter {
         this.storeTimers.delete(id);
       }
       if (op.state === "failed" || op.state === "waiting") void this.saveOp({ ...op, state: "on_device", reason: null, tries: 0 });
+    }
+    for (const op of this.paymentList()) {
+      if (orderId !== undefined && op.paymentId !== orderId) continue;
+      const timer = this.paymentTimers.get(op.paymentId);
+      if (timer !== undefined) {
+        this.deps.scheduler.clear(timer);
+        this.paymentTimers.delete(op.paymentId);
+      }
+      // A blanket Retry only hurries the payments that are waiting; a payment in conflict is retried only when the supplier chose it.
+      if (op.state === "waiting" || (op.state === "conflict" && orderId !== undefined)) {
+        if (orderId !== undefined) this.forcedPayments.add(op.paymentId);
+        void this.savePayment({ ...op, state: "waiting", conflict: null, reason: null, tries: 0 });
+      }
     }
     for (const e of this.entries.values()) {
       if (orderId !== undefined && e.orderId !== orderId) continue;
@@ -607,13 +681,34 @@ export class SyncCenter {
         lines: snap.state.lines.length,
         neverSent: snap.serverOrder === null && snap.version === null,
         tries: entry.tries,
+        payment: null,
       });
     }
     for (const op of [...this.storeOps.values()].sort((a, b) => a.seq - b.seq)) {
       const state: ItemState = op.state === "syncing" ? "syncing" : op.state === "failed" ? "failed" : op.state === "similar" ? "similar" : "waiting";
       counts[state === "similar" ? "conflict" : state] += 1;
-      items.unshift({ kind: "store", orderId: op.storeId, storeId: op.storeId, name: op.payload.name, matches: op.matches, state, reason: op.reason, lines: 0, neverSent: true, tries: op.tries });
+      items.unshift({ kind: "store", orderId: op.storeId, storeId: op.storeId, name: op.payload.name, matches: op.matches, state, reason: op.reason, lines: 0, neverSent: true, tries: op.tries, payment: null });
     }
+    const payments = { waiting: 0, syncing: 0, conflict: 0 };
+    for (const op of this.paymentList()) {
+      const state: ItemState = op.state === "syncing" ? "syncing" : op.state === "conflict" ? "conflict" : "waiting";
+      counts[state] += 1;
+      payments[state] += 1;
+      items.push({
+        kind: "payment",
+        orderId: op.paymentId,
+        storeId: op.storeId,
+        name: null,
+        matches: [],
+        state,
+        reason: op.reason,
+        lines: 0,
+        neverSent: !op.attempted,
+        tries: op.tries,
+        payment: { paymentId: op.paymentId, amount: op.amount, date: op.date, reference: op.reference, conflict: op.conflict, canRemove: canRemove(op), recordedOn: op.recordedOn },
+      });
+    }
+    const totals = waitingTotals(this.paymentList());
     this.status = {
       online: this.deps.connectivity.getState() === "online",
       leader: this.deps.election.isLeader(),
@@ -624,8 +719,226 @@ export class SyncCenter {
       counts,
       pendingStoreIds: [...this.storeOps.keys()],
       items,
+      payments,
+      waitingTotal: { count: totals.count, paisa: totals.paisa },
+      waitingByStore: totals.byStore,
     };
     for (const l of Array.from(this.listeners)) l();
+  }
+
+  // ---------------------------------------------------------------- cash payments recorded on the phone (Module 011)
+
+  /** The waiting payments in the order they were recorded. */
+  private paymentList(): PaymentOpRecord[] {
+    return [...this.paymentOps.values()].sort((a, b) => a.seq - b.seq);
+  }
+
+  /** The waiting payments (a copy), for the screens that list them. */
+  listPayments(): PaymentOpRecord[] {
+    return this.paymentList().map((op) => ({ ...op }));
+  }
+
+  /**
+   * Records a cash payment on the phone. It follows the same rules as the online form, is kept in the phone's storage first and
+   * counts as nothing until the server confirms it. `paymentId` is the key the online form already holds when the person chooses
+   * to keep that payment on the phone; the same key is never recorded twice. It refuses when the phone cannot keep the payment.
+   */
+  async recordPayment(args: { storeId: string; input: PaymentInput; paymentId?: string }): Promise<RecordPaymentResult> {
+    const checked = validatePaymentInput(args.input, (this.deps.today ?? todayInPakistan)());
+    if (!checked.ok) return { ok: false, reason: "invalid", fields: checked.fields };
+    const paymentId = args.paymentId ?? this.deps.newId();
+    try {
+      await this.loadPayments(); // a payment recorded by another tab of this phone counts for the key and the order
+    } catch {
+      return { ok: false, reason: "storage", message: "This phone could not keep the payment, so nothing was recorded. Free some space and try again." };
+    }
+    if (this.paymentOps.has(paymentId)) return { ok: false, reason: "duplicate", message: "This payment is already waiting on this phone." };
+    const payment = newPaymentOp({ paymentId, storeId: args.storeId, input: checked.value, seq: nextSeq(this.paymentList()), recordedOn: this.deps.nowText() });
+    try {
+      await this.deps.db.put("paymentOps", payment);
+    } catch {
+      return { ok: false, reason: "storage", message: "This phone could not keep the payment, so nothing was recorded. Free some space and try again." };
+    }
+    this.paymentOps.set(paymentId, payment);
+    this.emit();
+    void this.wake();
+    return { ok: true, payment: { ...payment } };
+  }
+
+  /** Writes a change of a waiting payment (one revision up). The in-memory state still drives sending if the write fails. */
+  private async savePayment(op: PaymentOpRecord): Promise<void> {
+    if (!this.paymentOps.has(op.paymentId)) return; // removed in the meantime
+    const next = { ...op, rev: op.rev + 1 };
+    this.paymentOps.set(op.paymentId, next);
+    try {
+      await this.deps.db.put("paymentOps", next);
+    } catch {
+      // The next successful write keeps it.
+    }
+    this.emit();
+    void this.wake();
+  }
+
+  /**
+   * Sends the waiting payments one at a time, in the order recorded, after the stores they may depend on. Before each request the
+   * attempt is written to the phone, so after a restart the same request (same key) is sent again and the server records it once.
+   * A payment is never sent from a tab that is not the sender, while sending is paused or a sign-in is needed, or for a store that
+   * is still waiting on the phone.
+   */
+  private async sendPayments(): Promise<void> {
+    const transport = this.deps.paymentTransport;
+    if (!transport) return;
+    try {
+      await this.loadPayments(); // payments recorded by another tab of this phone
+    } catch {
+      return;
+    }
+    for (;;) {
+      const op = dueNow(this.paymentList(), { pendingStoreIds: new Set(this.storeOps.keys()), retryingIds: new Set(this.paymentTimers.keys()) }).find((p) => {
+        const forced = this.forcedPayments.has(p.paymentId);
+        return this.canSendNow(forced, forced);
+      });
+      if (!op) return;
+      this.forcedPayments.delete(op.paymentId);
+
+      // Another tab may have sent or changed this payment since this tab read it: the phone's storage has the latest word.
+      let stored: PaymentOpRecord | undefined = op;
+      try {
+        stored = await this.deps.db.get("paymentOps", op.paymentId);
+      } catch {
+        stored = op;
+      }
+      if (stored === undefined) {
+        this.paymentOps.delete(op.paymentId);
+        this.emit();
+        continue;
+      }
+      if (stored.rev > op.rev || stored.state === "conflict") {
+        this.paymentOps.set(stored.paymentId, stored.state === "syncing" ? { ...stored, state: "waiting" } : stored);
+        this.emit();
+        continue;
+      }
+
+      const attempt: PaymentOpRecord = { ...stored, attempted: true, state: "syncing", rev: stored.rev + 1 };
+      try {
+        await this.deps.db.put("paymentOps", attempt);
+      } catch {
+        // The attempt could not be written, so nothing is sent: a request must never go out without a record of it.
+        this.holdForRetry(stored, "This phone could not save the attempt, so the payment was not sent yet.");
+        continue;
+      }
+      if (!this.paymentOps.has(op.paymentId)) {
+        await this.deps.db.remove("paymentOps", op.paymentId).catch(() => undefined); // removed while the attempt was written
+        continue;
+      }
+      this.paymentOps.set(attempt.paymentId, attempt);
+      this.lastAttemptAt = this.deps.nowText();
+      void this.deps.db.put("meta", { key: "lastSyncAttemptAt", value: this.lastAttemptAt }).catch(() => undefined);
+      this.emit();
+
+      let result: PaymentSendResult;
+      try {
+        result = await transport(attempt);
+      } catch {
+        result = { kind: "retryable", message: "Can't reach the server. Check your connection and try again." };
+      }
+      const current = this.paymentOps.get(attempt.paymentId);
+      if (!current) continue;
+      if (result.kind === "ok") {
+        this.needsSignIn = false;
+        this.paymentOps.delete(attempt.paymentId);
+        this.lastSyncAt = this.deps.nowText();
+        void this.deps.db.put("meta", { key: "lastSyncAt", value: this.lastSyncAt }).catch(() => undefined);
+        // If the removal fails the payment comes back after a restart and is sent once more: the server answers "replayed".
+        this.removingPayments.add(attempt.paymentId); // so a reload of the storage cannot bring it back while it is being removed
+        try {
+          await this.deps.db.remove("paymentOps", attempt.paymentId);
+        } catch {
+          // kept on the phone; sent again later
+        } finally {
+          this.removingPayments.delete(attempt.paymentId);
+        }
+        this.emit();
+      } else if (result.kind === "conflict") {
+        await this.writePayment({ ...current, state: "conflict", conflict: result.conflict, reason: result.message });
+      } else if (result.kind === "unauthorized") {
+        this.needsSignIn = true;
+        await this.writePayment({ ...current, state: "waiting", reason: "Sign in again to send the waiting payments." });
+      } else {
+        this.holdForRetry(current, result.message, true);
+      }
+    }
+  }
+
+  /** Stores a change without waking the sender (the sender is already running). */
+  private async writePayment(op: PaymentOpRecord): Promise<void> {
+    if (!this.paymentOps.has(op.paymentId)) return;
+    const next = { ...op, rev: op.rev + 1 };
+    this.paymentOps.set(op.paymentId, next);
+    try {
+      await this.deps.db.put("paymentOps", next);
+    } catch {
+      // The in-memory state still drives sending; the next successful write keeps it.
+    }
+    this.emit();
+  }
+
+  /** The payment waits for its next try (2 s, 5 s, 15 s, 45 s, then 2 minutes); later payments of its own store wait behind it. */
+  private holdForRetry(op: PaymentOpRecord, reason: string, persist = false): void {
+    const tries = op.tries + 1;
+    const next = { ...op, state: "waiting" as const, reason, tries, rev: persist ? op.rev + 1 : op.rev };
+    this.paymentOps.set(op.paymentId, next);
+    if (persist) void this.deps.db.put("paymentOps", next).catch(() => undefined);
+    const timer = this.paymentTimers.get(op.paymentId);
+    if (timer !== undefined) this.deps.scheduler.clear(timer);
+    this.paymentTimers.set(
+      op.paymentId,
+      this.deps.scheduler.set(() => {
+        this.paymentTimers.delete(op.paymentId);
+        void this.wake();
+      }, nextDelayMs(tries)),
+    );
+    this.emit();
+  }
+
+  /**
+   * After the server refused a payment's details (the amount, the date or the reference), the supplier may correct them and send it
+   * again with the same key. Nothing was recorded by the refused request, so the same key is safe. Not offered for any other refusal.
+   */
+  async correctAndResend(paymentId: string, input: PaymentInput): Promise<{ ok: true } | { ok: false; fields: PaymentFields } | { ok: false; message: string }> {
+    const op = this.paymentOps.get(paymentId);
+    if (!op || op.state !== "conflict" || op.conflict !== "refused") return { ok: false, message: "This payment cannot be corrected here." };
+    const checked = validatePaymentInput(input, (this.deps.today ?? todayInPakistan)());
+    if (!checked.ok) return { ok: false, fields: checked.fields };
+    this.needsSignIn = false;
+    this.forcedPayments.add(paymentId);
+    await this.savePayment({ ...op, amount: checked.value.amount, date: checked.value.date, reference: checked.value.reference, state: "waiting", conflict: null, reason: null, tries: 0 });
+    return { ok: true };
+  }
+
+  /**
+   * Removes a payment from the phone after the supplier confirmed it (the caller names the amount and the store). False when it
+   * cannot be removed: a payment that was sent and has no answer may already be on the server, so it can only be sent again.
+   */
+  async removePayment(paymentId: string): Promise<boolean> {
+    const op = this.paymentOps.get(paymentId);
+    if (!op || !canRemove(op)) return false;
+    this.paymentOps.delete(paymentId); // first, so the sender cannot pick it up while the storage is written
+    this.removingPayments.add(paymentId);
+    try {
+      await this.deps.db.remove("paymentOps", paymentId);
+    } catch {
+      this.paymentOps.set(paymentId, op);
+      this.emit();
+      return false;
+    } finally {
+      this.removingPayments.delete(paymentId);
+    }
+    const timer = this.paymentTimers.get(paymentId);
+    if (timer !== undefined) this.deps.scheduler.clear(timer);
+    this.paymentTimers.delete(paymentId);
+    this.emit();
+    return true;
   }
 
   // ---------------------------------------------------------------- stores made on the phone (US4)
@@ -744,10 +1057,17 @@ export class SyncCenter {
       entry.machine.edit({ ...local, storeId: answer.existingId });
     }
     this.storeOps.delete(storeId);
+    // The payments waiting for this store go to the existing store in the same step as the store's removal.
+    const before = this.paymentList();
+    const moved = remapStore(before, storeId, answer.existingId)
+      .filter((p, i) => p !== before[i])
+      .map((p) => ({ ...p, rev: p.rev + 1 }));
+    for (const p of moved) this.paymentOps.set(p.paymentId, p);
     try {
       await this.deps.db.batch([
         { op: "remove", store: "storeOps", key: storeId },
         { op: "remove", store: "stores", key: storeId },
+        ...moved.map((p) => ({ op: "put" as const, store: "paymentOps" as const, value: p })),
       ]);
     } catch {
       return false;

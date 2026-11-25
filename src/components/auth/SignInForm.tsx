@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 import { Button } from "@/components/ui/Button";
@@ -70,6 +71,11 @@ export function SignInForm({ next, expired }: { next?: string; expired?: boolean
       <Button type="submit" loading={busy} className="w-full">
         Sign in
       </Button>
+      <p className="text-center">
+        <Link href="/forgot-password" className="inline-flex min-h-11 items-center px-2 font-medium text-primary underline" data-testid="forgot-password-link">
+          Forgot password?
+        </Link>
+      </p>
     </form>
   );
 }

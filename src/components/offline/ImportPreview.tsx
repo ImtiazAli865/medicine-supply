@@ -3,6 +3,7 @@
 import { Banner } from "@/components/ui/States";
 import { Button } from "@/components/ui/Button";
 import type { ImportPreview as Preview, Verdict } from "@/lib/backup/preview";
+import { formatPaisa } from "@/lib/device/payments";
 
 const HEADINGS: Record<Verdict, string> = {
   new: "Will be added to this phone",
@@ -25,6 +26,11 @@ export function ImportPreview({ fileName, exportedAt, preview, busy, onConfirm, 
       <p className="text-sm" data-testid="import-preview-counts">
         {preview.counts.new} to add · {preview.counts.already_on_server + preview.counts.already_on_device} already here · {preview.counts.conflict} different · {preview.counts.cannot_restore} cannot be restored
       </p>
+      {preview.payments.count > 0 ? (
+        <p className="text-sm font-medium" data-testid="import-preview-payments">
+          {preview.payments.count} {preview.payments.count === 1 ? "payment" : "payments"}, {formatPaisa(preview.payments.paisa)}, will be kept on this phone and sent. The server records each payment once: a payment it already holds is not recorded again.
+        </p>
+      ) : null}
       {ORDER.map((verdict) => {
         const items = preview.items.filter((i) => i.verdict === verdict);
         if (items.length === 0) return null;
@@ -37,7 +43,7 @@ export function ImportPreview({ fileName, exportedAt, preview, busy, onConfirm, 
               {items.map((i) => (
                 <li key={`${i.kind}-${i.id}`}>
                   <span className="font-medium" dir="auto">
-                    {i.kind === "store" ? "Store: " : "Order: "}
+                    {i.kind === "store" ? "Store: " : i.kind === "payment" ? "Payment: " : "Order: "}
                     {i.label}
                   </span>
                   <span className="block text-muted">{i.reason}</span>

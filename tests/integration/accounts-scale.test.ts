@@ -5,7 +5,7 @@ import { issueInvoice, listInvoices } from "@/lib/invoices/repository";
 import { AccountListQuerySchema, AccountQuerySchema, PaymentBodySchema, StatementQuerySchema } from "@/lib/validation/account";
 import { InvoiceListQuerySchema } from "@/lib/validation/invoice";
 import { draftInvoiceWithClient } from "../helpers/accounts";
-import { createTenant, deleteTenant, hasTestEnv, serviceClient, SKIP_REASON, type TestTenant } from "../helpers/supabase-test";
+import { createTenant, assertTenantGone, deleteTenant, hasTestEnv, serviceClient, SKIP_REASON, type TestTenant } from "../helpers/supabase-test";
 
 // SC-012: a store account with 2,000 entries opens (balance and first page) within 3 seconds, the stores list for 100
 // stores with balances opens within 3 seconds, and a payment is recorded within 2 seconds. The Invoices list with the
@@ -118,6 +118,7 @@ suite("store accounts at scale", () => {
   afterAll(async () => {
     console.info(`SC-012 measured times in ms:\n${Object.entries(measured).map(([k, v]) => `  ${k}: ${v.join(", ")} (max ${Math.max(...v)})`).join("\n")}`);
     await deleteTenant(a);
+    await assertTenantGone(a); // the scale data is really gone, not just not mentioned
   }, 600_000);
 
   it("opens a store account with 2,000 entries (balance and first page) within 3 seconds, with the right balance", async () => {

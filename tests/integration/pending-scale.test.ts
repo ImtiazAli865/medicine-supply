@@ -3,7 +3,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { applyPriceFill, listPendingPrices, listTypedGroups, pendingCandidates, pendingSummary, previewPriceFill } from "@/lib/pending/repository";
 import { PendingListQuerySchema, PriceApplyBodySchema } from "@/lib/validation/pending";
 import { seedOrderWithClient, seedStoreWithClient } from "../helpers/pending";
-import { createTenant, deleteTenant, hasTestEnv, SKIP_REASON, type TestTenant } from "../helpers/supabase-test";
+import { createTenant, assertTenantGone, deleteTenant, hasTestEnv, SKIP_REASON, type TestTenant } from "../helpers/supabase-test";
 
 // SC-011: with 1,000 typed or waiting lines and 500 medicines without a price, each pending screen's data opens
 // within 2 seconds. Run against the Supabase test project; every request is made as a real signed-in user.
@@ -68,6 +68,7 @@ suite("pending screens at scale", () => {
   afterAll(async () => {
     console.info(`SC-011 measured times in ms over ${RUNS} runs each:\n${Object.entries(measured).map(([k, v]) => `  ${k}: ${v.join(", ")} (max ${Math.max(...v)})`).join("\n")}`);
     await deleteTenant(a);
+    await assertTenantGone(a); // the scale data is really gone, not just not mentioned
   }, 300_000);
 
   const query = (q = "", limit = "50") => PendingListQuerySchema.parse({ q, limit });

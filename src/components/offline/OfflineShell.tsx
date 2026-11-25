@@ -10,6 +10,7 @@ import { ButtonLink } from "@/components/ui/Button";
 import { LoadingBlock } from "@/components/ui/Spinner";
 import { Banner, EmptyState } from "@/components/ui/States";
 import { parseGo, shellHref, type ShellRoute } from "@/lib/device/shell-route";
+import { OfflinePaymentScreen } from "./OfflinePaymentScreen";
 import { useOffline } from "./OfflineProvider";
 import { SyncStatusSection } from "./SyncStatusSection";
 
@@ -39,6 +40,9 @@ function Home() {
         <ButtonLink href={shellHref({ kind: "orders" })} variant="secondary">
           Orders on this phone
         </ButtonLink>
+        <ButtonLink href={shellHref({ kind: "payment" })} variant="secondary" testId="offline-record-payment">
+          Record payment
+        </ButtonLink>
         <ButtonLink href={shellHref({ kind: "settings" })} variant="secondary">
           Sync status
         </ButtonLink>
@@ -64,6 +68,8 @@ function Screen({ route }: { route: ShellRoute }) {
           <SyncStatusSection />
         </div>
       );
+    case "payment":
+      return <OfflinePaymentScreen />;
     case "blocked":
       return <Blocked area={route.area} />;
   }
@@ -113,7 +119,7 @@ export function OfflineShell() {
         <div className="mb-3">
           <Banner kind="info">
             The connection is back.{" "}
-            <a href={go ?? "/orders"} className="inline-flex min-h-11 items-center font-semibold underline">
+            <a href={route.kind === "payment" ? "/accounts" : (go ?? "/orders")} className="inline-flex min-h-11 items-center font-semibold underline">
               Open the full app
             </a>
           </Banner>

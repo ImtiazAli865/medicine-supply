@@ -1,0 +1,46 @@
+openapi: 3.0.3
+info:
+  title: Password reset (Module 011)
+  version: 1.0.0
+  description: >
+    A forgotten-password path for the owner using the authentication service the project already uses. Nothing is stored
+    by the app. The request always gets the same neutral answer, a link works once and expires (set by the authentication
+    service), `type` is only ever `recovery`, there is no `next` parameter (no open redirect), and the app never asks for,
+    shows or sends the old password. These are the only new routes outside the signed-in area; the proxy lists the first two
+    as public and the third requires the recovery session that the second one creates.
+servers:
+  - url: /
+paths:
+  /forgot-password:
+    get:
+      summary: Page with one email box and the neutral confirmation
+      description: >
+        The page asks the authentication service to send the recovery email (client call), then always shows "If this
+        email has an account, a message was sent." It shows the same text for an unknown address and for a rate-limited
+        request. Public.
+      responses:
+        '200': { description: HTML page }
+  /auth/confirm:
+    get:
+      summary: Verifies the emailed recovery link and goes to the reset page
+      parameters:
+        - { name: token_hash, in: query, required: true, schema: { type: string, minLength: 8, maxLength: 512 } }
+        - { name: type, in: query, required: true, schema: { type: string, enum: [recovery] } }
+      responses:
+        '303':
+          description: >
+            On success the verified session cookie is set and the browser is sent to /reset-password. On any failure
+            (missing or malformed parameter, used or expired link, wrong type) the browser is sent to
+            /forgot-password?error=link with no detail about why.
+          headers:
+            Location: { schema: { type: string, enum: [/reset-password, /forgot-password?error=link] } }
+  /reset-password:
+    get:
+      summary: Page to set a new password after a verified recovery link
+      description: >
+        Needs the recovery session. Without it the browser is sent to /forgot-password?error=link. The form has the new
+        password twice, shows the minimum of 8 characters, refuses a shorter or mismatching password, and on success shows
+        "Your password was changed" and continues to Home (the session is already signed in). Never shows the old password.
+      responses:
+        '200': { description: HTML page }
+        '303': { description: No recovery session, Location /forgot-password?error=link }

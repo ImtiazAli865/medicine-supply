@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { listProducts } from "@/lib/products/repository";
 import { ListQuerySchema } from "@/lib/validation/store";
-import { createTenant, deleteTenant, hasTestEnv, serviceClient, SKIP_REASON, type TestTenant } from "../helpers/supabase-test";
+import { createTenant, assertTenantGone, deleteTenant, hasTestEnv, serviceClient, SKIP_REASON, type TestTenant } from "../helpers/supabase-test";
 
 // SC-009: with 5,000 medicines, at least 95% of 40 searches (name, strength, manufacturer, SKU,
 // dosage form and two-word searches) return within 1 second. Seeds a throwaway business in the
@@ -56,6 +56,7 @@ suite("medicine search at 5,000 medicines (SC-009)", () => {
 
   afterAll(async () => {
     await deleteTenant(a);
+    await assertTenantGone(a); // the scale data is really gone, not just not mentioned
   }, 120_000);
 
   it("has exactly 40 searches in the plan", () => {

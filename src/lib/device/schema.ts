@@ -7,7 +7,7 @@ import type { EditorState, LineInfo } from "@/lib/orders/editor-state";
 import type { RepeatPlan, SlimMedicine, UsualResponse } from "@/lib/orders/fast-types";
 import type { Order } from "@/lib/orders/types";
 
-export const SCHEMA_VERSION = 1;
+export const SCHEMA_VERSION = 2;
 
 export const REGISTRY_DB_NAME = "medsupply-registry";
 
@@ -20,9 +20,11 @@ export function businessDbName(businessId: string): string {
 /** Object stores created by each schema version (an upgrade step exists for every version up to SCHEMA_VERSION). */
 export const SCHEMA_UPGRADES: Record<number, readonly StoreName[]> = {
   1: ["meta", "medicines", "stores", "storeExtras", "drafts", "storeOps"],
+  // Version 2 (Module 011) adds the queue of cash payments recorded without the internet. Existing data is untouched.
+  2: ["paymentOps"],
 };
 
-export type StoreName = "meta" | "medicines" | "stores" | "storeExtras" | "drafts" | "storeOps";
+export type StoreName = "meta" | "medicines" | "stores" | "storeExtras" | "drafts" | "storeOps" | "paymentOps";
 
 export type SyncState = "on_device" | "waiting" | "syncing" | "synced" | "failed" | "conflict" | "blocked";
 
@@ -95,6 +97,41 @@ export interface StoreOpRecord {
   nextTryTick: number;
 }
 
+export type PaymentOpState = "on_device" | "syncing" | "waiting" | "conflict";
+
+/** Why the server refused a payment (shown on the conflict card). */
+export type PaymentConflictKind = "not_found" | "request_reused" | "refused";
+
+/**
+ * A cash payment recorded on the phone and not yet confirmed by the server (Module 011). It holds only what the person typed:
+ * no balance, invoice, ledger entry or allocation is ever kept. A confirmed payment is removed, so `synced` is never stored.
+ */
+export interface PaymentOpRecord {
+  /** Made on the phone once; it is the ledger entry id and the request id, so sending twice records one payment. */
+  paymentId: string;
+  /** Incremented by every write; a write is applied only if the stored rev is the one the writer read. */
+  rev: number;
+  /** Order in which the payment was recorded; sending follows it. */
+  seq: number;
+  storeId: string;
+  /** Canonical two-decimal text, above zero. */
+  amount: string;
+  /** YYYY-MM-DD, not in the future and not before 2000-01-01. */
+  date: string;
+  reference: string | null;
+  state: PaymentOpState;
+  /** A plain sentence for the supplier. */
+  reason: string | null;
+  conflict: PaymentConflictKind | null;
+  /** Written true before the first send; an attempted payment without an answer can never be removed from the phone. */
+  attempted: boolean;
+  tries: number;
+  /** The sender tick after which the next try is due (a counter, never the clock). */
+  nextTryTick: number;
+  /** Display only: when it was recorded on the phone. */
+  recordedOn: string;
+}
+
 export interface StoredStore {
   id: string;
   name: string;
@@ -142,6 +179,7 @@ export interface StoreMap {
   storeExtras: StoreExtras;
   drafts: DraftRecord;
   storeOps: StoreOpRecord;
+  paymentOps: PaymentOpRecord;
 }
 
 /** The key of each store's records (what `get` and `remove` take). */
@@ -152,6 +190,7 @@ export const KEY_PATH: Record<StoreName, string> = {
   storeExtras: "storeId",
   drafts: "orderId",
   storeOps: "storeId",
+  paymentOps: "paymentId",
 };
 
 export type BatchOp =

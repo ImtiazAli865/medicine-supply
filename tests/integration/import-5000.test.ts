@@ -3,7 +3,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { applyImport, previewImport } from "@/lib/imports/repository";
 import type { RawRow } from "@/lib/import/types";
 import { ApplyRequestSchema } from "@/lib/validation/import";
-import { createTenant, deleteTenant, hasTestEnv, SKIP_REASON, type TestTenant } from "../helpers/supabase-test";
+import { createTenant, assertTenantGone, deleteTenant, hasTestEnv, SKIP_REASON, type TestTenant } from "../helpers/supabase-test";
 
 // SC-002 (server part): a 5,000-row list previews in <= 30 s and imports in <= 60 s on the real
 // Supabase test project. The browser-side reading time is measured in the Playwright test.
@@ -17,6 +17,7 @@ suite("5,000-row import against Supabase", () => {
   });
   afterAll(async () => {
     await deleteTenant(t);
+    await assertTenantGone(t); // the scale data is really gone, not just not mentioned
   });
 
   it("previews within 30 s and imports within 60 s", async () => {

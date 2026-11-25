@@ -69,7 +69,7 @@ describe("backup from the phone", () => {
     await db.put("storeOps", op);
     const file = await buildBackupFile({ db, businessId: BIZ, now: () => "2026-11-21T08:00:00.000Z", fetchPage: pages().fetchPage });
     expect(file.source).toBe("server+device");
-    expect(file.counts).toEqual({ stores: 1, orders: 2, lines: 2, waitingOrders: 1, waitingStores: 1 });
+    expect(file.counts).toEqual({ stores: 1, orders: 2, lines: 2, waitingOrders: 1, waitingStores: 1, waitingPayments: 0 });
     expect(findForbiddenKeys(file)).toEqual([]);
     const parsed = parseBackup(serializeBackup(file), BIZ);
     expect(parsed.ok).toBe(true);

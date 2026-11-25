@@ -3,6 +3,7 @@
 import { AlertCircle, BookOpen } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { PendingSyncTotalNote } from "@/components/accounts/PendingSyncNote";
 import { Button } from "@/components/ui/Button";
 import { getAccountsSummary } from "@/lib/accounts/client";
 import { formatAccountMoney } from "@/lib/accounts/status";
@@ -70,6 +71,7 @@ export function AccountsSummaryCard() {
           </span>
         </Link>
       )}
+      {current?.summary ? <PendingSyncTotalNote /> : null}
     </section>
   );
 }

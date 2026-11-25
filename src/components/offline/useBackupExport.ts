@@ -3,6 +3,8 @@
 import { useCallback, useState } from "react";
 import { fetchJson } from "@/lib/api/client";
 import { backupFileName, serializeBackup } from "@/lib/backup/file";
+import { formatPaisa } from "@/lib/device/payments";
+import { parseMoneyToPaisa } from "@/lib/money";
 import { buildBackupFile } from "@/lib/backup/client";
 import type { ExportPage } from "@/lib/backup/export-repository";
 import { useOffline } from "./OfflineProvider";
@@ -21,8 +23,17 @@ export function downloadText(name: string, text: string): void {
 
 export interface ExportDone {
   name: string;
-  counts: { stores: number; orders: number; lines: number; waitingOrders: number; waitingStores: number };
+  counts: { stores: number; orders: number; lines: number; waitingOrders: number; waitingStores: number; waitingPayments: number };
   source: "server+device" | "device-only";
+  /** The waiting payments in the file and their exact total, for example "PKR 7,500.00" (null when there are none). */
+  paymentsTotal: string | null;
+}
+
+/** "2 payments, PKR 7,500.00 are in this file." (empty when the file holds no payment). */
+export function paymentsInFile(done: Pick<ExportDone, "counts" | "paymentsTotal">): string {
+  const n = done.counts.waitingPayments;
+  if (n === 0 || !done.paymentsTotal) return "";
+  return `${n} ${n === 1 ? "payment" : "payments"}, ${done.paymentsTotal} ${n === 1 ? "is" : "are"} in this file.`;
 }
 
 /** The one export used by Settings, by the sign-out warning and by "Clear device data". */
@@ -50,7 +61,13 @@ export function useBackupExport() {
         fetchPage: async (cursor) => (await fetchJson<ExportPage>(`/api/backup/export?limit=200${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`)).data,
       });
       downloadText(backupFileName(file.exportedAt), serializeBackup(file));
-      const result: ExportDone = { name: backupFileName(file.exportedAt), counts: file.counts, source: file.source };
+      const paisa = file.waiting.payments.reduce((sum, p) => sum + (parseMoneyToPaisa(p.amount) ?? 0), 0);
+      const result: ExportDone = {
+        name: backupFileName(file.exportedAt),
+        counts: file.counts,
+        source: file.source,
+        paymentsTotal: file.waiting.payments.length > 0 ? formatPaisa(paisa) : null,
+      };
       setDone(result);
       return result;
     } catch {

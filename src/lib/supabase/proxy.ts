@@ -3,7 +3,9 @@ import { NextResponse, type NextRequest } from "next/server";
 import { getSupabaseConfig, isSupabaseConfigured } from "./env";
 
 // /offline is the client-only offline shell (Module 009): it holds no data, and what it shows is decided on the device.
-const PUBLIC_PATHS = ["/sign-in", "/offline"];
+// /forgot-password and /auth/confirm (Module 011) are how a signed-out owner gets back in: the first only asks for an email, the second
+// verifies the emailed recovery link and creates the session. /reset-password is NOT public: it needs the session /auth/confirm creates.
+const PUBLIC_PATHS = ["/sign-in", "/offline", "/forgot-password", "/auth/confirm"];
 
 function isPublic(pathname: string): boolean {
   return PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`));
@@ -47,6 +49,14 @@ export async function updateSession(request: NextRequest): Promise<NextResponse>
   const {
     data: { user },
   } = await supabase.auth.getUser();
+
+  // The page for a new password needs the session that the emailed link creates; without it the way back is a new link.
+  if (!user && pathname === "/reset-password") {
+    const back = request.nextUrl.clone();
+    back.pathname = "/forgot-password";
+    back.search = "?error=link";
+    return NextResponse.redirect(back);
+  }
 
   if (!user && !isApi && !isPublic(pathname)) {
     const redirect = request.nextUrl.clone();

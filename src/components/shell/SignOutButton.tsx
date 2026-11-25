@@ -20,6 +20,16 @@ export function SignOutButton() {
   // Orders kept on this phone that the server has not confirmed (Module 009): signing out never deletes them, but the
   // supplier is told they are not on the server and will be sent after the same business signs in again.
   const unsent = status ? status.counts.waiting + status.counts.blocked + status.counts.failed + status.counts.conflict + status.counts.syncing : 0;
+  // Payments recorded on this phone are part of that count (Module 011): the warning names them, so it never says "orders" for money.
+  const payments = status ? status.payments.waiting + status.payments.syncing + status.payments.conflict : 0;
+  const orders = unsent - payments;
+  const plural = unsent !== 1;
+  const what =
+    payments === 0
+      ? `${unsent} ${unsent === 1 ? "order is" : "orders are"}`
+      : orders === 0
+        ? `${payments} ${payments === 1 ? "payment is" : "payments are"}`
+        : `${orders} ${orders === 1 ? "order" : "orders"} and ${payments} ${payments === 1 ? "payment" : "payments"} are`;
 
   async function signOut() {
     setBusy(true);
@@ -40,9 +50,9 @@ export function SignOutButton() {
         <LogOut size={20} aria-hidden="true" />
         <span className="hidden sm:inline">Sign out</span>
       </Button>
-      <Dialog open={warn} title="Orders are not on the server yet" onClose={() => (busy ? undefined : setWarn(false))}>
+      <Dialog open={warn} title={payments === 0 ? "Orders are not on the server yet" : orders === 0 ? "Payments are not on the server yet" : "Orders and payments are not on the server yet"} onClose={() => (busy ? undefined : setWarn(false))}>
         <p data-testid="sign-out-warning">
-          {unsent} {unsent === 1 ? "order is" : "orders are"} kept on this phone and not on the server yet. Signing out does not delete {unsent === 1 ? "it" : "them"}: {unsent === 1 ? "it is" : "they are"} sent after this business signs in again on this phone.
+          {what} kept on this phone and not on the server yet. Signing out does not delete {plural ? "them" : "it"}: {plural ? "they are" : "it is"} sent after this business signs in again on this phone.
         </p>
         <ExportOffer count={unsent} />
         <div className="flex flex-wrap gap-2">

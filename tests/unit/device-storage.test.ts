@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { MemoryDeviceStorage } from "../helpers/memory-storage";
-import type { DraftRecord, StoredMedicine, StoredStore } from "@/lib/device/schema";
+import type { DraftRecord, PaymentOpRecord, StoredMedicine, StoredStore } from "@/lib/device/schema";
 
 const BIZ_A = "123e4567-e89b-42d3-a456-426614174000";
 const BIZ_B = "123e4567-e89b-42d3-a456-426614174001";
@@ -22,6 +22,25 @@ function draft(orderId: string, rev: number, seq = 1): DraftRecord {
     nextTryTick: 0,
     neverSent: true,
     updatedOnDevice: "10:00",
+  };
+}
+
+function payment(paymentId: string, seq: number): PaymentOpRecord {
+  return {
+    paymentId,
+    rev: 1,
+    seq,
+    storeId: "s1",
+    amount: "5000.00",
+    date: "2026-11-24",
+    reference: null,
+    state: "on_device",
+    reason: null,
+    conflict: null,
+    attempted: false,
+    tries: 0,
+    nextTryTick: 0,
+    recordedOn: "10:00",
   };
 }
 
@@ -140,6 +159,56 @@ describe("DeviceStorage contract (in-memory implementation)", () => {
     storage.newerSchemaFor.add(`medsupply-${BIZ_A}`);
     const newer = await storage.openBusiness(BIZ_A);
     expect(newer.ok === false && newer.reason).toBe("newer_schema");
+  });
+
+  it("keeps waiting payments in their own store: put, get, getAll, remove and batch", async () => {
+    const storage = new MemoryDeviceStorage();
+    const db = await open(storage);
+    await db.put("paymentOps", payment("p1", 1));
+    await db.put("paymentOps", payment("p2", 2));
+    expect((await db.get("paymentOps", "p1"))?.amount).toBe("5000.00");
+    expect((await db.getAll("paymentOps")).map((p) => p.paymentId).sort()).toEqual(["p1", "p2"]);
+    expect(await db.getAll("drafts")).toEqual([]);
+    await db.put("paymentOps", { ...payment("p1", 1), rev: 2, state: "waiting" });
+    expect((await db.getAll("paymentOps")).length).toBe(2);
+    await db.batch([
+      { op: "put", store: "paymentOps", value: payment("p3", 3) },
+      { op: "remove", store: "paymentOps", key: "p1" },
+      { op: "put", store: "drafts", value: draft("o1", 1) },
+    ]);
+    expect((await db.getAll("paymentOps")).map((p) => p.paymentId).sort()).toEqual(["p2", "p3"]);
+    await db.remove("paymentOps", "p2");
+    expect((await db.getAll("paymentOps")).map((p) => p.paymentId)).toEqual(["p3"]);
+  });
+
+  it("keeps one business's waiting payments away from another's, and applies a payment batch all or nothing", async () => {
+    const storage = new MemoryDeviceStorage();
+    const a = await open(storage, BIZ_A);
+    const b = await open(storage, BIZ_B);
+    await a.put("paymentOps", payment("pa", 1));
+    await b.put("paymentOps", payment("pb", 1));
+    expect((await a.getAll("paymentOps")).map((p) => p.paymentId)).toEqual(["pa"]);
+    expect((await b.getAll("paymentOps")).map((p) => p.paymentId)).toEqual(["pb"]);
+    storage.failAfterWrites = 2;
+    await expect(
+      a.batch([
+        { op: "put", store: "paymentOps", value: payment("x1", 2) },
+        { op: "put", store: "paymentOps", value: payment("x2", 3) },
+      ]),
+    ).rejects.toThrow();
+    expect((await a.getAll("paymentOps")).map((p) => p.paymentId)).toEqual(["pa"]);
+  });
+
+  it("copies a waiting payment in and out like IndexedDB", async () => {
+    const storage = new MemoryDeviceStorage();
+    const db = await open(storage);
+    const p = payment("p1", 1);
+    await db.put("paymentOps", p);
+    p.amount = "1.00";
+    const read = await db.get("paymentOps", "p1");
+    expect(read?.amount).toBe("5000.00");
+    read!.amount = "2.00";
+    expect((await db.get("paymentOps", "p1"))?.amount).toBe("5000.00");
   });
 
   it("fails writes when the storage is full and keeps the old data", async () => {

@@ -1,7 +1,6 @@
 # Medicine Supply & Order Management
 
-Mobile-first app for a pharmaceutical supplier: stores, medicines, orders, invoices and store accounts.
-Built module by module with Spec Kit; this repository currently contains **Module 001** (login, products, stores), **Module 002** (setup checklist, business settings, catalog import) **Module 003** (manual orders and order history; `specs/003-manual-orders/`) and, in progress, **Module 004** (pending products: Quick Register, linking, Pending Prices; `specs/004-pending-products/`).
+Mobile-first app for a pharmaceutical supplier: stores, medicines, orders, a market list and purchases, invoices, store accounts (khata), offline order taking and payments, reports and profit. Built module by module with Spec Kit; the repository contains **Modules 001 to 011** (voice ordering was dropped). Start with the **Status** section below, and the four guides in `guides/`.
 
 Product requirements: `docs/master-prompt.txt` and `docs/negative-prompt.txt`.
 Project rules: `.specify/memory/constitution.md` and `CLAUDE.md`.
@@ -98,13 +97,30 @@ Not included yet: the Account Summary and payments (Module 007), paid statuses, 
 - **Exact and fast.** Totals are computed in the database from the frozen invoice lines (a 5,000-invoice, 50,000-line history answered in 1.3 to 1.5 seconds on the test project), money stays exact and is rounded once. Day, week and month groupings add up to the same total. Each report exports a CSV that equals the screen (Estimate and Incomplete markers kept, a loss stays a number). No PDF.
 - **Online only** (a failed load shows an error with Retry, never a zero; offline says "Reports need the internet"). It needs migration `supabase/migrations/0011_reports.sql` (read-only functions and one index; no table, no new package). Migrations 0009 and 0010 belong to the dropped voice work and are not in this repository.
 
-## Status and limits
+## What works in Module 011 (offline payments and hardening; code written and checked on the test project, see its quickstart for what has been verified)
 
-See `specs/001-auth-products-stores/quickstart.md`, section 8 "Verification results". In short: lint,
-typecheck and build pass; the database migration and RLS pass on a real PostgreSQL engine (PGlite);
-the tests that need a Supabase project (35 integration, 72 E2E) pass on a separate test project, and the app has been tried by the owner on a live Supabase dev project.
+- **Record a payment without the internet** (Offline home → Record payment, or the same screen at `/accounts/pay`). It follows the online rules (an amount above zero, a date not in the future and not before 2000-01-01, an optional reference). The payment is kept on the phone and shown as *waiting*; it is never called recorded before the server confirms it, never removed without a question, and sent automatically, once, in order within each store, with a key made on the phone so sending twice records once. A refusal (a store the server does not have, a key that already holds other details, a refused date or amount) stays on the phone with its reason for you to decide.
+- **Pending sync on every balance.** While a payment waits on the phone, the store's account screen, the Store accounts list, Home and the Reports balances say "Pending sync" and "N payments waiting on this phone, PKR X, not counted yet"; the invoice print and the statement never do. The phone itself keeps no balance.
+- **Backup file version 2** carries the waiting payments (only the store, amount, date, reference and key) and never a balance, invoice, ledger entry or price; old files still restore. The online Record payment dialog gained "Keep it on this phone and send later" for a lost connection.
+- **Sign-in help**: "Forgot password?" sends an email link that opens the app and lets you choose a new password (at least 8 characters; the old one is never asked for). A notice says so when offline mode cannot start because the address is not https.
+- **Checks recorded**: `specs/011-hardening-offline-payments/traceability.md` maps the 31 test items and 16 acceptance criteria of the master prompt to named tests (and says what is not covered), and `security-review.md` holds the real outputs of the row level security audit, the route check, the secret scan and `npm audit`. The shared test clean-up helper now finds every table itself and fails loudly; `npm run test:sweep` lists the leftover test businesses.
 
-Module 002 results (272 unit and integration tests, 168 E2E tests passed on the test project, 5,000-row import measured) are in `specs/002-setup-catalog-import/quickstart.md`, section 6. Migration `0002` is applied to the test project and to the owner's dev project; the Import and Settings screens have not yet been tried by the owner on a real phone.
+## Status
+
+**Implemented (Modules 001 to 011).** Sign-in and sign-out with password reset; stores and medicines (search, duplicates, exact PKR prices); setup checklist, business settings and catalog import (CSV and Excel); manual orders with automatic draft saving, typed medicines that are never lost, order history, confirm/edit/cancel; Quick Register, linking typed lines and Pending Prices; the consolidated market list and recorded purchases; fast order entry (usual medicines, repeat last order); invoices (draft, issue with the price check, cancel, print A4 and thermal, order sheets); store accounts (khata) with payments, reversals, adjustments, the optional Account Summary on invoices and the store statement; offline order taking, offline stores, offline payments, sync with a conflict panel, and backup and restore; reports and profit (online only, read only); every record is protected by row level security.
+
+**Not implemented.** Voice ordering and anything that calls an AI service (dropped), parsing pasted text, medicine nicknames, barcodes, several users with roles, tax or accounting exports, issuing invoices offline, reversals and adjustments offline, and a public deployment (instructions only: `guides/deployment.md`).
+
+**Limits you should know.**
+- Offline data lives on **one phone**; another device sees it only after it has been sent. Waiting items are sent **only while the app is open**.
+- Working without the internet needs a **secure address** (https, or localhost on a computer). On a plain http address the app says so and still works online. Print layouts are tested in the browser's print view; ink on paper from your real printers is for you to check once.
+- A balance shown while a payment waits is the server's balance and does not include it (it says so). Reports and invoices need the internet.
+- Reports speed, measured on the test project with 5,000 invoices and 50,000 invoice lines: three runs on 2026-11-24 gave warm medians from 0.2 s to 1.9 s (the largest, 1.86 s, is the 90-day sales report by day), under the 2 s target in every run, so no extra index was added; the **first** call after a quiet period was slower (2.4 to 3.4 s).
+- Profit uses the cost rule of the owner (realized cost is the weighted average actual cost on the order's day; the estimate uses the price saved on the order line); a line with no cost is marked incomplete and never guessed.
+- `npm audit`: no vulnerability in what ships; 7 moderate findings in the lint tooling (`minimatch` through `typescript-eslint`), not fixed yet (see the security review).
+- The test project still holds old leftover test businesses until `npm run test:sweep -- --delete` is run on it with the owner's yes.
+
+**Guides and records.** `guides/supabase-setup.md` (every migration in order, why there is no 0009 or 0010, the owner, the environment, the reset email), `guides/offline-and-sync.md`, `guides/backup-and-restore.md`, `guides/deployment.md`; `specs/011-hardening-offline-payments/traceability.md` and `security-review.md`; the per-module results are in `specs/<module>/quickstart.md`.
 
 ## Setup
 
@@ -116,10 +132,10 @@ cp .env.example .env.local   # then fill in your Supabase URL and anon key
 npm run dev
 ```
 
-1. Create a Supabase project. Apply `supabase/migrations/0001_init.sql`, then `0002_settings_and_import.sql`, then `0003_orders.sql`, then `0004_pending_products.sql`, then `0005_pending_perf.sql`, then `0006_market_list_purchases.sql` (CLI `supabase db push` or the SQL editor; the editor may warn about `drop ... if exists`, which only touches the new objects).
+1. Create a Supabase project and apply **every** file of `supabase/migrations/` in order (`0001` to `0008`, then `0011`; there is no `0009` or `0010`). `guides/supabase-setup.md` lists them one by one, explains the missing two, and covers the owner user, the environment file and the password-reset email.
 2. In the dashboard add a user (Authentication → Users), then run `supabase/seed/provision-owner.sql`
    after replacing the email and business name placeholders. Without this the account sees "not set up".
-3. Open the app and sign in.
+3. Open the app and sign in. Forgot the password? Use **Forgot password?** on the sign-in screen (after the one-time email setup in the guide).
 
 Secrets: only the public URL and anon key are used by the app. Never put a service-role key in `.env.local`
 or in `src/`. `npm run lint` fails if one appears.
@@ -134,6 +150,7 @@ or in `src/`. `npm run lint` fails if one appears.
 | `npm run typecheck` | Generate route types, then `tsc --noEmit` |
 | `npm test` | Unit tests, PGlite database tests, and (with test credentials) Supabase integration tests |
 | `npm run test:e2e` | Playwright tests in mobile (360 px) and desktop browsers |
+| `npm run test:sweep` | Lists the leftover test businesses on the **test** project (a dry run). `-- --delete` removes them (only run it when you mean to; it refuses any project that is not the test project) |
 
 Tests that need a Supabase test project are skipped with a visible message until `.env.test.local` is set.
 See quickstart sections 9 and 10. Stop `npm run dev` before `npm run test:e2e`.
