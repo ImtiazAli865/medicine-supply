@@ -108,7 +108,8 @@ async function deleteRows(client: CleanupClient, table: string, column: string, 
 
 export interface CleanupTarget {
   businessId: string | null;
-  userId: string;
+  /** null for a business that has no user (an orphan): there is no user to remove. */
+  userId: string | null;
 }
 
 /**
@@ -141,8 +142,10 @@ export async function cleanBusiness(client: CleanupClient, target: CleanupTarget
     if (business) errors.set("businesses", business.message);
   }
 
-  const user = await client.auth.admin.deleteUser(target.userId);
-  if (user.error && !/not found|user_not_found/i.test(`${user.error.code ?? ""} ${user.error.message}`)) errors.set("auth user", user.error.message);
+  if (target.userId) {
+    const user = await client.auth.admin.deleteUser(target.userId);
+    if (user.error && !/not found|user_not_found/i.test(`${user.error.code ?? ""} ${user.error.message}`)) errors.set("auth user", user.error.message);
+  }
 
   if (errors.size > 0) {
     const lines = [...errors].map(([table, message]) => `${table}: ${message}`);

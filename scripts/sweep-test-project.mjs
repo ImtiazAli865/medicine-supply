@@ -78,7 +78,7 @@ async function main() {
   for (const candidate of candidates) {
     try {
       for (const userId of candidate.userIds.slice(1)) await client.auth.admin.deleteUser(userId); // a business has one test user; extra users first
-      await cleanBusiness(client, { businessId: candidate.businessId, userId: candidate.userIds[0] });
+      await cleanBusiness(client, { businessId: candidate.businessId, userId: candidate.userIds[0] ?? null });
       removed += 1;
     } catch (error) {
       failed.push(`${candidate.label}: ${error instanceof Error ? error.message.slice(0, 160) : "failed"}`);

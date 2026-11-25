@@ -211,7 +211,7 @@ Same single Next.js project: `src/app`, `src/components`, `src/lib`, `tests/{uni
 ### Owner steps (cannot be done by the assistant alone)
 
 - [ ] T064 Owner: set up the password reset email on the DEV project (guides/supabase-setup.md): edit the "Reset password" template, add the app's address to the redirect list; then try one **real** reset from the phone and report; the assistant never types or sees the password.
-- [ ] T065 Owner: say yes before the leftover sweep (T050) is run with `--delete` on the TEST project (it deletes test data only; the dry run is shown first).
+- [x] T065 Owner: say yes before the leftover sweep (T050) is run with `--delete` on the TEST project (it deletes test data only; the dry run is shown first).
 - [ ] T066 Owner trial (quickstart section 4), recorded as reported, not seen: record a payment on the phone with the signal off (SC-013), turn the signal on and check it is recorded once; try one backup restore on real data (the restore drill).
 - [ ] T067 Pull request: open it only when the owner says so (title and description in English; end the description with the attribution line the harness asks for); merge only when the owner says so. The ADR (`/sp.adr offline-payments-queue-and-pending-sync`), the ADR for Module 010 and the constitution Principle II wording clarification stay the owner's decision.
 

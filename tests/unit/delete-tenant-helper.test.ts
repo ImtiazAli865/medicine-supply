@@ -160,6 +160,12 @@ describe("cleaning a business", () => {
     await expect(cleanBusiness(db.client(), target)).resolves.toBeUndefined();
   });
 
+  it("removes a business that has no user (an orphan) without touching the user service", async () => {
+    await cleanBusiness(db.client(), { businessId: BIZ, userId: null });
+    expect(db.count("businesses", BIZ)).toBe(0);
+    expect(db.users.has("user-1")).toBe(true);
+  });
+
   it("works with no business at all (an account made without one): only the user is removed", async () => {
     await cleanBusiness(db.client(), { businessId: null, userId: "user-1" });
     expect(db.users.has("user-1")).toBe(false);
