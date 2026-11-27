@@ -1,0 +1,82 @@
+openapi: 3.1.0
+info:
+  title: Store rates (Module 012)
+  version: "1.0"
+  description: >
+    New routes. Every route requires a signed-in business user (401 otherwise); data of another business answers 404.
+    Money is a decimal string with at most two decimals. No purchase price, MRP, cost, margin or profit is ever returned.
+paths:
+  /api/stores/{id}/rates:
+    get:
+      summary: The saved rates of one store, for the store page and for the order screen
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: { type: array, items: { $ref: "#/components/schemas/Rate" } }
+        "404": { description: Store not found }
+  /api/stores/{id}/rates/{productId}:
+    put:
+      summary: Set or change a rate from the store page
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: productId, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [rate, expected_version]
+              properties:
+                rate: { type: string, pattern: '^[0-9]{1,10}(\.[0-9]{1,2})?$', description: above zero }
+                expected_version: { type: [integer, "null"], description: null when no rate is expected }
+      responses:
+        "200": { description: The saved rate }
+        "409": { description: "version_conflict; the body carries the current rate" }
+        "422": { description: invalid rate }
+    delete:
+      summary: Remove a rate
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: productId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: expected_version, in: query, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: Removed (also when it was already removed) }
+        "409": { description: version_conflict }
+  /api/orders/rates:
+    get:
+      summary: All saved rates, page by page, for the phone copy
+      parameters:
+        - { name: limit, in: query, schema: { type: integer, maximum: 900 } }
+        - { name: cursor, in: query, schema: { type: string } }
+      responses:
+        "200": { description: "{ items: [DeviceRate], next_cursor }" }
+components:
+  schemas:
+    Rate:
+      type: object
+      required: [product_id, rate, version, catalog_price_at_set, catalog_price, updated_at, product]
+      properties:
+        product_id: { type: string, format: uuid }
+        rate: { type: string }
+        version: { type: integer }
+        catalog_price_at_set: { type: [string, "null"] }
+        catalog_price: { type: [string, "null"] }
+        updated_at: { type: string, format: date-time }
+        product:
+          type: object
+          description: identity only
+          properties:
+            name: { type: string }
+            strength: { type: [string, "null"] }
+            dosage_form: { type: [string, "null"] }
+            pack_size: { type: [string, "null"] }
+            manufacturer: { type: [string, "null"] }
+            unit: { type: string }
+            is_active: { type: boolean }

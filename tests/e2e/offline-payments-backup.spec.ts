@@ -42,7 +42,7 @@ test.describe("US3: backup and restore of waiting payments", () => {
     const file = await exportFile(page);
     await expect(page.getByTestId("backup-export-done")).toContainText("2 payments, PKR 7,500.00 are in this file.");
     const json = JSON.parse(file.text) as { version: number; counts: Record<string, number>; waiting: { payments: Array<Record<string, unknown>> } };
-    expect(json.version).toBe(2);
+    expect(json.version).toBe(3); // Module 012: version 3 (typed prices on waiting orders)
     expect(json.counts.waitingPayments).toBe(2);
     expect(json.waiting.payments.map((p) => Object.keys(p).sort())).toEqual([
       ["amount", "date", "paymentId", "reason", "reference", "storeId", "syncState"],

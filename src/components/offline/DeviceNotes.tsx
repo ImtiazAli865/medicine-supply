@@ -31,7 +31,7 @@ export function DeviceNotes({ orderOnPhoneOnly = false }: { /** The order shown 
   } else if (cacheAge) {
     const at = cacheAge.medicinesUpdatedAt ? formatPakistanDateTime(cacheAge.medicinesUpdatedAt) : null;
     if (cacheAge.stale) notes.push({ key: "stale", kind: "warning", text: `The lists on this phone were updated ${at ?? "more than a day ago"}, which is more than a day ago. New or changed medicines may be missing until you are online.` });
-    else if (!online && at) notes.push({ key: "age", kind: "info", text: `Medicine and store lists from this phone, updated ${at}.` });
+    else if (!online && at) notes.push({ key: "age", kind: "info", text: `Medicine and store lists from this phone, updated ${at}. Store prices are from the same copy and are checked again when you confirm.` });
   }
   if (storageLow) notes.push({ key: "storage", kind: "warning", text: "This phone's storage is nearly full, so the lists were not refreshed. Free some space to keep working offline." });
   if (orderOnPhoneOnly) notes.push({ key: "phone", kind: "info", text: "This order is on this phone only. Other devices will not see it until it has been sent." });

@@ -2,9 +2,10 @@
 
 import { Trash2 } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { LinePriceEditor } from "@/components/orders/LinePriceEditor";
 import { Badge } from "@/components/ui/Badge";
 import { formatPKR } from "@/lib/money";
-import { cleanTypedName, LIMITS, parseQuantity, type LineInfo } from "@/lib/orders/editor-state";
+import { cleanTypedName, LIMITS, parseQuantity, type LineInfo, type ShownPrice } from "@/lib/orders/editor-state";
 import { lineTotal } from "@/lib/orders/totals";
 import type { OrderLineInput } from "@/lib/orders/types";
 
@@ -24,6 +25,8 @@ export function OrderLineRow({
   onValidity,
   priceNote,
   actions,
+  shown,
+  onPrice,
 }: {
   line: OrderLineInput;
   info: LineInfo | undefined;
@@ -33,13 +36,18 @@ export function OrderLineRow({
   repeatedTyped?: boolean;
   /** A typed line on a confirmed order: its recorded name can no longer be edited. */
   lockName?: boolean;
-  onChange?: (patch: Partial<Pick<OrderLineInput, "quantity" | "unit" | "name">>) => void;
+  /** May return true when the change cleared a typed price (a unit change). */
+  onChange?: (patch: Partial<Pick<OrderLineInput, "quantity" | "unit" | "name">>) => boolean | void;
   onRemove?: () => void;
   onValidity?: (lineId: string, ok: boolean) => void;
   /** Replaces the price line, for example "Price recorded when you save" on a line added to a confirmed order. */
   priceNote?: string;
   /** Actions for a typed (not registered) line, such as Register this medicine (Module 004). */
   actions?: ReactNode;
+  /** Module 012: the price this line shows and where it comes from. */
+  shown?: ShownPrice;
+  /** Given when the price of this line may be set (a draft line, or a line being added to a confirmed order). */
+  onPrice?: (patch: Pick<OrderLineInput, "price" | "remember" | "rate_version">) => void;
 }) {
   const name = info?.name ?? line.name ?? "Medicine";
   const typed = line.product_id === null;
@@ -48,6 +56,7 @@ export function OrderLineRow({
   const [qtyText, setQtyText] = useState(String(line.quantity));
   const [unitText, setUnitText] = useState(line.unit);
   const [nameText, setNameText] = useState(name);
+  const [priceCleared, setPriceCleared] = useState(false);
   const qtyError = parseQuantity(qtyText) === null ? `Quantity must be a whole number from 1 to ${LIMITS.quantityMax.toLocaleString("en-US")}.` : null;
   const unitError = unitText.trim() === "" ? "Enter a unit." : unitText.trim().length > LIMITS.unit ? `Unit can be at most ${LIMITS.unit} characters.` : null;
   const nameEditable = typed && !readOnly && !lockName;
@@ -68,8 +77,10 @@ export function OrderLineRow({
   }, [focusQuantity]);
 
   const details = [info?.strength, info?.dosage_form, info?.pack_size, info?.manufacturer].filter(Boolean).join(" · ");
-  const price = info?.selling_price ?? null;
+  const price = shown ? shown.price : (info?.selling_price ?? null);
   const total = lineTotal(line.quantity, price);
+  const priceLabel =
+    info?.price_basis === "snapshot" ? "Price " : shown?.source === "typed" ? "Typed price " : shown?.source === "store_rate" ? "Store rate " : info?.price_basis === "current" || shown?.source === "catalog" ? "Current price " : "Price ";
 
   return (
     <li
@@ -169,7 +180,7 @@ export function OrderLineRow({
               className={inputClass}
               onChange={(e) => {
                 setUnitText(e.target.value);
-                if (e.target.value.trim() !== "" && e.target.value.trim().length <= LIMITS.unit) onChange?.({ unit: e.target.value });
+                if (e.target.value.trim() !== "" && e.target.value.trim().length <= LIMITS.unit && onChange?.({ unit: e.target.value })) setPriceCleared(true);
               }}
             />
           </div>
@@ -182,7 +193,7 @@ export function OrderLineRow({
         <p className="text-sm text-muted">{priceNote}</p>
       ) : price !== null ? (
         <p className="text-sm" data-testid="line-price">
-          <span className="text-muted">{info?.price_basis === "current" ? "Current price " : "Price "}</span>
+          <span className="text-muted">{priceLabel}</span>
           {formatPKR(price)}
           {total ? (
             <>
@@ -191,6 +202,23 @@ export function OrderLineRow({
             </>
           ) : null}
         </p>
+      ) : null}
+
+      {priceCleared && !readOnly ? (
+        <p role="status" className="text-sm text-warning" data-testid="price-cleared">
+          The typed price was removed because the unit changed.
+        </p>
+      ) : null}
+
+      {!typed && !readOnly && onPrice && shown && info?.price_basis !== "snapshot" ? (
+        <LinePriceEditor
+          line={line}
+          shown={shown}
+          onPrice={(patch) => {
+            setPriceCleared(false);
+            onPrice(patch);
+          }}
+        />
       ) : null}
 
       {typed && actions ? <div className="flex flex-wrap gap-2" data-testid="line-actions">{actions}</div> : null}

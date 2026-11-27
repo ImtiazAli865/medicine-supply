@@ -10,6 +10,11 @@ import type { SendResult } from "@/lib/device/sync-center";
 
 export type UnauthorizedMode = "redirect" | "event";
 
+/** Sent when a save could not remember a store rate because it changed elsewhere (Module 012). */
+export const RATE_CONFLICT_EVENT = "medsupply:rate-conflict";
+/** Sent when a store rate was saved, so the copy on this phone is brought up to date at once. */
+export const RATES_CHANGED_EVENT = "medsupply:rates-changed";
+
 export async function sendSaveRequest(orderId: string, request: SaveRequest<EditorState>, onUnauthorized: UnauthorizedMode = "redirect"): Promise<SendResult> {
   try {
     const { data } = await fetchJson<OrderResult>(`/api/orders/${orderId}`, {
@@ -17,6 +22,8 @@ export async function sendSaveRequest(orderId: string, request: SaveRequest<Edit
       json: toSaveInput(request.state, request.requestId, request.expectedVersion),
       onUnauthorized,
     });
+    if (data.rate_conflicts?.length && typeof window !== "undefined") window.dispatchEvent(new CustomEvent(RATE_CONFLICT_EVENT));
+    if (request.state.lines.some((l) => l.remember) && typeof window !== "undefined") window.dispatchEvent(new CustomEvent(RATES_CHANGED_EVENT));
     return { kind: "ok", version: data.order.version, savedAt: data.order.updated_at, order: data.order };
   } catch (error) {
     if (error instanceof ClientApiError) {

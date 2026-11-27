@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { fetchJson } from "@/lib/api/client";
+import { ClientApiError, fetchJson } from "@/lib/api/client";
 import type { DraftHandle } from "@/lib/device/sync-center";
 import { newId } from "@/lib/ids";
 import { createAutosave, ON_DEVICE_MESSAGE, type Autosave, type SaveOutcome, type SaveRequest } from "@/lib/orders/autosave";
@@ -18,7 +18,9 @@ import {
   type EditorState,
   type LineInfo,
 } from "@/lib/orders/editor-state";
+import { sameUnit } from "@/lib/orders/price";
 import type { SlimMedicine } from "@/lib/orders/fast-types";
+import { disposeWhenGone } from "@/lib/orders/dispose-when-gone";
 import { sendSaveRequest } from "@/lib/orders/save-transport";
 import type { Order, OrderLineInput, OrderResult } from "@/lib/orders/types";
 import type { Product } from "@/lib/products/types";
@@ -139,6 +141,9 @@ export function useOrderEditor({ orderId, initialOrder, storeId, mode = "draft",
 
   const updateLine = useCallback(
     (id: string, patch: Partial<Pick<OrderLineInput, "quantity" | "unit" | "name">>) => {
+      // A price is agreed for one unit: changing the unit clears a typed price and its "remember" tick (Module 012).
+      const before = machine.getLocalState().lines.find((l) => l.id === id);
+      const dropsPrice = patch.unit !== undefined && before !== undefined && before.price != null && !sameUnit(before.unit, patch.unit);
       if (patch.name !== undefined) {
         const clean = cleanTypedName(patch.name ?? "");
         const current = handle?.lineInfo[id];
@@ -147,10 +152,31 @@ export function useOrderEditor({ orderId, initialOrder, storeId, mode = "draft",
       }
       update((s) => ({
         ...s,
-        lines: s.lines.map((l) => (l.id === id ? { ...l, ...patch, name: patch.name !== undefined ? cleanTypedName(patch.name ?? "") : l.name } : l)),
+        lines: s.lines.map((l) =>
+          l.id === id
+            ? { ...l, ...patch, name: patch.name !== undefined ? cleanTypedName(patch.name ?? "") : l.name, ...(dropsPrice ? { price: null, remember: false } : {}) }
+            : l,
+        ),
       }));
+      return dropsPrice;
     },
-    [update, handle, noteInfo],
+    [update, machine, handle, noteInfo],
+  );
+
+  /** Module 012: the price typed for a line (null: automatic), and whether to remember it as the store's rate. */
+  const setLinePrice = useCallback(
+    (id: string, patch: Pick<OrderLineInput, "price" | "remember" | "rate_version">) =>
+      update((s) => ({ ...s, lines: s.lines.map((l) => (l.id === id ? { ...l, ...patch } : l)) })),
+    [update],
+  );
+
+  /** Edit mode: the lines added now carry the price shown, so a price can never change unseen when they are saved. */
+  const setExpectedPrices = useCallback(
+    (expected: ReadonlyMap<string, string | null>) => {
+      if (expected.size === 0) return;
+      update((s) => ({ ...s, lines: s.lines.map((l) => (expected.has(l.id) ? { ...l, expected_price: expected.get(l.id)! } : l)) }));
+    },
+    [update],
   );
 
   /** A catalog line the server will not take (for example a medicine made inactive) becomes a typed line with its exact name. */
@@ -175,7 +201,7 @@ export function useOrderEditor({ orderId, initialOrder, storeId, mode = "draft",
   const setStore = useCallback((newStoreId: string) => update((s) => ({ ...s, storeId: newStoreId })), [update]);
 
   /** Saves every unsaved edit first, then confirms with the version the server returned. */
-  const confirm = useCallback(async (): Promise<Order> => {
+  const confirm = useCallback(async (expected: Array<{ line_id: string; selling_price: string | null }>): Promise<Order> => {
     try {
       await machine.flush();
     } catch (error) {
@@ -188,13 +214,27 @@ export function useOrderEditor({ orderId, initialOrder, storeId, mode = "draft",
     const version = machine.getSnapshot().version;
     if (version === null) throw new Error("Add at least one medicine before confirming the order.");
     confirmRequestId.current ??= newId();
-    const { data } = await fetchJson<OrderResult>(`/api/orders/${orderId}/confirm`, {
-      json: { request_id: confirmRequestId.current, expected_version: version },
-    });
+    let data: OrderResult;
+    try {
+      ({ data } = await fetchJson<OrderResult>(`/api/orders/${orderId}/confirm`, {
+        json: { request_id: confirmRequestId.current, expected_version: version, expected_prices: expected },
+      }));
+    } catch (error) {
+      // A catalog price or a store rate moved since the screen showed it: show the new prices and ask again.
+      if (error instanceof ClientApiError && error.code === "price_changed" && error.current) {
+        const current = error.current as Order;
+        confirmRequestId.current = null;
+        setAdded(infoFromOrder(current));
+        noteInfo(infoFromOrder(current));
+        machine.adopt(stateFromOrder(current), current.version, current);
+        setEpoch((e) => e + 1);
+      }
+      throw error;
+    }
     confirmRequestId.current = null;
     machine.adopt(stateFromOrder(data.order), data.order.version, data.order);
     return data.order;
-  }, [machine, orderId]);
+  }, [machine, orderId, noteInfo]);
 
   /** Cancels (discards) the order. A draft that was never saved has nothing to cancel. */
   const discard = useCallback(
@@ -320,13 +360,12 @@ export function useOrderEditor({ orderId, initialOrder, storeId, mode = "draft",
   }, [machine, router]);
 
   // With a sync-centre handle the centre owns the machine (it keeps sending after this screen is closed); the screen that
-  // opened the handle releases it.
-  useEffect(
-    () => () => {
-      if (!handle) machine.dispose();
-    },
-    [machine, handle],
-  );
+  // opened the handle releases it. Without one the machine is this screen's own and must survive React running the effect
+  // twice, or every later edit would be silently ignored.
+  const [holdMachine] = useState(disposeWhenGone);
+  useEffect(() => {
+    if (!handle) return holdMachine(() => machine.dispose());
+  }, [machine, handle, holdMachine]);
 
   return {
     state,
@@ -339,6 +378,8 @@ export function useOrderEditor({ orderId, initialOrder, storeId, mode = "draft",
     getLines,
     addTypedLine,
     updateLine,
+    setLinePrice,
+    setExpectedPrices,
     removeLine,
     convertLineToTyped,
     removeLines,

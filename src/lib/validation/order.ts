@@ -27,6 +27,9 @@ const optionalText = (max: number, label: string) =>
     .transform((v) => (v == null || v === "" ? null : v))
     .default(null);
 
+// A price as typed: the database refuses zero, text and more than two decimals with a plain message.
+const priceText = z.string().trim().max(14, "Enter a price above 0 with at most two decimals.").nullable().optional();
+
 const LineSchema = z
   .object({
     id: z.uuid("A valid line id is required."),
@@ -34,6 +37,10 @@ const LineSchema = z
     name: z.string().nullish(),
     quantity,
     unit,
+    price: priceText,
+    remember: z.boolean().optional(),
+    rate_version: z.number().int().min(1).nullable().optional(),
+    expected_price: priceText,
   })
   .transform((line, ctx) => {
     // A catalog line takes its description from the medicine on the server; any name sent is ignored.
@@ -67,6 +74,13 @@ export const OrderActionSchema = z.object({
   expected_version: z.number("expected_version is required.").int().min(1),
 });
 
+/** Confirm sends the price of every line as the screen showed it, so a price can never change unseen. */
+export const OrderConfirmSchema = OrderActionSchema.extend({
+  expected_prices: z
+    .array(z.object({ line_id: z.uuid("A valid line id is required."), selling_price: z.string().max(14).nullable() }), "expected_prices is required.")
+    .max(LIMITS.lines),
+});
+
 export const OrderCancelSchema = OrderActionSchema.extend({
   reason: optionalText(LIMITS.reason, "Reason"),
 });
@@ -94,5 +108,6 @@ export const OrderListQuerySchema = z
 
 export type OrderSaveBody = z.infer<typeof OrderSaveSchema>;
 export type OrderActionBody = z.infer<typeof OrderActionSchema>;
+export type OrderConfirmBody = z.infer<typeof OrderConfirmSchema>;
 export type OrderCancelBody = z.infer<typeof OrderCancelSchema>;
 export type OrderListQuery = z.infer<typeof OrderListQuerySchema>;

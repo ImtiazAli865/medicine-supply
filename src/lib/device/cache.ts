@@ -6,8 +6,9 @@
 import { PAGE_SIZE } from "@/lib/orders/fast-list";
 import { SLIM_MEDICINE_KEYS, type MedicinePage, type RepeatPlan, type SlimMedicine, type UsualResponse } from "@/lib/orders/fast-types";
 import type { OrderPage } from "@/lib/orders/types";
+import type { DeviceRatePage } from "@/lib/rates/types";
 import type { StorePage } from "@/lib/stores/types";
-import type { BusinessDatabase, StoredMedicine, StoredStore } from "./schema";
+import type { BatchOp, BusinessDatabase, StoredMedicine, StoredRate, StoredStore } from "./schema";
 
 export const FRESH_MS = 5 * 60_000;
 export const STALE_MS = 24 * 60 * 60_000;
@@ -58,6 +59,34 @@ async function loadMedicines(transport: CacheTransport): Promise<{ rows: StoredM
     if (rows.length >= DEVICE_MEDICINE_LIMIT) return { rows: rows.slice(0, DEVICE_MEDICINE_LIMIT), truncated: cursor !== null || rows.length > DEVICE_MEDICINE_LIMIT };
   } while (cursor);
   return { rows, truncated: false };
+}
+
+/** Every store rate (selling prices only), kept with exactly these fields. */
+async function loadRates(transport: CacheTransport): Promise<StoredRate[]> {
+  const rows: StoredRate[] = [];
+  let cursor: string | null = null;
+  do {
+    const params = new URLSearchParams({ limit: "900" });
+    if (cursor) params.set("cursor", cursor);
+    const page: DeviceRatePage = await transport.get<DeviceRatePage>(`/api/orders/rates?${params}`);
+    for (const r of page.items) {
+      rows.push({ key: `${r.store_id}:${r.product_id}`, storeId: r.store_id, productId: r.product_id, rate: r.rate, version: r.version, catalogPriceAtSet: r.catalog_price_at_set ?? null });
+    }
+    cursor = page.next_cursor;
+  } while (cursor);
+  return rows;
+}
+
+/** Replaces the rate copy in one atomic step. A failure keeps the older copy; the rest of the refresh still counts. */
+export async function refreshRates(db: BusinessDatabase, transport: CacheTransport, stamp: string): Promise<void> {
+  try {
+    const rows = await loadRates(transport);
+    const keep = new Set(rows.map((r) => r.key));
+    const removals: BatchOp[] = (await db.getAll("storeRates")).filter((r) => !keep.has(r.key)).map((r) => ({ op: "remove", store: "storeRates", key: r.key }));
+    await db.batch([...removals, ...rows.map((value): BatchOp => ({ op: "put", store: "storeRates", value })), { op: "put", store: "meta", value: { key: "ratesUpdatedAt", value: stamp } }]);
+  } catch {
+    // The older copy of the rates stays; a price that moved is still caught at confirm.
+  }
 }
 
 async function loadStores(transport: CacheTransport): Promise<StoredStore[]> {
@@ -148,6 +177,7 @@ export async function refreshDeviceCopy(
     }
 
     const stamp = new Date(now).toISOString();
+    await refreshRates(db, transport, stamp);
     await db.replaceMedicines(medicines.rows, stamp);
     await db.replaceStores(stores, stamp);
     for (const e of extras) await db.put("storeExtras", { storeId: e.storeId, usual: e.usual, repeatPlan: e.repeatPlan, updatedAt: stamp });

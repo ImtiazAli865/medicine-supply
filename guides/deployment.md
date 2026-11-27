@@ -14,7 +14,7 @@ The offline mode needs a **secure address** (see `offline-and-sync.md`). On a pl
 
 ## Steps
 
-1. **Database.** Create the production Supabase project and apply the migrations in order, exactly as in `supabase-setup.md` (nine files; there is no 0009 and no 0010). Create the owner user and run `supabase/seed/provision-owner.sql`.
+1. **Database.** Create the production Supabase project and apply the migrations in order, exactly as in `supabase-setup.md` (ten files; there is no 0009 and no 0010). Create the owner user and run `supabase/seed/provision-owner.sql`.
 2. **Environment variables on the host.** Only two: `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY`, from the production project. **Never** add the service-role key or any other secret to the host's settings for the app: the app does not use one.
 3. **Build and start.** `npm install`, `npm run build`, `npm run start` (a host such as Vercel does this itself). The build also writes the offline file list (`scripts/make-sw-assets.mjs`).
 4. **Addresses in Supabase.** Authentication → URL Configuration: set **Site URL** to the app's https address and add it to the **Redirect URLs**.

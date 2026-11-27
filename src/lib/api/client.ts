@@ -75,7 +75,7 @@ function handleExpiredSession(mode: UnauthorizedMode) {
 }
 
 interface RequestOptions {
-  method?: "GET" | "POST" | "PATCH" | "PUT";
+  method?: "GET" | "POST" | "PATCH" | "PUT" | "DELETE";
   json?: unknown;
   signal?: AbortSignal;
   onUnauthorized?: UnauthorizedMode;

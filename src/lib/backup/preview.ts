@@ -52,7 +52,14 @@ function sameState(a: DraftRecord, w: BackupWaitingOrder): boolean {
   if (a.state.storeId !== w.storeId || a.state.notes !== w.notes || a.state.lines.length !== w.lines.length) return false;
   return a.state.lines.every((l, i) => {
     const x = w.lines[i]!;
-    return l.id === x.id && l.product_id === x.product_id && l.quantity === x.quantity && l.unit === x.unit && (l.product_id !== null || l.name === x.name);
+    return (
+      l.id === x.id &&
+      l.product_id === x.product_id &&
+      l.quantity === x.quantity &&
+      l.unit === x.unit &&
+      (l.price ?? null) === (x.price ?? null) &&
+      (l.product_id !== null || l.name === x.name)
+    );
   });
 }
 

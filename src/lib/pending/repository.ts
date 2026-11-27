@@ -148,6 +148,7 @@ export async function applyPriceFill(supabase: SupabaseClient, productId: string
     p_request_id: input.request_id,
     p_line_ids: input.line_ids,
     p_fill_lines: input.fill_lines,
+    p_expected: input.expected ?? null,
   })) as FunctionResult;
   if (data.done !== true) throw refusal(data);
   return {

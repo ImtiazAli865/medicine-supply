@@ -137,6 +137,28 @@ async function orderList(db: BusinessDatabase, params: URLSearchParams): Promise
   return ok({ items, next_cursor: offset + limit < drafts.length ? String(offset + limit) : null });
 }
 
+/** The rates of one store from the phone's copy, in the shape of the online route. */
+async function storeRates(db: BusinessDatabase, storeId: string): Promise<LocalAnswer> {
+  const updated = (await db.get("meta", "ratesUpdatedAt"))?.value as string | undefined;
+  if (!updated) return notOnPhone("This store's own prices list");
+  const medicinesById = new Map((await db.getAll("medicines")).map((m) => [m.id, m]));
+  const items = (await db.getAll("storeRates"))
+    .filter((r) => r.storeId === storeId && medicinesById.has(r.productId))
+    .map((r) => {
+      const m = medicinesById.get(r.productId)!;
+      return {
+        product_id: r.productId,
+        rate: r.rate,
+        version: r.version,
+        catalog_price_at_set: r.catalogPriceAtSet,
+        catalog_price: m.selling_price,
+        updated_at: updated,
+        product: { name: m.name, strength: m.strength, dosage_form: m.dosage_form, pack_size: m.pack_size, manufacturer: m.manufacturer, unit: m.unit, is_active: true },
+      };
+    });
+  return ok({ items });
+}
+
 /**
  * The answer from the device for this request, or null when this request is not answered locally (any other path or method,
  * or no database open): the caller then reports the real network error.
@@ -169,6 +191,9 @@ export async function answerLocal(db: BusinessDatabase | null, method: string, p
   }
 
   if (path === "/api/stores") return stores(db, params);
+
+  const ratesMatch = /^\/api\/stores\/([^/]+)\/rates$/.exec(path);
+  if (ratesMatch) return storeRates(db, decodeURIComponent(ratesMatch[1]!));
 
   const storeMatch = /^\/api\/stores\/([^/]+)$/.exec(path);
   if (storeMatch) {

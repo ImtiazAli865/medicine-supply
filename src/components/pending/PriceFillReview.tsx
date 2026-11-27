@@ -68,7 +68,13 @@ export function PriceFillReview({ product: initial }: { product: MedicineBrief }
     setBusy(fillLines ? "fill" : "save");
     try {
       const { data } = await fetchJson<PriceApplyResult>(`/api/pending/prices/${product.id}/apply`, {
-        json: { request_id: requestId.current, price: preview.price, line_ids: fillLines ? preview.lines.map((l) => l.line_id) : [], fill_lines: fillLines },
+        json: {
+          request_id: requestId.current,
+          price: preview.price,
+          line_ids: fillLines ? preview.lines.map((l) => l.line_id) : [],
+          fill_lines: fillLines,
+          ...(fillLines ? { expected: preview.lines.map((l) => ({ line_id: l.line_id, price: l.price ?? preview.price })) } : {}),
+        },
       });
       setProduct(data.product);
       if (fillLines) {
@@ -159,7 +165,8 @@ export function PriceFillReview({ product: initial }: { product: MedicineBrief }
       {phase.kind === "done" ? (
         <section className="space-y-3 rounded-xl border border-primary bg-primary-soft p-4" data-testid="fill-result">
           <p className="font-semibold text-primary-strong">
-            Filled {plural(phase.result.filled_count, "line", "lines")} in {plural(phase.result.orders_touched, "order", "orders")} at {formatPKR(phase.price)}.
+            Filled {plural(phase.result.filled_count, "line", "lines")} in {plural(phase.result.orders_touched, "order", "orders")} at {formatPKR(phase.price)}
+            {phase.result.filled.some((l) => l.price_source === "store_rate") ? " (stores with their own rate got their rate)" : ""}.
           </p>
           <p className="text-sm text-muted">The price and the new totals are on those orders, and the history of each order says what was recorded.</p>
           {phase.remaining > 0 ? (
@@ -196,11 +203,12 @@ function ReviewPanel({
 }) {
   const orders = new Set(preview.lines.map((l) => l.order_id)).size;
   const some = preview.lines.length > 0;
+  const storeRates = preview.lines.filter((l) => l.price_source === "store_rate").length;
   return (
     <section className="space-y-3 rounded-xl border border-border bg-surface p-4" aria-label="Review" data-testid="review-panel">
       <h2 className="text-lg font-semibold">
         {some ? (
-          <>These lines will get {formatPKR(preview.price)}</>
+          <>{storeRates > 0 ? "These lines will get a price" : `These lines will get ${formatPKR(preview.price)}`}</>
         ) : (
           <>No order line is waiting for a price</>
         )}
@@ -212,6 +220,11 @@ function ReviewPanel({
       ) : (
         <p className="text-muted">Confirmed orders have no line of this medicine without a price. You can still save the price for the medicine.</p>
       )}
+      {storeRates > 0 ? (
+        <p className="text-sm" data-testid="review-store-rates">
+          {plural(storeRates, "line", "lines")} of stores with their own rate will get that rate; the others get {formatPKR(preview.price)}.
+        </p>
+      ) : null}
       <p className="text-sm text-muted" data-testid="untouched-count">
         Lines that already have a price are never changed: {preview.untouched_priced_lines.toLocaleString("en-US")}.
       </p>
@@ -236,7 +249,10 @@ function ReviewPanel({
                 </Link>
               </span>
               <span className="shrink-0 text-right text-sm">
-                <span className="block text-muted">Qty {line.quantity.toLocaleString("en-US")}</span>
+                <span className="block text-muted">
+                  Qty {line.quantity.toLocaleString("en-US")}
+                  {storeRates > 0 && line.price ? ` × ${formatPKR(line.price)}${line.price_source === "store_rate" ? " (store rate)" : ""}` : ""}
+                </span>
                 <span className="block font-medium">{formatPKR(line.line_total)}</span>
               </span>
             </li>

@@ -24,7 +24,15 @@ function stateOf(w: BackupWaitingOrder): EditorState {
   return {
     storeId: w.storeId,
     notes: w.notes,
-    lines: w.lines.map((l) => ({ id: l.id, product_id: l.product_id, name: l.product_id === null ? (l.name ?? l.display_name ?? "") : null, quantity: l.quantity, unit: l.unit })),
+    lines: w.lines.map((l) => ({
+      id: l.id,
+      product_id: l.product_id,
+      name: l.product_id === null ? (l.name ?? l.display_name ?? "") : null,
+      quantity: l.quantity,
+      unit: l.unit,
+      ...(l.price !== undefined ? { price: l.price } : {}),
+      ...(l.remember ? { remember: true, rate_version: l.rateVersion ?? null } : {}),
+    })),
   };
 }
 

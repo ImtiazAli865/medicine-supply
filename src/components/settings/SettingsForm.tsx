@@ -153,7 +153,7 @@ export function SettingsForm({ initial }: { initial: Settings }) {
             />
             <span>
               <span className="block font-medium">Print the Account Summary on invoices by default</span>
-              <span className="block text-sm text-muted">Off by default. Invoices are not printed yet; this is stored for when they are.</span>
+              <span className="block text-sm text-muted">Off by default. The print page of an issued invoice starts with this choice; you can change it there for one print.</span>
             </span>
           </label>
           {errors.account_summary_default ? <p role="alert" className="text-sm text-danger">{errors.account_summary_default}</p> : null}

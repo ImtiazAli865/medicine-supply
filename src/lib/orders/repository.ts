@@ -1,8 +1,8 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { ApiError, notFound, unusableId } from "@/lib/api/errors";
 import { decodeCursor, slicePage } from "@/lib/api/paging";
-import type { OrderActionBody, OrderCancelBody, OrderListQuery, OrderSaveBody } from "@/lib/validation/order";
-import type { Order, OrderPage, OrderResult, OrderSummary } from "./types";
+import type { OrderActionBody, OrderCancelBody, OrderConfirmBody, OrderListQuery, OrderSaveBody } from "@/lib/validation/order";
+import type { Order, OrderPage, OrderResult, OrderSummary, RateConflict } from "./types";
 
 // Orders are read and written only through database functions (migration 0003). Writes run as the
 // signed-in user's session, the function reads the business from it, and a refusal comes back as a
@@ -36,6 +36,8 @@ function refusal(result: FunctionResult): ApiError {
       );
     case "order_empty":
       return new ApiError("order_empty", "Add at least one medicine before confirming the order.");
+    case "price_changed":
+      return new ApiError("price_changed", "A price changed. Check the new prices before going on.", { current });
     case "not_found":
       return notFound();
     case "store_not_found":
@@ -98,16 +100,17 @@ export async function saveOrder(
 
   if (data.saved !== true) throw refusal(data);
   return {
-    result: { replayed: data.replayed === true, order: data.order as Order },
+    result: { replayed: data.replayed === true, order: data.order as Order, rate_conflicts: (data.rate_conflicts as RateConflict[] | undefined) ?? [] },
     created: data.created === true,
   };
 }
 
-export async function confirmOrder(supabase: SupabaseClient, id: string, input: OrderActionBody): Promise<OrderResult> {
+export async function confirmOrder(supabase: SupabaseClient, id: string, input: OrderActionBody | OrderConfirmBody): Promise<OrderResult> {
   const data = (await call(supabase, "order_confirm", {
     p_id: id,
     p_request_id: input.request_id,
     p_expected_version: input.expected_version,
+    p_expected_prices: "expected_prices" in input ? input.expected_prices : null,
   })) as FunctionResult;
   if (data.confirmed !== true) throw refusal(data);
   return { replayed: data.replayed === true, order: data.order as Order };

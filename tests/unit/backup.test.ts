@@ -112,7 +112,7 @@ describe("backup file", () => {
     const f = sample();
     expect(parseBackup("{not json", BIZ)).toMatchObject({ ok: false, reason: "damaged" });
     expect(parseBackup(JSON.stringify({ hello: 1 }), BIZ)).toMatchObject({ ok: false, reason: "damaged" });
-    expect(parseBackup(JSON.stringify({ ...f, version: 3 }), BIZ)).toMatchObject({ ok: false, reason: "unknown_version" });
+    expect(parseBackup(JSON.stringify({ ...f, version: 4 }), BIZ)).toMatchObject({ ok: false, reason: "unknown_version" });
     expect(parseBackup(serializeBackup(f), OTHER_BIZ)).toMatchObject({ ok: false, reason: "other_business" });
     expect(parseBackup(JSON.stringify({ ...f, counts: { ...f.counts, orders: 9 } }), BIZ)).toMatchObject({ ok: false, reason: "damaged" });
     const badQty = structuredClone(f);

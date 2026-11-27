@@ -11,6 +11,8 @@ import { ClientApiError, fetchJson } from "@/lib/api/client";
 import { useSearchList } from "@/lib/hooks/useSearchList";
 import { newId } from "@/lib/ids";
 import { formatPKR } from "@/lib/money";
+import { sameUnit } from "@/lib/orders/price";
+import type { StoreRatesResponse } from "@/lib/rates/types";
 import type { Order } from "@/lib/orders/types";
 import type { LinkResult, MedicineBrief } from "@/lib/pending/types";
 import type { Product } from "@/lib/products/types";
@@ -126,6 +128,8 @@ function LinkFlow({
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
   const requestId = useRef(newId());
+  // The price the line would get on this order: the order store's rate for this medicine and unit, else its selling price.
+  const [offered, setOffered] = useState<{ price: string; storeRate: boolean } | null>(null);
 
   const confirmed = target.orderStatus === "confirmed";
 
@@ -154,9 +158,27 @@ function LinkFlow({
     }
   }
 
-  function choose() {
-    if (confirmed && picked?.selling_price) setStep("price");
-    else void submit(false);
+  async function choose() {
+    if (!confirmed || !picked) {
+      void submit(false);
+      return;
+    }
+    setBusy(true);
+    setProblem(null);
+    try {
+      const { data: order } = await fetchJson<Order>(`/api/orders/${target.orderId}`);
+      const { data: rates } = await fetchJson<StoreRatesResponse>(`/api/stores/${order.store.id}/rates`);
+      const rate = rates.items.find((r) => r.product_id === picked.id && r.product.is_active && sameUnit(r.product.unit, target.line.unit));
+      const price = rate?.rate ?? picked.selling_price;
+      setBusy(false);
+      if (price) {
+        setOffered({ price, storeRate: Boolean(rate) });
+        setStep("price");
+      } else void submit(false);
+    } catch (error) {
+      setBusy(false);
+      setProblem(error instanceof ClientApiError ? error.message : "Something went wrong. Please try again.");
+    }
   }
 
   if (step === "search") {
@@ -179,17 +201,18 @@ function LinkFlow({
 
   if (!picked) return null;
 
-  if (step === "price") {
+  if (step === "price" && offered) {
     return (
       <div className="space-y-4" data-testid="link-price-step">
         <p>
-          This order is confirmed and this line has no price yet. Use <span className="font-semibold">{formatPKR(picked.selling_price)}</span> for this line?
+          This order is confirmed and this line has no price yet. Use <span className="font-semibold">{formatPKR(offered.price)}</span>
+          {offered.storeRate ? " (this store's rate)" : ""} for this line?
         </p>
         <p className="text-sm text-muted">If you use it, the price is recorded on the line and in the order history. If not, the line stays without a price and waits on the Need a price list.</p>
         {problem ? <Banner kind="error">{problem}</Banner> : null}
         <div className="flex flex-col gap-2">
           <Button onClick={() => void submit(true)} loading={busy} data-testid="link-price-yes">
-            Yes, use {formatPKR(picked.selling_price)}
+            Yes, use {formatPKR(offered.price)}
           </Button>
           <Button variant="secondary" onClick={() => void submit(false)} disabled={busy} data-testid="link-price-no">
             No, leave the line without a price

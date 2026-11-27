@@ -165,7 +165,7 @@ test.describe("US1: recording a payment without the internet", () => {
     expect(await idbGet(page, "storeOps", record[0]!.storeId)).toBeDefined();
   });
 
-  test("a database written by version 1 of the app upgrades to version 2 with everything intact", async ({ page, context, freshTenant }) => {
+  test("a database written by version 1 of the app upgrades to the current version with everything intact", async ({ page, context, freshTenant }) => {
     await signIn(page, freshTenant);
     await waitDeviceReady(page);
     await goOffline(context);
@@ -245,8 +245,8 @@ test.describe("US1: recording a payment without the internet", () => {
       db.close();
       return result;
     });
-    expect(info.version).toBe(2);
-    expect(info.stores).toEqual(["drafts", "medicines", "meta", "paymentOps", "storeExtras", "storeOps", "stores"]);
+    expect(info.version).toBe(3); // Module 012: version 3 (store rates)
+    expect(info.stores).toEqual(["drafts", "medicines", "meta", "paymentOps", "storeExtras", "storeOps", "storeRates", "stores"]);
     expect(await idbGet(page, "stores", storeId)).toMatchObject({ name: "Version One Store", pending: true });
     expect(await idbGet(page, "storeOps", storeId)).toMatchObject({ state: "on_device", payload: { name: "Version One Store" } });
     expect(await idbGet(page, "drafts", draftId)).toMatchObject({ orderId: draftId, neverSent: true, state: { notes: "kept from version 1", lines: [{ name: "Typed In Version One", quantity: 3 }] } });

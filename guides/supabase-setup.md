@@ -9,7 +9,7 @@ How to set up the database and sign-in for this app. Nothing here needs a servic
 
 ## 2. Apply the migrations, in this order
 
-Apply every file of `supabase/migrations/` to the project, one after the other, either with the CLI (`supabase db push`) or by pasting each file into the SQL editor. Seven of the nine files wrap themselves in `begin` and `commit`, and the CLI applies each file as one unit, so a failure leaves nothing half-applied; if you use the SQL editor for `0001` or `0005` (the two without it), run the file once and read the result before the next. The editor may warn about `drop ... if exists`; it only touches the objects the file itself creates.
+Apply every file of `supabase/migrations/` to the project, one after the other, either with the CLI (`supabase db push`) or by pasting each file into the SQL editor. Eight of the ten files wrap themselves in `begin` and `commit`, and the CLI applies each file as one unit, so a failure leaves nothing half-applied; if you use the SQL editor for `0001` or `0005` (the two without it), run the file once and read the result before the next. The editor may warn about `drop ... if exists`; it only touches the objects the file itself creates.
 
 | Order | File | What it adds |
 |-------|------|--------------|
@@ -22,10 +22,11 @@ Apply every file of `supabase/migrations/` to the project, one after the other, 
 | 7 | `0007_invoices.sql` | invoices, invoice numbers, order sheets |
 | 8 | `0008_store_accounts.sql` | the store account (khata): payments, reversals, the Account Summary, the statement |
 | 9 | `0011_reports.sql` | read-only reports and profit (functions and one index; no table) |
+| 10 | `0012_store_rates.sql` | each store's own selling prices (two tables, two columns on order lines); safe to run again |
 
 ### Why there is no 0009 and no 0010
 
-Migrations `0009` and `0010` belonged to the voice-ordering work, which was dropped (pull request 7 was closed without merging). They are **not in this repository**. They were applied earlier to the maintainer's test and development projects only, so those two projects hold two extra tables (`voice_parse_attempts` and `voice_diagnostics`). A new project does **not** need them: apply the nine files above and nothing else. The next new migration, if there is one, is numbered `0012` or higher.
+Migrations `0009` and `0010` belonged to the voice-ordering work, which was dropped (pull request 7 was closed without merging). They are **not in this repository**. They were applied earlier to the maintainer's test and development projects only, so those two projects hold two extra tables (`voice_parse_attempts` and `voice_diagnostics`). A new project does **not** need them: apply the ten files above and nothing else. The next new migration, if there is one, is numbered `0013` or higher.
 
 ## 3. Create the owner and the business
 
@@ -64,7 +65,7 @@ Good to know:
 
 ## 6. The test project (only for running the automated tests)
 
-Create a **second, separate** Supabase project, apply the same nine migrations to it, and put its URL, anon key and service-role key in `.env.test.local` as `SUPABASE_TEST_URL`, `SUPABASE_TEST_ANON_KEY` and `SUPABASE_TEST_SERVICE_ROLE_KEY`. The tests create and delete their own throwaway businesses there. Never point the tests at the project that holds real data. Without these values the tests that need a project are skipped with a visible message.
+Create a **second, separate** Supabase project, apply the same ten migrations to it, and put its URL, anon key and service-role key in `.env.test.local` as `SUPABASE_TEST_URL`, `SUPABASE_TEST_ANON_KEY` and `SUPABASE_TEST_SERVICE_ROLE_KEY`. The tests create and delete their own throwaway businesses there. Never point the tests at the project that holds real data. Without these values the tests that need a project are skipped with a visible message.
 
 ## 7. Which key goes where
 

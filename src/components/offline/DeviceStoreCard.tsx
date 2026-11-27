@@ -37,7 +37,7 @@ export function DeviceStoreCard({ item }: { item: SyncItem }) {
         ) : null}
         {item.state === "similar" ? (
           <div data-testid="similar-store-question" className="space-y-2 rounded-lg bg-warning-soft p-3">
-            <p className="font-medium">Is this the same store as one that is already on the server?</p>
+            <p className="font-medium">Is this the same store as one that is already on the server? Prices typed on its orders stay on them; nothing is remembered as the other store&apos;s price.</p>
             <ul className="space-y-2">
               {item.matches.map((m) => (
                 <li key={m.id} className="flex flex-wrap items-center justify-between gap-2">

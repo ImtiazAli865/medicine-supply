@@ -7,7 +7,7 @@ import type { EditorState, LineInfo } from "@/lib/orders/editor-state";
 import type { RepeatPlan, SlimMedicine, UsualResponse } from "@/lib/orders/fast-types";
 import type { Order } from "@/lib/orders/types";
 
-export const SCHEMA_VERSION = 2;
+export const SCHEMA_VERSION = 3;
 
 export const REGISTRY_DB_NAME = "medsupply-registry";
 
@@ -22,9 +22,11 @@ export const SCHEMA_UPGRADES: Record<number, readonly StoreName[]> = {
   1: ["meta", "medicines", "stores", "storeExtras", "drafts", "storeOps"],
   // Version 2 (Module 011) adds the queue of cash payments recorded without the internet. Existing data is untouched.
   2: ["paymentOps"],
+  // Version 3 (Module 012) adds each store's own selling prices, for orders taken without the internet.
+  3: ["storeRates"],
 };
 
-export type StoreName = "meta" | "medicines" | "stores" | "storeExtras" | "drafts" | "storeOps" | "paymentOps";
+export type StoreName = "meta" | "medicines" | "stores" | "storeExtras" | "drafts" | "storeOps" | "paymentOps" | "storeRates";
 
 export type SyncState = "on_device" | "waiting" | "syncing" | "synced" | "failed" | "conflict" | "blocked";
 
@@ -153,8 +155,20 @@ export interface StoreExtras {
 /** Medicines are stored exactly in the slim shape of Module 008: no purchase price, MRP or cost, ever. */
 export type StoredMedicine = SlimMedicine;
 
+/** One store's own selling price for a medicine (Module 012): selling prices only. */
+export interface StoredRate {
+  /** `storeId:productId`. */
+  key: string;
+  storeId: string;
+  productId: string;
+  rate: string;
+  version: number;
+  catalogPriceAtSet: string | null;
+}
+
 export interface MetaMap {
   schemaVersion: number;
+  ratesUpdatedAt: string;
   medicinesUpdatedAt: string;
   storesUpdatedAt: string;
   lastSyncAt: string;
@@ -180,6 +194,7 @@ export interface StoreMap {
   drafts: DraftRecord;
   storeOps: StoreOpRecord;
   paymentOps: PaymentOpRecord;
+  storeRates: StoredRate;
 }
 
 /** The key of each store's records (what `get` and `remove` take). */
@@ -191,6 +206,7 @@ export const KEY_PATH: Record<StoreName, string> = {
   drafts: "orderId",
   storeOps: "storeId",
   paymentOps: "paymentId",
+  storeRates: "key",
 };
 
 export type BatchOp =

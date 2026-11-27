@@ -37,8 +37,23 @@ function base64UrlToText(input: string): string | null {
   }
 }
 
+/**
+ * The name of this app's sign-in cookie, as Supabase builds it from the project's address; null when no address is
+ * configured. Cookies are shared by everything served from one host name, so another project's cookie must not be read.
+ */
+function ownCookieName(): string | null {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  if (!url) return null;
+  try {
+    return `sb-${new URL(url).hostname.split(".")[0]}-auth-token`;
+  } catch {
+    return null;
+  }
+}
+
 /** Joins the chunks of the auth cookie (`.0`, `.1`, ...) from a `document.cookie` style string; null when there is none. */
 export function readAuthCookieValue(cookieHeader: string): string | null {
+  const own = ownCookieName();
   const groups = new Map<string, Array<{ index: number; value: string }>>();
   for (const part of cookieHeader.split(";")) {
     const eq = part.indexOf("=");
@@ -47,6 +62,7 @@ export function readAuthCookieValue(cookieHeader: string): string | null {
     const match = AUTH_COOKIE.exec(name);
     if (!match) continue;
     const base = name.replace(/\.\d+$/, "");
+    if (own !== null && base !== own) continue;
     const list = groups.get(base) ?? [];
     list.push({ index: match[1] === undefined ? 0 : Number(match[1]), value: safeDecodeURIComponent(part.slice(eq + 1).trim()) });
     groups.set(base, list);

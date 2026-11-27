@@ -9,6 +9,8 @@ export type ItemStatus = "registered" | "pending_registration";
 /** current = live catalog price (draft only); snapshot = recorded at confirm; none = no selling price. */
 export type PriceBasis = "current" | "snapshot" | "none";
 
+import type { PriceSource, RateInfo } from "./price";
+
 export interface OrderLine {
   id: string;
   position: number;
@@ -28,6 +30,16 @@ export interface OrderLine {
   selling_price: string | null;
   line_total: string | null;
   product_is_active: boolean | null;
+  /** Where the price comes from (Module 012). Optional: an order saved on a phone before Module 012 has none. */
+  price_source?: PriceSource | null;
+  /** The price typed for this order; only on a draft. */
+  chosen_price?: string | null;
+  /** The medicine's catalog selling price now; only on a draft. */
+  catalog_price?: string | null;
+  /** The medicine's own unit; only on a draft. */
+  product_unit?: string | null;
+  /** The order store's rate for this medicine and unit; only on a draft. */
+  rate?: RateInfo | null;
 }
 
 export interface OrderTotals {
@@ -100,6 +112,14 @@ export interface OrderLineInput {
   name: string | null;
   quantity: number;
   unit: string;
+  /** Module 012. Absent: keep what the line has. null: automatic. A two-decimal string: the price typed for this order. */
+  price?: string | null;
+  /** Remember `price` as the store's rate for this medicine. */
+  remember?: boolean;
+  /** The rate version the screen saw (null when it saw none). */
+  rate_version?: number | null;
+  /** For a line added to a confirmed order: the price the screen showed. */
+  expected_price?: string | null;
 }
 
 export interface OrderSaveInput {
@@ -110,7 +130,15 @@ export interface OrderSaveInput {
   lines: OrderLineInput[];
 }
 
+/** A rate that was not remembered because it changed meanwhile (the order itself was saved). */
+export interface RateConflict {
+  product_id: string;
+  current_rate: string | null;
+  current_version: number | null;
+}
+
 export interface OrderResult {
   replayed: boolean;
   order: Order;
+  rate_conflicts?: RateConflict[];
 }

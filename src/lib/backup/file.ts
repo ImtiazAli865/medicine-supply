@@ -10,8 +10,9 @@ import { isValidMoney, parseMoneyToPaisa } from "@/lib/money";
 
 export const BACKUP_FORMAT = "medsupply-backup";
 /** Version 2 (Module 011) adds the cash payments waiting on the phone. Version 1 files are still read (they have no payments). */
-export const BACKUP_VERSION = 2;
-const READABLE_VERSIONS: readonly number[] = [1, 2];
+// Version 3 (Module 012) lets a waiting order line carry the price the supplier typed (and the "remember" tick).
+export const BACKUP_VERSION = 3;
+const READABLE_VERSIONS: readonly number[] = [1, 2, 3];
 /** The most waiting payments one file may hold. */
 export const MAX_BACKUP_PAYMENTS = 5000;
 
@@ -77,6 +78,9 @@ const waitingLineSchema = z
     manufacturer: text,
     quantity,
     unit: z.string().min(1).max(50),
+    price: z.string().regex(/^\d{1,10}\.\d{2}$/, "not a money amount").nullable().optional(),
+    remember: z.boolean().optional(),
+    rateVersion: z.number().int().min(1).nullable().optional(),
   })
   .strict();
 
@@ -127,7 +131,7 @@ const waitingPaymentSchema = z
 export const backupSchema = z
   .object({
     format: z.literal(BACKUP_FORMAT),
-    version: z.union([z.literal(1), z.literal(2)]),
+    version: z.union([z.literal(1), z.literal(2), z.literal(3)]),
     exportedAt: z.string().min(1),
     businessId: uuid,
     source: z.enum(["server+device", "device-only"]),
@@ -165,6 +169,8 @@ const FORBIDDEN_KEY = /price|mrp|cost|margin|profit|balance|invoice|payment|ledg
  * forbidden key (balance, invoice, ledger, a price, a cost...) anywhere, including inside a payment entry, is still found.
  */
 function isAllowedPaymentKey(path: string, key: string): boolean {
+  // Module 012: the one other exception, the price typed on a line of an order still waiting on the phone.
+  if (key === "price") return /^\$\.waiting\.orders\[\d+\]\.lines\[\d+\]$/.test(path);
   if (key === "payments") return path === "$.waiting";
   if (key === "waitingPayments") return path === "$.counts";
   if (key === "paymentId") return /^\$\.waiting\.payments\[\d+\]$/.test(path);
@@ -209,6 +215,9 @@ export function waitingOrderFromDraft(draft: DraftRecord): BackupWaitingOrder {
       ...infoOf(draft.lineInfo[l.id]),
       quantity: l.quantity,
       unit: l.unit,
+      // Only what the supplier typed for this order; never a catalog price or a store rate.
+      ...(l.price !== undefined ? { price: l.price } : {}),
+      ...(l.remember ? { remember: true, rateVersion: l.rate_version ?? null } : {}),
     })),
   };
 }

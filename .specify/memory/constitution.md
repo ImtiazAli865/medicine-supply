@@ -1,5 +1,14 @@
 <!--
 Sync Impact Report
+Version change: 1.0.1 -> 1.1.0 (MINOR, amended 2026-11-26 with the owner's explicit approval)
+Reason: the owner negotiates a different rate for each medicine with each store (Module 012).
+  In "Technical Constraints & Fixed Decisions", "One Selling Price per product" became one
+  catalog Selling Price per product plus optional per-store negotiated rates. No principle was
+  added, removed or redefined; Principle II (snapshot at confirm, a recorded price never changes,
+  prices never invented) applies unchanged. Migration plan: specs/012-store-rates (a database
+  change numbered 0012 or higher); existing orders and invoices keep their recorded prices.
+Templates requiring updates: none (plan, spec and tasks templates do not mention the line) OK
+Earlier report (1.0.1):
 Version change: 1.0.0 -> 1.0.1 (PATCH, amended 2026-11-19 with the owner's explicit approval)
 Reason: voice ordering was dropped from Module 008 (PR #7 closed, branch 008-voice-order-gemini
   kept); Module 008 is now "fast order entry". Only the module list in "Development Workflow
@@ -148,7 +157,9 @@ be completed MUST be reported as a limitation, never replaced silently by a stub
 
 - Stack: Next.js App Router + TypeScript, React, Tailwind CSS, Lucide React, Supabase
   (Postgres, Auth, RLS, JS client), IndexedDB, browser printing with print styles.
-- One Selling Price per product; no batch or expiry tracking; English UI; PKR.
+- One catalog Selling Price per product, plus optional per-store negotiated rates (typed by
+  the supplier, never invented or computed from another price); no batch or expiry tracking;
+  English UI; PKR.
 - Product catalog search is debounced, indexed and server-queried to stay fast at
   thousands of products.
 - Supabase interactions and the Gemini route handler are the only places holding server
@@ -186,4 +197,4 @@ clarifications. Every plan and review MUST check compliance with Principles I-VI
 any justified deviation is recorded in the plan's Complexity Tracking. Runtime guidance
 for the agent lives in `CLAUDE.md`.
 
-**Version**: 1.0.1 | **Ratified**: 2026-11-05 | **Last Amended**: 2026-11-19
+**Version**: 1.1.0 | **Ratified**: 2026-11-05 | **Last Amended**: 2026-11-26
