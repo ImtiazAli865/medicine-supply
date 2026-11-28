@@ -39,6 +39,8 @@ export const KNOWN_TABLE_ORDER = [
   "order_lines",
   "orders",
   "order_counters",
+  "store_rate_events",
+  "store_rates",
   "products",
   "imports",
   "stores",

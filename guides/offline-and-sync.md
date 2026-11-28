@@ -40,6 +40,10 @@ Removing a payment always asks first, names the amount and the store, and says i
 
 When you are online and a payment still waits on the phone, every balance you see is the server's balance and **does not include it**. The store's account screen, the Store accounts list, Home and the Reports balances all say so ("1 payment waiting on this phone, PKR 5,000.00, not counted yet" and a **Pending sync** label). The invoice print and the store statement never carry that note: they show only what the server has recorded. When the server confirms the payment the note disappears and the balance is read again.
 
+## Store prices without the internet
+
+The phone keeps each store's own selling prices (never a purchase price, MRP or cost), refreshed with the medicine list. Offline, an order of a store shows its rate; a price you type is kept with the order, and **Remember for this store** is applied when the order reaches the server. If the rate on the server changed meanwhile, it is not overwritten and the app says so. Prices are checked again when you confirm the order, which needs the internet.
+
 ## The address must be secure
 
 The app keeps its own files on the phone so a reload works without the internet. A browser only allows that on a **secure address**: `https://...`, or `localhost` on the same computer. On a plain `http://192.168...` address the offline mode **cannot start**, and the app says so at the top of the screen ("Offline mode cannot start on this address because it is not https."). Orders and payments still work while the signal is on. For real use, use the https address of the app.

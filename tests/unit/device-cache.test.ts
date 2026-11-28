@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { MemoryDeviceStorage } from "../helpers/memory-storage";
 import { FRESH_MS, noteStoreOpened, readCacheAge, refreshDeviceCopy, STALE_MS, type CacheTransport } from "@/lib/device/cache";
+import { answerLocal } from "@/lib/device/local-api";
 import type { BusinessDatabase } from "@/lib/device/schema";
 import type { RepeatPlan, SlimMedicine, UsualResponse } from "@/lib/orders/fast-types";
 
@@ -191,5 +192,64 @@ describe("device copy refresh", () => {
     const fresh = await readCacheAge(db, T0 + 60_000);
     expect(fresh).toMatchObject({ empty: false, stale: false });
     expect((await readCacheAge(db, T0 + STALE_MS + 1)).stale).toBe(true);
+  });
+});
+
+describe("Module 012: the store prices kept on the phone", () => {
+  function withRates(f: Fake, rates: Array<Record<string, unknown>>): CacheTransport {
+    return {
+      async get<T>(path: string): Promise<T> {
+        if (path.startsWith("/api/orders/rates")) return { items: rates, next_cursor: null } as T;
+        return f.transport.get<T>(path);
+      },
+    };
+  }
+  const rate = { store_id: "s1", product_id: "m00000", rate: "220.00", version: 2, catalog_price_at_set: "200.00", purchase_price: "90.00" };
+
+  it("stores only the selling rate fields, answers the store's list offline, and drops a removed rate", async () => {
+    const { db } = await openDb();
+    const f = fake(3);
+    await refreshDeviceCopy(db, withRates(f, [rate, { ...rate, store_id: "s2", rate: "230.00" }]), env());
+    expect(Object.keys((await db.get("storeRates", "s1:m00000"))!).sort()).toEqual(["catalogPriceAtSet", "key", "productId", "rate", "storeId", "version"]);
+
+    const answer = await answerLocal(db, "GET", "/api/stores/s1/rates");
+    expect(answer).toMatchObject({ status: 200, body: { items: [{ product_id: "m00000", rate: "220.00", version: 2, catalog_price: "12.00", product: { unit: "strip" } }] } });
+
+    await refreshDeviceCopy(db, withRates(f, []), env(), { force: true });
+    expect(await db.getAll("storeRates")).toEqual([]);
+  });
+
+  it("says the list is not on the phone when it was never loaded, and keeps the older copy when a refresh of it fails", async () => {
+    const { db } = await openDb();
+    expect((await answerLocal(db, "GET", "/api/stores/s1/rates"))!.status).toBe(503);
+    const f = fake(3);
+    await refreshDeviceCopy(db, withRates(f, [rate]), env());
+    const result = await refreshDeviceCopy(db, f.transport, env(), { force: true }); // the rate route fails
+    expect(result.status).toBe("ok");
+    expect(await db.getAll("storeRates")).toHaveLength(1);
+  });
+});
+
+describe("a phone database closed while a refresh is running", () => {
+  it("ends as a failed refresh and never as an unhandled error", async () => {
+    const { db } = await openDb();
+    // As in the browser: the first read is answered, then the screen stops the runtime and the connection is closing.
+    let reads = 0;
+    const closing = new Proxy(db, {
+      get(target, key) {
+        if (key === "get") {
+          return async (...args: Parameters<BusinessDatabase["get"]>) => {
+            reads += 1;
+            if (reads > 1) throw new DOMException("The database connection is closing.", "InvalidStateError");
+            return args[0] === "meta" ? { key: args[1], value: new Date(T0 - FRESH_MS * 2).toISOString() } : undefined;
+          };
+        }
+        const value = Reflect.get(target, key) as unknown;
+        return typeof value === "function" ? value.bind(target) : value;
+      },
+    });
+    const { transport, calls } = fake(1);
+    await expect(refreshDeviceCopy(closing, transport, { nowMs: () => T0 })).resolves.toEqual({ status: "failed", message: "The database connection is closing." });
+    expect(calls).toEqual([]);
   });
 });

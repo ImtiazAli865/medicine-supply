@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { zodFields } from "@/lib/api/errors";
-import { OrderActionSchema, OrderCancelSchema, OrderListQuerySchema, OrderSaveSchema } from "@/lib/validation/order";
+import { OrderActionSchema, OrderCancelSchema, OrderConfirmSchema, OrderListQuerySchema, OrderSaveSchema } from "@/lib/validation/order";
 
 const line = (over: Record<string, unknown> = {}) => ({
   id: randomUUID(),
@@ -140,5 +140,29 @@ describe("OrderListQuerySchema", () => {
     expect(() => OrderListQuerySchema.parse({ from: "2026-11-07", to: "2026-11-06" })).toThrow();
     expect(() => OrderListQuerySchema.parse({ limit: "101" })).toThrow();
     expect(() => OrderListQuerySchema.parse({ store_id: "x" })).toThrow();
+  });
+});
+
+describe("Module 012: price fields", () => {
+  const line = { id: "123e4567-e89b-42d3-a456-426614174001", product_id: "123e4567-e89b-42d3-a456-426614174002", name: null, quantity: 1, unit: "strip" };
+  const body = (extra: Record<string, unknown>) => ({
+    request_id: "123e4567-e89b-42d3-a456-426614174003",
+    expected_version: null,
+    store_id: "123e4567-e89b-42d3-a456-426614174004",
+    notes: null,
+    lines: [{ ...line, ...extra }],
+  });
+
+  it("keeps price, remember, rate_version and expected_price as sent, and leaves an absent price absent", () => {
+    const sent = OrderSaveSchema.parse(body({ price: "220", remember: true, rate_version: 3, expected_price: null }));
+    expect(sent.lines[0]).toMatchObject({ price: "220", remember: true, rate_version: 3, expected_price: null });
+    expect("price" in OrderSaveSchema.parse(body({})).lines[0]!).toBe(false);
+    expect(OrderSaveSchema.parse(body({ price: null })).lines[0]).toMatchObject({ price: null });
+  });
+
+  it("requires the shown prices to confirm", () => {
+    const base = { request_id: "123e4567-e89b-42d3-a456-426614174003", expected_version: 2 };
+    expect(() => OrderConfirmSchema.parse(base)).toThrow();
+    expect(OrderConfirmSchema.parse({ ...base, expected_prices: [{ line_id: line.id, selling_price: null }] }).expected_prices).toHaveLength(1);
   });
 });

@@ -106,7 +106,8 @@ test.describe("US1: take an order with no internet", () => {
 
     await expect(page.getByTestId("checklist-source")).toContainText("4 lines");
     await page.getByTestId("checklist-open").click();
-    await page.getByTestId("checklist-row").nth(1).getByTestId("checklist-toggle").click();
+    // Which usual medicine came first can vary (equal counts), so take a row that is not on the order yet.
+    await page.getByTestId("checklist-row").filter({ hasNotText: "On order" }).first().getByTestId("checklist-toggle").click();
     await page.getByTestId("checklist-add").click();
     await expect(page.getByTestId("order-line")).toHaveCount(2);
     await expect(page.getByTestId("save-status")).toHaveAttribute("data-state", "on_device");

@@ -59,9 +59,10 @@ export function OrderView({
       ) : null}
 
       <ul className="space-y-3" data-testid="order-lines">
-        {order.lines.map((line) => (
+        {order.lines.map((line, position) => (
           <OrderLineRow
             key={line.id}
+            position={position}
             line={{ id: line.id, product_id: line.product_id, name: line.product_id === null ? line.name : null, quantity: line.quantity, unit: line.unit }}
             info={infoFromLine(line)}
             actions={order.status !== "cancelled" ? renderLineActions?.(line) : undefined}

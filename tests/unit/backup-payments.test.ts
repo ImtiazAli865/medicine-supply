@@ -41,8 +41,8 @@ function reparse(file: unknown) {
 describe("building a version 2 backup", () => {
   it("writes version 2, the count and exactly the seven fields of each waiting payment", () => {
     const file = build();
-    expect(BACKUP_VERSION).toBe(2);
-    expect(file.version).toBe(2);
+    expect(BACKUP_VERSION).toBe(3);
+    expect(file.version).toBe(3);
     expect(file.counts.waitingPayments).toBe(2);
     expect(file.waiting.payments).toHaveLength(2);
     for (const p of file.waiting.payments) expect(Object.keys(p).sort()).toEqual(["amount", "date", "paymentId", "reason", "reference", "storeId", "syncState"]);
@@ -86,14 +86,14 @@ describe("reading a backup file", () => {
     }
   });
 
-  it("refuses a version 1 file that claims payments, and a version 3 file, with the existing messages", () => {
+  it("refuses a version 1 file that claims payments, and a file of a newer version, with the existing messages", () => {
     const v1 = JSON.parse(serializeBackup(build()));
     v1.version = 1;
     const refused = reparse(v1);
     expect(refused.ok).toBe(false);
-    const v3 = JSON.parse(serializeBackup(build()));
-    v3.version = 3;
-    const unknown = reparse(v3);
+    const v4 = JSON.parse(serializeBackup(build()));
+    v4.version = 4;
+    const unknown = reparse(v4);
     expect(unknown).toMatchObject({ ok: false, reason: "unknown_version", message: "This backup was made by a different version of the app and cannot be read. Nothing was imported." });
   });
 

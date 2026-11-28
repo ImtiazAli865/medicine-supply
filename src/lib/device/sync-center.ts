@@ -1054,7 +1054,9 @@ export class SyncCenter {
       if (entry.storeId !== storeId) continue;
       const local = entry.machine.getLocalState();
       entry.storeId = answer.existingId;
-      entry.machine.edit({ ...local, storeId: answer.existingId });
+      // Typed prices stay on the order; nothing becomes the other store's rate without the supplier ticking it again.
+      const lines = local.lines.map((l) => (l.remember ? { ...l, remember: false, rate_version: null } : l));
+      entry.machine.edit({ ...local, storeId: answer.existingId, lines });
     }
     this.storeOps.delete(storeId);
     // The payments waiting for this store go to the existing store in the same step as the store's removal.

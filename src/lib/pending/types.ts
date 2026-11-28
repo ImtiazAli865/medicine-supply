@@ -83,6 +83,9 @@ export interface WaitingLine {
   store_name: string;
   quantity: number;
   line_total: string;
+  /** The price this line will get (Module 012): the store's rate when it has one, else the typed price. */
+  price?: string;
+  price_source?: "store_rate" | "catalog";
 }
 
 export interface PriceFillPreview {

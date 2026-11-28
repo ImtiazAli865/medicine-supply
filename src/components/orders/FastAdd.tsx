@@ -11,6 +11,8 @@ import { ErrorState } from "@/components/ui/States";
 import { LoadingBlock } from "@/components/ui/Spinner";
 import { useMedicineList } from "@/lib/hooks/useMedicineList";
 import { cleanTypedName, LIMITS, parseQuantity } from "@/lib/orders/editor-state";
+import { formatPKR } from "@/lib/money";
+import { sameUnit, type StoreRateMap } from "@/lib/orders/price";
 import type { SlimMedicine } from "@/lib/orders/fast-types";
 
 const inputClass = "min-h-11 w-full rounded-lg border border-border bg-surface px-3 py-2 text-base";
@@ -21,16 +23,25 @@ function detailsOf(medicine: SlimMedicine): string {
   return [medicine.strength, medicine.dosage_form, medicine.pack_size, medicine.manufacturer].filter(Boolean).join(" · ");
 }
 
+/** The store's rate for a medicine, only for the medicine's own unit. */
+function rateFor(rates: StoreRateMap | null, medicine: SlimMedicine): string | null {
+  const rate = rates?.get(medicine.id);
+  return rate && sameUnit(rate.unit, medicine.unit) ? rate.rate : null;
+}
+
 function ResultButton({
   medicine,
   highlighted,
   disabled,
   onChoose,
+  storeRate = null,
 }: {
   medicine: SlimMedicine;
   highlighted: boolean;
   disabled: boolean;
   onChoose: (medicine: SlimMedicine) => void;
+  /** This store's rate for the medicine, when it has one (Module 012). */
+  storeRate?: string | null;
 }) {
   const details = detailsOf(medicine);
   return (
@@ -57,7 +68,11 @@ function ResultButton({
         ) : null}
         <span className="flex flex-wrap items-center gap-2 text-sm text-muted">
           Unit: {medicine.unit}
-          {medicine.selling_price === null ? <Badge tone="warning">No selling price</Badge> : null}
+          {storeRate ? (
+            <span data-testid="result-store-rate">Store rate {formatPKR(storeRate)}</span>
+          ) : medicine.selling_price === null ? (
+            <Badge tone="warning">No selling price</Badge>
+          ) : null}
         </span>
       </button>
     </li>
@@ -75,8 +90,11 @@ export function FastAdd({
   disabled,
   onPickProduct,
   onPickTyped,
+  rates = null,
 }: {
   disabled: boolean;
+  /** The order store's rates, shown on the results. */
+  rates?: StoreRateMap | null;
   onPickProduct: (medicine: SlimMedicine, quantity: number) => void;
   onPickTyped: (name: string, quantity: number, unit: string) => void;
 }) {
@@ -248,7 +266,14 @@ export function FastAdd({
           ) : (
             <ul className="space-y-2">
               {list.results.map((medicine, index) => (
-                <ResultButton key={medicine.id} medicine={medicine} highlighted={active === index} disabled={disabled} onChoose={choose} />
+                <ResultButton
+                  key={medicine.id}
+                  medicine={medicine}
+                  highlighted={active === index}
+                  disabled={disabled}
+                  onChoose={choose}
+                  storeRate={rateFor(rates, medicine)}
+                />
               ))}
             </ul>
           )}

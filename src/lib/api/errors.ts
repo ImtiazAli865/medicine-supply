@@ -19,6 +19,7 @@ export type ErrorCode =
   | "product_inactive"
   | "list_changed"
   | "price_differs"
+  | "price_changed"
   | "invalid_price"
   | "request_reused"
   | "list_too_large"
@@ -53,6 +54,7 @@ const STATUS: Record<ErrorCode, number> = {
   product_inactive: 409,
   list_changed: 409,
   price_differs: 409,
+  price_changed: 409,
   invalid_price: 400,
   request_reused: 409,
   list_too_large: 409,

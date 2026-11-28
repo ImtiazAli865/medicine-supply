@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { MemoryDeviceStorage } from "../helpers/memory-storage";
 import { readAuthCookieValue, rememberIdentity, resolveIdentity, userIdFromCookie } from "@/lib/device/identity";
 
@@ -85,6 +85,25 @@ describe("device identity", () => {
     const mismatch = await rememberIdentity(storage, header, { userId: USER_B, businessId: BIZ_B, businessName: "Beta" });
     expect(mismatch).toEqual({ status: "needs_sign_in", reason: "mismatch" });
     expect(await storage.getRegistryEntry(USER_B)).toBeUndefined();
+  });
+
+  it("reads only this project's sign-in cookie, whatever other projects left on the same address", async () => {
+    // Cookies are shared by every app served from one host name (all ports of localhost, for example).
+    vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "https://projectref.supabase.co");
+    try {
+      const other = `sb-otherproject-auth-token=${encodeURIComponent(sessionJson(USER_B))}`;
+      const own = `${NAME}=${encodeURIComponent(sessionJson(USER_A))}`;
+      expect(userIdFromCookie(`${other}; ${own}`)).toEqual({ userId: USER_A, reason: null });
+      expect(userIdFromCookie(other)).toEqual({ userId: null, reason: "no_cookie" });
+
+      const storage = new MemoryDeviceStorage();
+      const ok = await rememberIdentity(storage, `${other}; ${own}`, { userId: USER_A, businessId: BIZ_A, businessName: "Alpha" });
+      expect(ok.status).toBe("ok");
+      expect(await resolveIdentity(storage, `${other}; ${own}`)).toMatchObject({ status: "ok", businessId: BIZ_A });
+      expect(await resolveIdentity(storage, other)).toEqual({ status: "needs_sign_in", reason: "no_cookie" });
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 
   it("never returns or stores the cookie value", async () => {

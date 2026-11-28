@@ -1,0 +1,13 @@
+{
+  "$comment": "Module 012: changes from backup file version 2 to 3. Versions 1 and 2 are still read.",
+  "version": 3,
+  "$.waiting.orders[i].lines[j]": {
+    "added_optional": {
+      "price": "money string above zero, two decimals, or null (the price typed for this order)",
+      "remember": "boolean",
+      "rateVersion": "integer >= 1 or null"
+    }
+  },
+  "forbidden_key_exceptions": ["price at $.waiting.orders[i].lines[j] only"],
+  "unchanged": "No price on server orders or catalog data; store rates are never exported; no purchase price, MRP, cost, margin, profit, balance, invoice or ledger anywhere."
+}

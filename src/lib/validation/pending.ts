@@ -47,6 +47,8 @@ export const PriceApplyBodySchema = z
     price: PriceSchema,
     line_ids: z.array(z.uuid("A valid line id is required.")).max(1000, "At most 1,000 lines can be filled at once.").optional().default([]),
     fill_lines: z.boolean("fill_lines is required."),
+    // Module 012: the price of each line as the review showed it.
+    expected: z.array(z.object({ line_id: z.uuid("A valid line id is required."), price: z.string().max(14) })).max(1000).optional(),
   })
   .superRefine((value, ctx) => {
     if (!value.fill_lines && value.line_ids.length > 0) {

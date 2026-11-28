@@ -4,6 +4,7 @@ import Link from "next/link";
 import { Badge } from "@/components/ui/Badge";
 import { ButtonLink } from "@/components/ui/Button";
 import { ActiveToggle } from "@/components/ui/ActiveToggle";
+import { StoreRates } from "@/components/stores/StoreRates";
 import { requirePageContext } from "@/lib/api/auth";
 import { isUuid } from "@/lib/ids";
 import { getStore } from "@/lib/stores/repository";
@@ -55,6 +56,7 @@ export default async function StoreDetailPage({ params }: PageProps<"/stores/[id
         <Row label="Address" value={store.address} />
         <Row label="Notes" value={store.notes} />
       </dl>
+      <StoreRates storeId={store.id} />
     </div>
   );
 }

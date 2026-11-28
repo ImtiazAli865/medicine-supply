@@ -54,8 +54,9 @@ export async function addMedicine(page: Page, search: string, name = search, qua
   await expect(box).toHaveValue("");
 }
 
+/** The line at this place of the saved order (0 = added first), wherever the screen shows it: a draft shows newest first. */
 export function line(page: Page, index: number): Locator {
-  return page.getByTestId("order-line").nth(index);
+  return page.locator(`[data-testid="order-line"][data-position="${index}"]`);
 }
 
 export async function setQuantity(page: Page, index: number, quantity: string): Promise<void> {

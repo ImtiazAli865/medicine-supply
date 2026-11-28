@@ -1,4 +1,5 @@
 import type { SlimMedicine } from "./fast-types";
+import { effectivePrice, sameUnit, type PriceSource, type RateInfo, type StoreRateMap } from "./price";
 import type { Order, OrderLine, OrderLineInput, OrderSaveInput, PriceBasis } from "./types";
 
 // The state the order screen edits and autosaves, plus what the screen needs to display each line.
@@ -23,6 +24,12 @@ export interface LineInfo {
   price_basis: PriceBasis;
   /** True for a typed (not registered) line. */
   typed: boolean;
+  /** Module 012 (all optional: details kept on a phone before Module 012 have none). */
+  price_source?: PriceSource | null;
+  chosen_price?: string | null;
+  catalog_price?: string | null;
+  product_unit?: string | null;
+  rate?: RateInfo | null;
 }
 
 export const LIMITS = { quantityMax: 100000, lines: 200, notes: 1000, unit: 50, name: 200, reason: 500 } as const;
@@ -42,6 +49,8 @@ export function stateFromOrder(order: Order): EditorState {
       name: l.product_id === null ? l.name : null,
       quantity: l.quantity,
       unit: l.unit,
+      // The typed price of a draft line is part of what the screen edits and saves.
+      ...(l.chosen_price != null ? { price: l.chosen_price } : {}),
     })),
   };
 }
@@ -57,6 +66,11 @@ export function infoFromLine(line: OrderLine): LineInfo {
     selling_price: line.selling_price,
     price_basis: line.price_basis,
     typed: line.product_id === null,
+    price_source: line.price_source ?? null,
+    chosen_price: line.chosen_price ?? null,
+    catalog_price: line.catalog_price,
+    product_unit: line.product_unit,
+    rate: line.rate ?? null,
   };
 }
 
@@ -65,7 +79,7 @@ export function infoFromOrder(order: Order): Record<string, LineInfo> {
 }
 
 /** The fields of a medicine the order screen shows; both a full product and the slim shape of Module 008 have them. */
-export type ProductInfoSource = Pick<SlimMedicine, "name" | "strength" | "dosage_form" | "pack_size" | "manufacturer" | "selling_price">;
+export type ProductInfoSource = Pick<SlimMedicine, "name" | "strength" | "dosage_form" | "pack_size" | "manufacturer" | "selling_price"> & { unit?: string };
 
 /** Display info for a line the person just added from the catalog (the live price is shown as current). */
 export function infoFromProduct(product: ProductInfoSource): LineInfo {
@@ -79,7 +93,50 @@ export function infoFromProduct(product: ProductInfoSource): LineInfo {
     selling_price: product.selling_price,
     price_basis: product.selling_price === null ? "none" : "current",
     typed: false,
+    catalog_price: product.selling_price,
+    product_unit: product.unit,
   };
+}
+
+/** What the screen shows for one line's price, and where it comes from (Module 012). */
+export interface ShownPrice {
+  price: string | null;
+  source: PriceSource | null;
+  /** The order store's rate for this medicine (only for the medicine's own unit). */
+  rate: RateInfo | null;
+  /** True when the line uses the medicine's own unit, so its price can be remembered. */
+  unitMatches: boolean;
+  /** The medicine's unit when it is known. */
+  productUnit: string | null;
+  catalog: string | null;
+}
+
+/**
+ * The price of one line as the screen shows it. A recorded (snapshot) price is shown as recorded. Otherwise the same
+ * rule as the database applies, using the store's rates when they are loaded and the order's own details when not.
+ */
+export function shownPrice(line: OrderLineInput, info: LineInfo | undefined, rates: StoreRateMap | null): ShownPrice {
+  const none: ShownPrice = { price: null, source: null, rate: null, unitMatches: false, productUnit: null, catalog: null };
+  if (!info) return none;
+  if (info.price_basis === "snapshot") return { ...none, price: info.selling_price, source: info.price_source ?? null };
+  if (line.product_id === null) return none;
+  const known = rates?.get(line.product_id);
+  const productUnit = known?.unit ?? info.product_unit ?? null;
+  const unitMatches = productUnit !== null && sameUnit(line.unit, productUnit);
+  // Without the loaded rates, the rate the server sent with this order is used (it is only sent for a matching unit).
+  const rate = rates ? (known && unitMatches ? known : null) : productUnit === null || unitMatches ? (info.rate ?? null) : null;
+  const catalog = info.catalog_price !== undefined ? info.catalog_price : info.selling_price;
+  const chosen = line.price !== undefined ? line.price : (info.chosen_price ?? null);
+  const result = effectivePrice({
+    typedLine: false,
+    chosen,
+    rate: rate?.rate,
+    productActive: true,
+    lineUnit: line.unit,
+    productUnit: line.unit,
+    catalog,
+  });
+  return { price: result.price, source: result.source, rate, unitMatches, productUnit, catalog: catalog ?? null };
 }
 
 export function infoForTyped(name: string): LineInfo {

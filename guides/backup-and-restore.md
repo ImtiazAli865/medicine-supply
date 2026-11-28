@@ -10,7 +10,7 @@ Settings → **Sync and backup** has **Export backup** and **Import backup**. A 
 
 ## What it never holds
 
-Prices of any kind (purchase price, MRP, selling price), costs, margins or profit, invoices, balances, ledger entries, passwords, keys, tokens or the sign-in cookie. The app refuses to read a file that contains any of these, and its tests check every file it makes.
+Prices from the catalog or from a store's saved rates (purchase price, MRP, selling price), costs, margins or profit, invoices, balances, ledger entries, passwords, keys, tokens or the sign-in cookie. The one exception is a price **you typed** on a line of an order still waiting on the phone (backup file version 3), so the order is restored as you made it. The app refuses to read a file that contains any other price or any of these, and its tests check every file it makes.
 
 ## When to export
 

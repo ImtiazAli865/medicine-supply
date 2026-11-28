@@ -30,9 +30,12 @@ import { conflictFrom, kindOfServerConflict, type Choice } from "@/lib/device/co
 import type { DraftHandle } from "@/lib/device/sync-center";
 import { useOrderEditor, type NewLineEntry } from "@/lib/hooks/useOrderEditor";
 import { useInactiveLines } from "@/lib/hooks/useInactiveLines";
+import { useStoreRates } from "@/lib/hooks/useStoreRates";
 import { useUsualMedicines } from "@/lib/hooks/useUsualMedicines";
-import { LIMITS, repeatedTypedLineIds } from "@/lib/orders/editor-state";
+import { LIMITS, repeatedTypedLineIds, shownPrice, type ShownPrice } from "@/lib/orders/editor-state";
 import type { RepeatLine, RepeatPlan, RepeatSource, SlimMedicine, UsualMedicine } from "@/lib/orders/fast-types";
+import { formatPKR } from "@/lib/money";
+import { newestFirst, LATEST_SHOWN } from "@/lib/orders/line-view";
 import { formatOrderNumber } from "@/lib/orders/number";
 import type { Order } from "@/lib/orders/types";
 import type { Product } from "@/lib/products/types";
@@ -127,6 +130,8 @@ function OrderEditorScreen({
   const proposals = usePendingProposals(orderId, (order) => editor.adoptServerOrder(order));
   // Usual medicines and the repeat source belong to the chosen store of a draft (never to a confirmed order being edited).
   const usual = useUsualMedicines(mode === "edit" ? null : state.storeId);
+  // The order store's rates (Module 012): what a line is priced at, and what the search results show.
+  const storeRates = useStoreRates(state.storeId);
   const [undo, setUndo] = useState<UndoAction | null>(null);
   const undoKey = useRef(0);
 
@@ -142,6 +147,7 @@ function OrderEditorScreen({
   const [actionError, setActionError] = useState<string | null>(null);
   const [toTyped, setToTyped] = useState<string | null>(null);
   const [separateId, setSeparateId] = useState<string | null>(null);
+  const [showAllLines, setShowAllLines] = useState(false);
 
   const handleValidity = useCallback((id: string, ok: boolean) => {
     setInvalid((prev) => {
@@ -161,7 +167,8 @@ function OrderEditorScreen({
   const hasLines = state.lines.length > 0;
   const repeated = repeatedTypedLineIds(state, info);
   const onOrderIds = useMemo(() => new Set(state.lines.flatMap((l) => (l.product_id ? [l.product_id] : []))), [state.lines]);
-  const unpriced = state.lines.filter((l) => (info[l.id]?.selling_price ?? null) === null).length;
+  const shown: Record<string, ShownPrice> = Object.fromEntries(state.lines.map((l) => [l.id, shownPrice(l, info[l.id], storeRates.rates)]));
+  const unpriced = state.lines.filter((l) => shown[l.id]!.price === null).length;
   const notRegistered = state.lines.filter((l) => l.product_id === null).length;
   const conflict = snapshot.status === "changed_elsewhere";
   // A save refused because a medicine added on this screen became inactive: name the lines and offer to remove them.
@@ -199,6 +206,25 @@ function OrderEditorScreen({
     setStoreName(server.store.name);
     if (server.status !== "draft") onOrderChange(server);
   }
+
+  // A rate remembered by the last save is read again, so the next line added shows it.
+  const remembers = !editing && state.lines.some((l) => l.remember);
+  const reloadRates = storeRates.retry;
+  useEffect(() => {
+    if (remembers && snapshot.lastSavedAt) reloadRates();
+    // Only a new confirmed save matters.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [snapshot.lastSavedAt]);
+
+  // A rate that changed elsewhere is never overwritten: after the save the server's value differs from the typed one.
+  const notRemembered =
+    !editing && snapshot.status === "saved"
+      ? state.lines.flatMap((l) => {
+          const server = snapshot.serverOrder?.lines.find((s) => s.id === l.id);
+          if (!l.remember || !l.price || !server || server.chosen_price !== l.price || !shown[l.id]!.unitMatches) return [];
+          return server.rate?.rate === l.price ? [] : [{ id: l.id, name: server.name, rate: server.rate?.rate ?? null }];
+        })
+      : [];
 
   const showUndo = useCallback((label: string, lineIds: string[]) => {
     undoKey.current += 1;
@@ -250,10 +276,12 @@ function OrderEditorScreen({
     setBusy(true);
     setActionError(null);
     try {
-      const order = await editor.confirm();
+      // The price of every line exactly as shown: the server refuses to record anything else.
+      const order = await editor.confirm(state.lines.map((l) => ({ line_id: l.id, selling_price: shown[l.id]!.price })));
       setConfirmOpen(false);
       onOrderChange(order);
     } catch (error) {
+      if (error instanceof ClientApiError && error.code === "price_changed") storeRates.retry();
       setActionError(messageOf(error));
     } finally {
       setBusy(false);
@@ -279,6 +307,8 @@ function OrderEditorScreen({
     setBusy(true);
     setActionError(null);
     try {
+      // Lines being added now carry the price shown for them.
+      editor.setExpectedPrices(new Map(state.lines.filter((l) => !originalIds.has(l.id) && l.product_id !== null).map((l) => [l.id, shown[l.id]!.price])));
       onOrderChange(await editor.saveChanges());
     } catch (error) {
       setActionError(messageOf(error));
@@ -302,6 +332,12 @@ function OrderEditorScreen({
     if (current.status !== (editing ? "confirmed" : "draft")) onOrderChange(current);
     else if (editing) onOrderChange(current);
   }
+
+  // A draft shows its newest lines first (they were just added); a confirmed order being edited keeps its recorded order.
+  const attention = new Set([...invalid, ...[duplicate?.lineId, focusLine].filter((id): id is string => Boolean(id))]);
+  const lineView = editing
+    ? { rows: state.lines.map((line, position) => ({ line, position, hidden: false })), older: 0 }
+    : newestFirst(state.lines, showAllLines, attention);
 
   return (
     // data-unsaved-guard keeps this screen (and what was typed) on display if the session expires.
@@ -433,34 +469,41 @@ function OrderEditorScreen({
         </Link>
       ) : null}
 
-      <FastAdd disabled={atLineLimit} onPickProduct={(medicine, quantity) => pickProduct(medicine, { quantity, announce: true })} onPickTyped={pickTyped} />
-      <UndoBar action={undo} onUndo={(ids) => editor.removeLines(ids)} onDismiss={dismissUndo} />
-      {editing ? null : (
-        <>
-          <RepeatLastOrder source={usual.source} hasLines={hasLines} disabled={atLineLimit} fetchRepeat={usual.fetchRepeat} onApply={applyRepeat} />
-          <LastOrderChecklist source={usual.source} disabled={atLineLimit} onOrderIds={onOrderIds} fetchRepeat={usual.fetchRepeat} onAdd={addFromLastOrder} />
-          <UsualMedicines
-            usual={usual.usual}
-            hasHistory={usual.source !== null}
-            loading={usual.loading}
-            error={usual.error ?? null}
-            onRetry={usual.retry}
-            onOrderIds={onOrderIds}
-            disabled={atLineLimit}
-            onAdd={addUsual}
-          />
-        </>
-      )}
+      {notRemembered.length > 0 ? (
+        <div data-testid="rate-conflict">
+          <Banner kind="warning">
+            {notRemembered.map((c) => (
+              <p key={c.id}>
+                The rate for <span dir="auto">{c.name}</span> was changed elsewhere and was not replaced{c.rate ? ` (it is ${formatPKR(c.rate)} now)` : ""}. This order keeps your price.
+              </p>
+            ))}
+          </Banner>
+        </div>
+      ) : null}
 
+      <FastAdd
+        disabled={atLineLimit}
+        rates={storeRates.rates}
+        onPickProduct={(medicine, quantity) => pickProduct(medicine, { quantity, announce: true })}
+        onPickTyped={pickTyped}
+      />
+      <UndoBar action={undo} onUndo={(ids) => editor.removeLines(ids)} onDismiss={dismissUndo} />
       <section aria-label="Order lines" className="space-y-3">
+        {hasLines && !editing ? (
+          <h2 className="text-lg font-semibold" data-testid="lines-heading">
+            In this order ({state.lines.length}){state.lines.length > 1 ? <span className="text-sm font-normal text-muted"> · newest first</span> : null}
+          </h2>
+        ) : null}
         {hasLines ? (
           <ul className="space-y-3" data-testid="order-lines">
-            {state.lines.map((line) => {
+            {lineView.rows.map(({ line, position, hidden }) => {
               const isNew = editing && !originalIds.has(line.id);
               return (
                 <OrderLineRow
                   key={`${line.id}:${editor.epoch}`}
                   line={line}
+                  position={position}
+                  hidden={hidden}
                   info={info[line.id]}
                   highlight={duplicate?.lineId === line.id}
                   focusQuantity={focusLine === line.id}
@@ -468,6 +511,8 @@ function OrderEditorScreen({
                   lockName={editing && !isNew}
                   priceNote={isNew ? "Price recorded when you save" : undefined}
                   onChange={(patch) => editor.updateLine(line.id, patch)}
+                  shown={shown[line.id]}
+                  onPrice={!editing || isNew ? (patch) => editor.setLinePrice(line.id, patch) : undefined}
                   onRemove={() => (editing ? setRemoveId(line.id) : editor.removeLine(line.id))}
                   onValidity={handleValidity}
                   actions={
@@ -494,11 +539,32 @@ function OrderEditorScreen({
           </ul>
         ) : (
           <p data-testid="no-lines" className="rounded-xl border border-dashed border-border bg-surface px-4 py-6 text-center text-muted">
-            No medicines yet. Search above, tap a usual medicine, or repeat the last order.
+            {editing ? "No medicines yet. Search above to add one." : "No medicines yet. Search above, or use the last order or a usual medicine below."}
           </p>
         )}
+        {!editing && lineView.older > 0 ? (
+          <Button variant="secondary" className="w-full" data-testid="toggle-lines" aria-expanded={showAllLines} onClick={() => setShowAllLines((v) => !v)}>
+            {showAllLines ? `Show only the latest ${LATEST_SHOWN}` : `Show all ${state.lines.length} lines`}
+          </Button>
+        ) : null}
         {atLineLimit ? <p className="text-sm text-warning">An order can have at most {LIMITS.lines} lines. Start a new order for more.</p> : null}
       </section>
+      {editing ? null : (
+        <>
+          <RepeatLastOrder source={usual.source} hasLines={hasLines} disabled={atLineLimit} fetchRepeat={usual.fetchRepeat} onApply={applyRepeat} />
+          <LastOrderChecklist source={usual.source} disabled={atLineLimit} onOrderIds={onOrderIds} fetchRepeat={usual.fetchRepeat} onAdd={addFromLastOrder} />
+          <UsualMedicines
+            usual={usual.usual}
+            hasHistory={usual.source !== null}
+            loading={usual.loading}
+            error={usual.error ?? null}
+            onRetry={usual.retry}
+            onOrderIds={onOrderIds}
+            disabled={atLineLimit}
+            onAdd={addUsual}
+          />
+        </>
+      )}
 
       <div>
         <label htmlFor="order-notes" className="mb-1 block text-sm font-medium">
@@ -515,7 +581,7 @@ function OrderEditorScreen({
         />
       </div>
 
-      <OrderTotals lines={state.lines.map((l) => ({ quantity: l.quantity, selling_price: info[l.id]?.selling_price ?? null }))} lastKnown={!online && !editing} />
+      <OrderTotals lines={state.lines.map((l) => ({ quantity: l.quantity, selling_price: shown[l.id]!.price }))} lastKnown={!online && !editing} />
 
       {actionError && !confirmOpen && !discardOpen ? <Banner kind="error">{actionError}</Banner> : null}
 

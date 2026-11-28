@@ -36,7 +36,7 @@ beforeAll(async () => {
   tablesBefore = await tables(before);
   columnsBefore = await columns(before);
   await before.close();
-  db = await createTestDb();
+  db = await createTestDb({ upTo: "0011_reports.sql" });
 }, 60_000);
 
 afterAll(async () => {

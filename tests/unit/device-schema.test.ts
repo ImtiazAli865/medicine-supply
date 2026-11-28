@@ -34,10 +34,15 @@ describe("device schema", () => {
   });
 
   it("adds the payment queue in version 2 and keeps version 1 as it was", () => {
-    expect(SCHEMA_VERSION).toBe(2);
+    expect(SCHEMA_VERSION).toBe(3);
     expect(SCHEMA_UPGRADES[1]).toEqual(["meta", "medicines", "stores", "storeExtras", "drafts", "storeOps"]);
     expect(SCHEMA_UPGRADES[2]).toEqual(["paymentOps"]);
     expect(KEY_PATH.paymentOps).toBe("paymentId");
+  });
+
+  it("adds only the store prices in version 3, so a phone on version 2 keeps all it holds", () => {
+    expect(SCHEMA_UPGRADES[3]).toEqual(["storeRates"]);
+    expect(KEY_PATH.storeRates).toBe("key");
   });
 
   it("keeps no balance, invoice, ledger or price field on a waiting payment", () => {

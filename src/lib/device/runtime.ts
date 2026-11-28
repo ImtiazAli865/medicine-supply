@@ -4,13 +4,13 @@
 
 import { fetchJson, setConnectivityReporter, setLocalAnswerHook } from "@/lib/api/client";
 import { newId } from "@/lib/ids";
-import { readCacheAge, refreshDeviceCopy, type CacheAge, type RefreshOutcome } from "./cache";
+import { readCacheAge, refreshDeviceCopy, refreshRates, type CacheAge, type RefreshOutcome } from "./cache";
 import { createConnectivity, type Connectivity } from "./connectivity";
 import { createIndexedDbStorage } from "./db";
 import { rememberIdentity, resolveIdentity, type Identity } from "./identity";
 import { answerLocal } from "./local-api";
 import { createLeaderElection } from "./locks";
-import { saveOrderTransport } from "@/lib/orders/save-transport";
+import { RATES_CHANGED_EVENT, saveOrderTransport } from "@/lib/orders/save-transport";
 import { saveStoreTransport } from "./store-transport";
 import { sendPaymentTransport } from "./payment-transport";
 import type { BusinessDatabase, DeviceStorage } from "./schema";
@@ -127,6 +127,10 @@ export async function startDeviceRuntime(args: StartArgs): Promise<DeviceRuntime
     return outcome;
   };
 
+  // A rate saved on this phone reaches its copy at once, so the next order without the internet shows it.
+  const onRatesChanged = () => void refreshRates(db, { get: async <T,>(path: string) => (await fetchJson<T>(path)).data }, new Date().toISOString());
+  window.addEventListener(RATES_CHANGED_EVENT, onRatesChanged);
+
   const onOnline = () => connectivity.browserOnline();
   const onOffline = () => connectivity.browserOffline();
   window.addEventListener("online", onOnline);
@@ -151,7 +155,8 @@ export async function startDeviceRuntime(args: StartArgs): Promise<DeviceRuntime
     center,
     identity,
     refresh,
-    readCacheAge: () => readCacheAge(db, Date.now()),
+    // A stopped runtime has closed its database; a late question then has no answer instead of an error.
+    readCacheAge: () => readCacheAge(db, Date.now()).catch(() => null),
     clearData: async () => {
       // Stop sending first, then delete only THIS business's database (never another business's) and its registry entry.
       center.stop();
@@ -161,6 +166,7 @@ export async function startDeviceRuntime(args: StartArgs): Promise<DeviceRuntime
     },
     stop: () => {
       window.removeEventListener("online", onOnline);
+      window.removeEventListener(RATES_CHANGED_EVENT, onRatesChanged);
       window.removeEventListener("offline", onOffline);
       offConnectivity();
       if (refreshTimer !== null) clearInterval(refreshTimer);

@@ -209,3 +209,24 @@ describe("stores made offline", () => {
     expect(server.calls).toEqual([`store:Restart Store:plain`, `order:o1:${store.id}`]);
   });
 });
+
+describe("Module 012: typed prices when an offline store turns out to exist", () => {
+  it("keeps the typed price on the order and clears the remember tick, so nothing becomes the other store's rate", async () => {
+    server.storeScript = ["similar"];
+    const center = makeCenter();
+    await center.start();
+    const store = (await center.createStore({ name: "Existing Pharmacy " }))!;
+    const handle = await center.openDraft({ orderId: "o9", serverOrder: null, storeId: store.id, lineInfo: {} });
+    handle.machine.edit({
+      storeId: store.id,
+      notes: "",
+      lines: [{ id: "l-o9", product_id: "p1", name: null, quantity: 2, unit: "strip", price: "220.00", remember: true, rate_version: null }],
+    });
+    connectivity.reportSuccess();
+    await settle(2_000);
+    await center.resolveSimilar(store.id, { choice: "use_existing", existingId: "existing-store" });
+    await settle(2_000);
+    expect(server.orderStore.get("o9")).toBe("existing-store");
+    expect(server.orderLines.get("o9")).toEqual([expect.objectContaining({ price: "220.00", remember: false, rate_version: null })]);
+  });
+});
