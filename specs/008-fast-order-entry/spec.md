@@ -43,6 +43,8 @@ Most stores order nearly the same medicines each time. After choosing a store th
 
 Below the store name the supplier sees the medicines this store orders most often, each on a card that shows full identifying details and the quantity the store ordered last time. One tap adds the line.
 
+**Changed 2026-11-28 (owner's choice after a trial):** the lines of a draft order now sit directly below the search box, above the last order and the usual medicines, newest first. Only the latest three are open ("Show all N lines" opens the rest); a line with an invalid entry or one being pointed at is never hidden. The saved order and the invoice keep the order of adding, and editing a confirmed order is unchanged.
+
 **Why this priority**: When the supplier wants only some of the usual medicines, or a few extra, there is no typing at all.
 
 **Independent Test**: With a store that has several earlier orders, open a new order and add three usual medicines with one tap each; check three lines with the shown quantities and units, in three interactions.

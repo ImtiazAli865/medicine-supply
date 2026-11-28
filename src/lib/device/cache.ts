@@ -140,12 +140,17 @@ export async function refreshDeviceCopy(
   options: { force?: boolean } = {},
 ): Promise<RefreshOutcome> {
   const now = env.nowMs();
+  // Every read of the phone database stays inside a try: the connection can be closing, and this must never reject.
   if (!options.force) {
-    const updated = (await db.get("meta", "medicinesUpdatedAt"))?.value as string | undefined;
-    const storesUpdated = (await db.get("meta", "storesUpdatedAt"))?.value as string | undefined;
-    if (updated && storesUpdated) {
-      const age = now - Date.parse(updated);
-      if (Number.isFinite(age) && age >= 0 && age < FRESH_MS) return { status: "skipped", reason: "fresh" };
+    try {
+      const updated = (await db.get("meta", "medicinesUpdatedAt"))?.value as string | undefined;
+      const storesUpdated = (await db.get("meta", "storesUpdatedAt"))?.value as string | undefined;
+      if (updated && storesUpdated) {
+        const age = now - Date.parse(updated);
+        if (Number.isFinite(age) && age >= 0 && age < FRESH_MS) return { status: "skipped", reason: "fresh" };
+      }
+    } catch (error) {
+      return failed(error);
     }
   }
   try {
@@ -183,8 +188,12 @@ export async function refreshDeviceCopy(
     for (const e of extras) await db.put("storeExtras", { storeId: e.storeId, usual: e.usual, repeatPlan: e.repeatPlan, updatedAt: stamp });
     return { status: "ok", medicines: medicines.rows.length, stores: stores.length, extras: extras.length, truncated: medicines.truncated };
   } catch (error) {
-    return { status: "failed", message: error instanceof Error && error.message ? error.message : "The lists could not be refreshed." };
+    return failed(error);
   }
+}
+
+function failed(error: unknown): RefreshOutcome {
+  return { status: "failed", message: error instanceof Error && error.message ? error.message : "The lists could not be refreshed." };
 }
 
 export interface CacheAge {

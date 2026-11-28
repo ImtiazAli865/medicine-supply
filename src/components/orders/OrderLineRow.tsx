@@ -14,6 +14,8 @@ const inputClass = "min-h-11 w-full rounded-lg border border-border bg-surface p
 /** One order line: the medicine, its quantity and unit, and its price. Read-only when `readOnly`. */
 export function OrderLineRow({
   line,
+  position,
+  hidden = false,
   info,
   highlight = false,
   focusQuantity = false,
@@ -29,6 +31,10 @@ export function OrderLineRow({
   onPrice,
 }: {
   line: OrderLineInput;
+  /** The line's place in the saved order, which the screen may show in another order. */
+  position?: number;
+  /** An older line that is not open: it stays mounted, so what was typed in it is kept. */
+  hidden?: boolean;
   info: LineInfo | undefined;
   highlight?: boolean;
   focusQuantity?: boolean;
@@ -86,6 +92,8 @@ export function OrderLineRow({
     <li
       data-testid="order-line"
       data-line-id={line.id}
+      data-position={position}
+      hidden={hidden}
       className={`space-y-3 rounded-xl border bg-surface p-3 ${highlight ? "border-primary ring-2 ring-primary-soft" : "border-border"}`}
     >
       <div className="flex items-start justify-between gap-2">

@@ -158,45 +158,50 @@ export function OfflineProvider({ server, children }: { server: ServerIdentity |
     let timer: ReturnType<typeof setInterval> | null = null;
 
     const identity = userId && businessId && businessName ? { userId, businessId, businessName } : null;
-    startDeviceRuntime({
-      server: identity,
-      onRefreshed: (outcome) => {
-        if (cancelled) return;
-        setStorageLow(outcome.status === "skipped" && outcome.reason === "storage_low");
-        if (outcome.status === "ok")
-          void runtimeRef.current?.readCacheAge().then((age) => !cancelled && setCacheAge(age));
-      },
-    })
-      .then(async (rt) => {
-        if (cancelled) {
-          rt.stop();
-          return;
-        }
-        started = rt;
-        runtimeRef.current = rt;
-        setRuntime(rt);
-        setMode(rt.mode);
-        setMessage(rt.message);
-        setOnline(rt.connectivity.getState() === "online");
-        offs.push(rt.connectivity.subscribe((s) => setOnline(s === "online")));
-        const center = rt.center;
-        if (center) {
-          setStatus(center.getStatus());
-          offs.push(center.subscribe(() => setStatus(center.getStatus())));
-        }
-        setCacheAge(await rt.readCacheAge());
-        timer = setInterval(
-          () => void rt.readCacheAge().then((age) => !cancelled && setCacheAge(age)),
-          CACHE_AGE_EVERY_MS,
-        );
-        if (identity) void registerWorker().then((ok) => !cancelled && setRegisterFailed(!ok));
+    // Started one tick later: React's development double run of effects discards the first run at once, and a discarded run
+    // must not open the phone's storage or take over the app's global hooks from the run that stays.
+    queueMicrotask(() => {
+      if (cancelled) return;
+      startDeviceRuntime({
+        server: identity,
+        onRefreshed: (outcome) => {
+          if (cancelled) return;
+          setStorageLow(outcome.status === "skipped" && outcome.reason === "storage_low");
+          if (outcome.status === "ok")
+            void runtimeRef.current?.readCacheAge().then((age) => !cancelled && setCacheAge(age));
+        },
       })
-      .catch(() => {
-        if (!cancelled) {
-          setMode("unavailable");
-          setMessage("The device storage could not be started.");
-        }
-      });
+        .then(async (rt) => {
+          if (cancelled) {
+            rt.stop();
+            return;
+          }
+          started = rt;
+          runtimeRef.current = rt;
+          setRuntime(rt);
+          setMode(rt.mode);
+          setMessage(rt.message);
+          setOnline(rt.connectivity.getState() === "online");
+          offs.push(rt.connectivity.subscribe((s) => setOnline(s === "online")));
+          const center = rt.center;
+          if (center) {
+            setStatus(center.getStatus());
+            offs.push(center.subscribe(() => setStatus(center.getStatus())));
+          }
+          setCacheAge(await rt.readCacheAge());
+          timer = setInterval(
+            () => void rt.readCacheAge().then((age) => !cancelled && setCacheAge(age)),
+            CACHE_AGE_EVERY_MS,
+          );
+          if (identity) void registerWorker().then((ok) => !cancelled && setRegisterFailed(!ok));
+        })
+        .catch(() => {
+          if (!cancelled) {
+            setMode("unavailable");
+            setMessage("The device storage could not be started.");
+          }
+        });
+    });
 
     return () => {
       cancelled = true;

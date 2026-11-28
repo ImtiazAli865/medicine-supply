@@ -229,3 +229,27 @@ describe("Module 012: the store prices kept on the phone", () => {
     expect(await db.getAll("storeRates")).toHaveLength(1);
   });
 });
+
+describe("a phone database closed while a refresh is running", () => {
+  it("ends as a failed refresh and never as an unhandled error", async () => {
+    const { db } = await openDb();
+    // As in the browser: the first read is answered, then the screen stops the runtime and the connection is closing.
+    let reads = 0;
+    const closing = new Proxy(db, {
+      get(target, key) {
+        if (key === "get") {
+          return async (...args: Parameters<BusinessDatabase["get"]>) => {
+            reads += 1;
+            if (reads > 1) throw new DOMException("The database connection is closing.", "InvalidStateError");
+            return args[0] === "meta" ? { key: args[1], value: new Date(T0 - FRESH_MS * 2).toISOString() } : undefined;
+          };
+        }
+        const value = Reflect.get(target, key) as unknown;
+        return typeof value === "function" ? value.bind(target) : value;
+      },
+    });
+    const { transport, calls } = fake(1);
+    await expect(refreshDeviceCopy(closing, transport, { nowMs: () => T0 })).resolves.toEqual({ status: "failed", message: "The database connection is closing." });
+    expect(calls).toEqual([]);
+  });
+});

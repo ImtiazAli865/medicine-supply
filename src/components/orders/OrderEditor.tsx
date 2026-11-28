@@ -35,6 +35,7 @@ import { useUsualMedicines } from "@/lib/hooks/useUsualMedicines";
 import { LIMITS, repeatedTypedLineIds, shownPrice, type ShownPrice } from "@/lib/orders/editor-state";
 import type { RepeatLine, RepeatPlan, RepeatSource, SlimMedicine, UsualMedicine } from "@/lib/orders/fast-types";
 import { formatPKR } from "@/lib/money";
+import { newestFirst, LATEST_SHOWN } from "@/lib/orders/line-view";
 import { formatOrderNumber } from "@/lib/orders/number";
 import type { Order } from "@/lib/orders/types";
 import type { Product } from "@/lib/products/types";
@@ -146,6 +147,7 @@ function OrderEditorScreen({
   const [actionError, setActionError] = useState<string | null>(null);
   const [toTyped, setToTyped] = useState<string | null>(null);
   const [separateId, setSeparateId] = useState<string | null>(null);
+  const [showAllLines, setShowAllLines] = useState(false);
 
   const handleValidity = useCallback((id: string, ok: boolean) => {
     setInvalid((prev) => {
@@ -331,6 +333,12 @@ function OrderEditorScreen({
     else if (editing) onOrderChange(current);
   }
 
+  // A draft shows its newest lines first (they were just added); a confirmed order being edited keeps its recorded order.
+  const attention = new Set([...invalid, ...[duplicate?.lineId, focusLine].filter((id): id is string => Boolean(id))]);
+  const lineView = editing
+    ? { rows: state.lines.map((line, position) => ({ line, position, hidden: false })), older: 0 }
+    : newestFirst(state.lines, showAllLines, attention);
+
   return (
     // data-unsaved-guard keeps this screen (and what was typed) on display if the session expires.
     // A div, not a form: the dialogs below contain their own forms, and forms must not be nested.
@@ -480,32 +488,22 @@ function OrderEditorScreen({
         onPickTyped={pickTyped}
       />
       <UndoBar action={undo} onUndo={(ids) => editor.removeLines(ids)} onDismiss={dismissUndo} />
-      {editing ? null : (
-        <>
-          <RepeatLastOrder source={usual.source} hasLines={hasLines} disabled={atLineLimit} fetchRepeat={usual.fetchRepeat} onApply={applyRepeat} />
-          <LastOrderChecklist source={usual.source} disabled={atLineLimit} onOrderIds={onOrderIds} fetchRepeat={usual.fetchRepeat} onAdd={addFromLastOrder} />
-          <UsualMedicines
-            usual={usual.usual}
-            hasHistory={usual.source !== null}
-            loading={usual.loading}
-            error={usual.error ?? null}
-            onRetry={usual.retry}
-            onOrderIds={onOrderIds}
-            disabled={atLineLimit}
-            onAdd={addUsual}
-          />
-        </>
-      )}
-
       <section aria-label="Order lines" className="space-y-3">
+        {hasLines && !editing ? (
+          <h2 className="text-lg font-semibold" data-testid="lines-heading">
+            In this order ({state.lines.length}){state.lines.length > 1 ? <span className="text-sm font-normal text-muted"> · newest first</span> : null}
+          </h2>
+        ) : null}
         {hasLines ? (
           <ul className="space-y-3" data-testid="order-lines">
-            {state.lines.map((line) => {
+            {lineView.rows.map(({ line, position, hidden }) => {
               const isNew = editing && !originalIds.has(line.id);
               return (
                 <OrderLineRow
                   key={`${line.id}:${editor.epoch}`}
                   line={line}
+                  position={position}
+                  hidden={hidden}
                   info={info[line.id]}
                   highlight={duplicate?.lineId === line.id}
                   focusQuantity={focusLine === line.id}
@@ -541,11 +539,32 @@ function OrderEditorScreen({
           </ul>
         ) : (
           <p data-testid="no-lines" className="rounded-xl border border-dashed border-border bg-surface px-4 py-6 text-center text-muted">
-            No medicines yet. Search above, tap a usual medicine, or repeat the last order.
+            {editing ? "No medicines yet. Search above to add one." : "No medicines yet. Search above, or use the last order or a usual medicine below."}
           </p>
         )}
+        {!editing && lineView.older > 0 ? (
+          <Button variant="secondary" className="w-full" data-testid="toggle-lines" aria-expanded={showAllLines} onClick={() => setShowAllLines((v) => !v)}>
+            {showAllLines ? `Show only the latest ${LATEST_SHOWN}` : `Show all ${state.lines.length} lines`}
+          </Button>
+        ) : null}
         {atLineLimit ? <p className="text-sm text-warning">An order can have at most {LIMITS.lines} lines. Start a new order for more.</p> : null}
       </section>
+      {editing ? null : (
+        <>
+          <RepeatLastOrder source={usual.source} hasLines={hasLines} disabled={atLineLimit} fetchRepeat={usual.fetchRepeat} onApply={applyRepeat} />
+          <LastOrderChecklist source={usual.source} disabled={atLineLimit} onOrderIds={onOrderIds} fetchRepeat={usual.fetchRepeat} onAdd={addFromLastOrder} />
+          <UsualMedicines
+            usual={usual.usual}
+            hasHistory={usual.source !== null}
+            loading={usual.loading}
+            error={usual.error ?? null}
+            onRetry={usual.retry}
+            onOrderIds={onOrderIds}
+            disabled={atLineLimit}
+            onAdd={addUsual}
+          />
+        </>
+      )}
 
       <div>
         <label htmlFor="order-notes" className="mb-1 block text-sm font-medium">

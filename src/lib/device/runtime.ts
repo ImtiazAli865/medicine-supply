@@ -155,7 +155,8 @@ export async function startDeviceRuntime(args: StartArgs): Promise<DeviceRuntime
     center,
     identity,
     refresh,
-    readCacheAge: () => readCacheAge(db, Date.now()),
+    // A stopped runtime has closed its database; a late question then has no answer instead of an error.
+    readCacheAge: () => readCacheAge(db, Date.now()).catch(() => null),
     clearData: async () => {
       // Stop sending first, then delete only THIS business's database (never another business's) and its registry entry.
       center.stop();
