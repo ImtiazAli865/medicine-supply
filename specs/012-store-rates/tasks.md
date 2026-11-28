@@ -101,7 +101,7 @@
 - [x] T040 Update the Roman Urdu manual in `manual/` (outside git, never committed) and rebuild its PDF.
 - [x] T041 Owner: apply `0012_store_rates.sql` to the TEST project (needed before T020 and the browser tests).
 - [ ] T042 Owner: apply it to the DEV project and try quickstart section 3; record as reported, not seen.
-- [ ] T043 Show the owner the guard diffs (T017), then commit, push and open the pull request only when told; merge only when told.
+- [X] T043 Show the owner the guard diffs (T017), then commit, push and open the pull request only when told; merge only when told.
 
 ## Where the planned tests ended up (2026-11-27)
 
